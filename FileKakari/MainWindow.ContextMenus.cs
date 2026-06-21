@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -32,7 +33,7 @@ public partial class MainWindow
         var isSpecialView = SpecialLocationService.IsSpecialUri(navigation.CurrentPath);
         var isDisconnected = activeTab.IsDisconnected;
         var canOperateInFolder = !isSpecialView && !isDisconnected;
-        var canPaste = _pendingFileOperation is not null && canOperateInFolder;
+        var canPaste = (IsInternalClipboardValid() || ClipboardContainsFileDropList()) && canOperateInFolder;
         var menu = new ContextMenu
         {
             PlacementTarget = ItemsList
@@ -208,7 +209,7 @@ public partial class MainWindow
         var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
         var isSpecialView = SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath);
         var canOperateInFolder = !isSpecialView && !tab.IsDisconnected;
-        var canPaste = _pendingFileOperation is not null && canOperateInFolder;
+        var canPaste = (IsInternalClipboardValid() || ClipboardContainsFileDropList()) && canOperateInFolder;
         var menu = new ContextMenu
         {
             PlacementTarget = listView
@@ -502,6 +503,37 @@ public partial class MainWindow
         if (Application.Current?.TryFindResource(typeof(Separator)) is Style style)
         {
             separator.Style = style;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetClipboardSequenceNumber();
+
+    private bool IsInternalClipboardValid()
+    {
+        if (_pendingFileOperation is null)
+        {
+            return false;
+        }
+
+        if (GetClipboardSequenceNumber() != _internalClipboardSequence)
+        {
+            _pendingFileOperation = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool ClipboardContainsFileDropList()
+    {
+        try
+        {
+            return Clipboard.ContainsFileDropList();
+        }
+        catch
+        {
+            return false;
         }
     }
 

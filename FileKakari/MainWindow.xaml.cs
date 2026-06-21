@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -226,6 +226,7 @@ public partial class MainWindow : Window
     private int _addRangeItemCount => _loadController.AddRangeItemCount;
     private int _diagnosticLoadId => _loadController.DiagnosticLoadId;
     private PendingFileOperation? _pendingFileOperation;
+    private uint _internalClipboardSequence;
     private Dictionary<string, GridViewColumn> _columnsById = [];
 
     public ICollectionView ItemsView { get; }

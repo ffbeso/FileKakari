@@ -497,6 +497,7 @@ public partial class MainWindow
             .Select(entry => new PendingFileOperationItem(entry.FullPath, entry.Name, entry.IsDirectory))
             .ToList();
         _pendingFileOperation = new PendingFileOperation(operationItems, operationKind);
+        _internalClipboardSequence = GetClipboardSequenceNumber();
         SetFileOperationStatus(context, operationKind == PendingFileOperationKind.Copy
             ? _text.Format("CopyReady", FormatOperationTargetSummary(operationItems))
             : _text.Format("MoveReady", FormatOperationTargetSummary(operationItems)));
@@ -504,6 +505,11 @@ public partial class MainWindow
 
     private async Task PastePendingFileOperationAsync(FolderPane? targetPane = null)
     {
+        if (_isFileOperationInProgress)
+        {
+            return;
+        }
+
         if (GetActiveFileOperationContext(targetPane) is not { } context)
         {
             return;
@@ -520,38 +526,63 @@ public partial class MainWindow
             return;
         }
 
-        if (_pendingFileOperation is null)
-        {
-            SetFileOperationStatus(context, _text.Get("PasteFailedNoPending"));
-            return;
-        }
+        IReadOnlyList<FileTransferItem> operationItems;
+        PendingFileOperationKind operationKind;
 
-        var operation = _pendingFileOperation;
-        foreach (var item in operation.Items)
+        if (IsInternalClipboardValid())
         {
-            if (!File.Exists(item.SourcePath) && !Directory.Exists(item.SourcePath))
+            var operation = _pendingFileOperation!;
+            foreach (var item in operation.Items)
             {
-                SetFileOperationStatus(context, _text.Get("PasteFailedSourceMissing"));
-                _pendingFileOperation = null;
+                if (!File.Exists(item.SourcePath) && !Directory.Exists(item.SourcePath))
+                {
+                    SetFileOperationStatus(context, _text.Get("PasteFailedSourceMissing"));
+                    _pendingFileOperation = null;
+                    return;
+                }
+            }
+            operationItems = operation.Items
+                .Select(item => new FileTransferItem(item.SourcePath, item.Name, item.IsDirectory))
+                .ToList();
+            operationKind = operation.Kind;
+        }
+        else
+        {
+            var externalItems = TryGetExternalClipboardItems();
+            if (externalItems is null)
+            {
+                SetFileOperationStatus(context, _text.Get("PasteFailedNoPending"));
                 return;
             }
+
+            foreach (var item in externalItems)
+            {
+                if (!File.Exists(item.SourcePath) && !Directory.Exists(item.SourcePath))
+                {
+                    SetFileOperationStatus(context, _text.Get("PasteFailedSourceMissing"));
+                    return;
+                }
+            }
+            operationItems = externalItems;
+            operationKind = GetExternalPreferredDropEffect();
         }
 
-        var operationItems = operation.Items
-            .Select(item => new FileTransferItem(item.SourcePath, item.Name, item.IsDirectory))
-            .ToList();
         var completedPaths = await ExecuteFileTransferAsync(
             operationItems,
             context.CurrentPath,
-            operation.Kind,
+            operationKind,
             refreshActiveFolder: true,
             refreshTab: context.Tab,
             statusContext: context,
             refreshPane: context.Pane);
+
         var completed = completedPaths.Count > 0;
-        if (completed && operation.Kind == PendingFileOperationKind.Move)
+        if (completed && operationKind == PendingFileOperationKind.Move)
         {
-            _pendingFileOperation = null;
+            if (_pendingFileOperation is not null)
+            {
+                _pendingFileOperation = null;
+            }
         }
     }
 
@@ -949,5 +980,102 @@ public partial class MainWindow
         return operationKind == PendingFileOperationKind.Copy
             ? _text.Get("OperationCopy")
             : _text.Get("OperationMove");
+    }
+
+    private static IReadOnlyList<FileTransferItem>? TryGetExternalClipboardItems()
+    {
+        try
+        {
+            if (!Clipboard.ContainsFileDropList())
+            {
+                return null;
+            }
+
+            var paths = Clipboard.GetFileDropList();
+            if (paths == null || paths.Count == 0)
+            {
+                return null;
+            }
+
+            var items = new List<FileTransferItem>(paths.Count);
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                var isDirectory = Directory.Exists(path);
+                var isFile = File.Exists(path);
+                if (!isDirectory && !isFile)
+                {
+                    continue;
+                }
+
+                var trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var name = Path.GetFileName(trimmed);
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = path;
+                }
+
+                items.Add(new FileTransferItem(path, name, isDirectory));
+            }
+
+            return items.Count > 0 ? items : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static PendingFileOperationKind GetExternalPreferredDropEffect()
+    {
+        try
+        {
+            var dataObject = Clipboard.GetDataObject();
+            if (dataObject != null && dataObject.GetDataPresent("Preferred DropEffect"))
+            {
+                var effectData = dataObject.GetData("Preferred DropEffect");
+                int effectValue = 0;
+                if (effectData is MemoryStream ms)
+                {
+                    try
+                    {
+                        ms.Position = 0;
+                    }
+                    catch
+                    {
+                    }
+                    byte[] bytes = new byte[4];
+                    if (ms.Read(bytes, 0, 4) == 4)
+                    {
+                        effectValue = BitConverter.ToInt32(bytes, 0);
+                    }
+                }
+                else if (effectData is byte[] bytes)
+                {
+                    if (bytes.Length >= 4)
+                    {
+                        effectValue = BitConverter.ToInt32(bytes, 0);
+                    }
+                }
+                else if (effectData is int intVal)
+                {
+                    effectValue = intVal;
+                }
+
+                // DragDropEffects.Move = 2
+                if ((effectValue & 2) != 0)
+                {
+                    return PendingFileOperationKind.Move;
+                }
+            }
+        }
+        catch
+        {
+        }
+        return PendingFileOperationKind.Copy;
     }
 }

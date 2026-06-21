@@ -1,0 +1,140 @@
+<UserControl x:Class="FileKakari.UserCommandEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{DynamicResource AppBackgroundBrush}">
+    <DockPanel Margin="16">
+        <!-- Bottom: Save Button -->
+        <StackPanel DockPanel.Dock="Bottom"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button x:Name="SaveButton"
+                    Width="88"
+                    Height="30"
+                    IsDefault="True"
+                    Click="SaveButton_Click" />
+        </StackPanel>
+
+        <!-- Main Edit Area -->
+        <Grid Margin="0,0,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Command List and Operations -->
+            <DockPanel Grid.Column="0">
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0" Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button x:Name="AddCommandButton" Margin="2" Padding="6,4" Click="AddCommandButton_Click"/>
+                    <Button x:Name="DuplicateCommandButton" Margin="2" Padding="6,4" Click="DuplicateCommandButton_Click"/>
+                    <Button x:Name="DeleteCommandButton" Margin="2" Padding="6,4" Click="DeleteCommandButton_Click"/>
+                    <Button x:Name="MoveUpCommandButton" Content="▲" Margin="2" Padding="6,4" Click="MoveUpCommandButton_Click"/>
+                    <Button x:Name="MoveDownCommandButton" Content="▼" Margin="2" Padding="6,4" Click="MoveDownCommandButton_Click"/>
+                </StackPanel>
+                <Button x:Name="ReloadCommandsButton" DockPanel.Dock="Bottom" Margin="0,8,0,0" Padding="6,4" Click="ReloadCommandsButton_Click"/>
+                <ListView x:Name="CommandsListBox"
+                          SelectionChanged="CommandsListBox_SelectionChanged">
+                    <ListView.Style>
+                        <Style TargetType="ListView" BasedOn="{StaticResource {x:Type ListView}}">
+                            <Style.Triggers>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource ControlDisabledBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.Style>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource ContentListViewItemStyle}">
+                            <Setter Property="Padding" Value="8,4" />
+                            <Style.Triggers>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource SelectionBackgroundBrush}" />
+                                    <Setter Property="BorderThickness" Value="1" />
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource ControlDisabledBrush}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </DockPanel>
+
+            <!-- Right: Editor Area -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <Grid x:Name="CommandEditArea" IsEnabled="False" Margin="8,0,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Enabled -->
+                    <TextBlock x:Name="CmdEnabledLabel" Grid.Row="0" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <CheckBox x:Name="CmdEnabledCheckBox" Grid.Row="0" Grid.Column="1" Margin="0,0,0,12" VerticalAlignment="Center" Checked="CommandField_Changed" Unchecked="CommandField_Changed"/>
+
+                    <!-- Name -->
+                    <TextBlock x:Name="CmdNameLabel" Grid.Row="1" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <TextBox x:Name="CmdNameTextBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" TextChanged="CommandField_Changed"/>
+
+                    <!-- Target -->
+                    <TextBlock x:Name="CmdTargetLabel" Grid.Row="2" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <ComboBox x:Name="CmdTargetComboBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" SelectionChanged="CommandField_Changed"/>
+
+                    <!-- Extensions -->
+                    <TextBlock x:Name="CmdExtensionsLabel" Grid.Row="3" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <TextBox x:Name="CmdExtensionsTextBox" Grid.Row="3" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" TextChanged="CommandField_Changed"/>
+
+                    <!-- Executable -->
+                    <TextBlock x:Name="CmdExecutableLabel" Grid.Row="4" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <TextBox x:Name="CmdExecutableTextBox" Grid.Row="4" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" TextChanged="CommandField_Changed"/>
+
+                    <!-- Arguments -->
+                    <TextBlock x:Name="CmdArgumentsLabel" Grid.Row="5" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <TextBox x:Name="CmdArgumentsTextBox" Grid.Row="5" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" TextChanged="CommandField_Changed"/>
+
+                    <!-- WorkingDirectory -->
+                    <TextBlock x:Name="CmdWorkingDirLabel" Grid.Row="6" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <TextBox x:Name="CmdWorkingDirTextBox" Grid.Row="6" Grid.Column="1" Margin="0,0,0,12" MinHeight="30" VerticalContentAlignment="Center" TextChanged="CommandField_Changed"/>
+
+                    <!-- UseShellExecute -->
+                    <TextBlock x:Name="CmdUseShellLabel" Grid.Row="7" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <CheckBox x:Name="CmdUseShellCheckBox" Grid.Row="7" Grid.Column="1" Margin="0,0,0,12" VerticalAlignment="Center" Checked="CommandField_Changed" Unchecked="CommandField_Changed"/>
+
+                    <!-- AllowFiles -->
+                    <TextBlock x:Name="CmdAllowFilesLabel" Grid.Row="8" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <CheckBox x:Name="CmdAllowFilesCheckBox" Grid.Row="8" Grid.Column="1" Margin="0,0,0,12" VerticalAlignment="Center" Checked="CommandField_Changed" Unchecked="CommandField_Changed"/>
+
+                    <!-- AllowDirectories -->
+                    <TextBlock x:Name="CmdAllowDirsLabel" Grid.Row="9" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <CheckBox x:Name="CmdAllowDirsCheckBox" Grid.Row="9" Grid.Column="1" Margin="0,0,0,12" VerticalAlignment="Center" Checked="CommandField_Changed" Unchecked="CommandField_Changed"/>
+
+                    <!-- AllowMultiple -->
+                    <TextBlock x:Name="CmdAllowMultipleLabel" Grid.Row="10" Grid.Column="0" Margin="0,0,12,12" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                    <CheckBox x:Name="CmdAllowMultipleCheckBox" Grid.Row="10" Grid.Column="1" Margin="0,0,0,12" VerticalAlignment="Center" Checked="CommandField_Changed" Unchecked="CommandField_Changed"/>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</UserControl>

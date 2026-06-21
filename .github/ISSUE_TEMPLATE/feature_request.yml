@@ -1,0 +1,29 @@
+﻿name: 機能提案 (Feature Request)
+description: 新しい機能や仕様改善の提案
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        新しいアイデアや機能の要望がある場合は、以下のフォームに記入して提案をお願いします。
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案内容
+      placeholder: 追加したい機能の詳細や動作イメージを記載してください
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい問題
+      placeholder: この機能によって、どのようなユースケースや課題が解決されるかを記載してください
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 補足
+      placeholder: 関連する既存のツール、仕様メモ、補足情報などがあれば記載してください
+    validations:
+      required: false

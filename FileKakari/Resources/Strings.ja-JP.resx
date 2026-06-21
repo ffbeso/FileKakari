@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="BackButton" xml:space="preserve"><value>戻る</value></data>
+  <data name="ForwardButton" xml:space="preserve"><value>進む</value></data>
+  <data name="UpButton" xml:space="preserve"><value>上へ</value></data>
+  <data name="RefreshButton" xml:space="preserve"><value>更新</value></data>
+  <data name="PlacesButton" xml:space="preserve"><value>場所</value></data>
+  <data name="NewTabButton" xml:space="preserve"><value>新規タブ</value></data>
+  <data name="CloseTabButton" xml:space="preserve"><value>タブを閉じる</value></data>
+  <data name="CloseThisTabMenu" xml:space="preserve"><value>このタブを閉じる</value></data>
+  <data name="CloseOtherTabsMenu" xml:space="preserve"><value>他のタブを閉じる</value></data>
+  <data name="CloseTabsToRightMenu" xml:space="preserve"><value>右側のタブを閉じる</value></data>
+  <data name="RestoreClosedTabMenu" xml:space="preserve"><value>閉じたタブを戻す</value></data>
+  <data name="OpenInExplorerMenu" xml:space="preserve"><value>エクスプローラーで開く</value></data>
+  <data name="LockFolderTabMenu" xml:space="preserve"><value>ロック</value></data>
+  <data name="UnlockFolderTabMenu" xml:space="preserve"><value>ロック解除</value></data>
+  <data name="NewFolderButton" xml:space="preserve"><value>新規フォルダ</value></data>
+  <data name="NewFileButton" xml:space="preserve"><value>新規ファイル</value></data>
+  <data name="ColumnName" xml:space="preserve"><value>名前</value></data>
+  <data name="ColumnType" xml:space="preserve"><value>種類</value></data>
+  <data name="ColumnSize" xml:space="preserve"><value>サイズ</value></data>
+  <data name="ColumnModified" xml:space="preserve"><value>更新日時</value></data>
+  <data name="ColumnCreated" xml:space="preserve"><value>作成日時</value></data>
+  <data name="ColumnExtension" xml:space="preserve"><value>拡張子</value></data>
+  <data name="ColumnAttributes" xml:space="preserve"><value>属性</value></data>
+  <data name="ColumnFullPath" xml:space="preserve"><value>フル パス</value></data>
+  <data name="ColumnAccessed" xml:space="preserve"><value>アクセス日時</value></data>
+  <data name="ColumnParentPath" xml:space="preserve"><value>親フォルダ</value></data>
+  <data name="ColumnBaseName" xml:space="preserve"><value>名前 (拡張子なし)</value></data>
+  <data name="ColumnDriveName" xml:space="preserve"><value>ドライブ</value></data>
+  <data name="ColumnDriveType" xml:space="preserve"><value>種類</value></data>
+  <data name="ColumnTotalSize" xml:space="preserve"><value>総容量</value></data>
+  <data name="ColumnFreeAndUsage" xml:space="preserve"><value>空き容量 / 使用率</value></data>
+  <data name="TypeFolder" xml:space="preserve"><value>フォルダ</value></data>
+  <data name="TypeFile" xml:space="preserve"><value>ファイル</value></data>
+  <data name="DriveTypeFixed" xml:space="preserve"><value>ローカル ドライブ</value></data>
+  <data name="DriveTypeRemovable" xml:space="preserve"><value>リムーバブル ドライブ</value></data>
+  <data name="DriveTypeNetwork" xml:space="preserve"><value>ネットワーク ドライブ</value></data>
+  <data name="DriveTypeCDRom" xml:space="preserve"><value>光学ドライブ</value></data>
+  <data name="DriveTypeRam" xml:space="preserve"><value>RAM ドライブ</value></data>
+  <data name="DriveTypeNoRootDirectory" xml:space="preserve"><value>ドライブ</value></data>
+  <data name="DriveTypeUnknown" xml:space="preserve"><value>ドライブ</value></data>
+  <data name="LocationHome" xml:space="preserve"><value>ホーム</value></data>
+  <data name="LocationThisPc" xml:space="preserve"><value>PC</value></data>
+  <data name="LocationDesktop" xml:space="preserve"><value>デスクトップ</value></data>
+  <data name="LocationDocuments" xml:space="preserve"><value>ドキュメント</value></data>
+  <data name="LocationDownloads" xml:space="preserve"><value>ダウンロード</value></data>
+  <data name="LocationPictures" xml:space="preserve"><value>ピクチャ</value></data>
+  <data name="LocationMusic" xml:space="preserve"><value>ミュージック</value></data>
+  <data name="LocationVideos" xml:space="preserve"><value>ビデオ</value></data>
+  <data name="DrivesLoaded" xml:space="preserve"><value>{0:N0} 件のドライブを {1:N0} ms で読み込みました</value></data>
+  <data name="DriveFreeAndUsage" xml:space="preserve"><value>空き {0} / 使用率 {1:N0}%</value></data>
+  <data name="DriveNotReady" xml:space="preserve"><value>未準備</value></data>
+  <data name="AttributeHidden" xml:space="preserve"><value>Hidden</value></data>
+  <data name="AttributeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="AttributeReadOnly" xml:space="preserve"><value>ReadOnly</value></data>
+  <data name="AttributeArchive" xml:space="preserve"><value>Archive</value></data>
+  <data name="OperationUnavailableInSpecialLocation" xml:space="preserve"><value>このビューではその操作は使えません。</value></data>
+  <data name="PathNotFound" xml:space="preserve"><value>パスが見つかりません: {0}</value></data>
+  <data name="DriveDisconnectedStatus" xml:space="preserve"><value>ドライブが見つかりません。再接続後に更新してください。</value></data>
+  <data name="LoadingZero" xml:space="preserve"><value>読み込み中... 0件</value></data>
+  <data name="LoadingProgress" xml:space="preserve"><value>読み込み中... {0:N0}件, {1:N0} ms</value></data>
+  <data name="ItemsLoaded" xml:space="preserve"><value>{0:N0}件を {1:N0} ms で読み込みました</value></data>
+  <data name="ItemsCount" xml:space="preserve"><value>{0:N0}件</value></data>
+  <data name="Filtering" xml:space="preserve"><value>絞り込み中... {0:N0}件</value></data>
+  <data name="FilterApplied" xml:space="preserve"><value>絞り込み中 / {0:N0}件</value></data>
+  <data name="FilterPlaceholder" xml:space="preserve"><value>フィルタ</value></data>
+  <data name="StatusFolderSummary" xml:space="preserve"><value>総件数 {0:N0} 件</value></data>
+  <data name="StatusFilterSummary" xml:space="preserve"><value>絞り込み {0:N0} / {1:N0} 件</value></data>
+  <data name="StatusSelectionSummary" xml:space="preserve"><value>選択 {0:N0} 件, {1}</value></data>
+  <data name="StatusPcSummary" xml:space="preserve"><value>ドライブ {0:N0} 件, 空き {1} / 総容量 {2}</value></data>
+  <data name="DeletedMultiple" xml:space="preserve"><value>{0:N0} 件を削除しました。</value></data>
+  <data name="OpenFolderFailedTitle" xml:space="preserve"><value>フォルダを開けませんでした</value></data>
+  <data name="OpenFileFailedTitle" xml:space="preserve"><value>ファイルを開けませんでした</value></data>
+  <data name="OpenFailedMissing" xml:space="preserve"><value>オープン失敗: 項目が見つかりません。</value></data>
+  <data name="OpenFailedPrefix" xml:space="preserve"><value>オープン失敗: {0}</value></data>
+  <data name="OpenSingleSelectionOnly" xml:space="preserve"><value>オープンは1項目選択時のみ有効です。</value></data>
+  <data name="RenameCanceled" xml:space="preserve"><value>リネームをキャンセルしました。</value></data>
+  <data name="RenameSingleSelectionOnly" xml:space="preserve"><value>リネームは1項目選択時のみ有効です。</value></data>
+  <data name="RenameFailedEmpty" xml:space="preserve"><value>リネーム失敗: 名前を空にできません。</value></data>
+  <data name="RenameFailedInvalid" xml:space="preserve"><value>リネーム失敗: 使用できない文字が含まれています。</value></data>
+  <data name="RenameFailedExists" xml:space="preserve"><value>リネーム失敗: 同じ名前の項目が既に存在します。</value></data>
+  <data name="RenameFailedPrefix" xml:space="preserve"><value>リネーム失敗: {0}</value></data>
+  <data name="RenameFailedTitle" xml:space="preserve"><value>リネーム失敗</value></data>
+  <data name="RenamedTo" xml:space="preserve"><value>{0} にリネームしました</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>"{0}" をゴミ箱へ移動しますか?</value></data>
+  <data name="DeleteConfirmMultipleMessage" xml:space="preserve"><value>選択中の {0:N0} 件をゴミ箱へ移動しますか?</value></data>
+  <data name="DeleteConfirmTitle" xml:space="preserve"><value>削除の確認</value></data>
+  <data name="DeleteFailedTitle" xml:space="preserve"><value>削除失敗</value></data>
+  <data name="CopyFailedNoSelection" xml:space="preserve"><value>コピー失敗: 項目が選択されていません。</value></data>
+  <data name="CutFailedNoSelection" xml:space="preserve"><value>切り取り失敗: 項目が選択されていません。</value></data>
+  <data name="OperationCopy" xml:space="preserve"><value>コピー</value></data>
+  <data name="OperationMove" xml:space="preserve"><value>移動</value></data>
+  <data name="OperationFailedSourceMissing" xml:space="preserve"><value>{0}失敗: 元の項目が見つかりません。</value></data>
+  <data name="CopyReady" xml:space="preserve"><value>コピー対象: {0}</value></data>
+  <data name="MoveReady" xml:space="preserve"><value>移動対象: {0}</value></data>
+  <data name="DragCopyConfirmTitle" xml:space="preserve"><value>コピーの確認</value></data>
+  <data name="DragCopyConfirmMessage" xml:space="preserve"><value>選択中の {0:N0} 件を次の場所へコピーしますか?
+{1}</value></data>
+  <data name="PasteFailedNoPending" xml:space="preserve"><value>貼り付け失敗: コピーまたは切り取り対象がありません。</value></data>
+  <data name="PasteFailedSourceMissing" xml:space="preserve"><value>貼り付け失敗: 元の項目が見つかりません。</value></data>
+  <data name="PasteFailedExists" xml:space="preserve"><value>貼り付け失敗: 同じ名前の項目が既に存在します。</value></data>
+  <data name="PasteFailedPrefix" xml:space="preserve"><value>貼り付け失敗: {0}</value></data>
+  <data name="PasteFailedTitle" xml:space="preserve"><value>貼り付け失敗</value></data>
+  <data name="FileConflictTitle" xml:space="preserve"><value>同名項目の確認</value></data>
+  <data name="FileConflictMessage" xml:space="preserve"><value>同じ名前の項目が既に存在します。続行方法を選んでください。</value></data>
+  <data name="FileConflictSource" xml:space="preserve"><value>コピー元: {0} ({1})</value></data>
+  <data name="FileConflictTarget" xml:space="preserve"><value>既存項目: {0} ({1})</value></data>
+  <data name="FileConflictOverwrite" xml:space="preserve"><value>上書き</value></data>
+  <data name="FileConflictSkip" xml:space="preserve"><value>スキップ</value></data>
+  <data name="FileConflictRename" xml:space="preserve"><value>名前変更</value></data>
+  <data name="FileConflictOverwriteAll" xml:space="preserve"><value>全て上書き</value></data>
+  <data name="FileConflictSkipAll" xml:space="preserve"><value>全てスキップ</value></data>
+  <data name="CopiedTo" xml:space="preserve"><value>{0} にコピーしました</value></data>
+  <data name="MovedTo" xml:space="preserve"><value>{0} に移動しました</value></data>
+  <data name="CopiedMultiple" xml:space="preserve"><value>{0:N0} 件をコピーしました。</value></data>
+  <data name="MovedMultiple" xml:space="preserve"><value>{0:N0} 件を移動しました。</value></data>
+  <data name="MultipleItems" xml:space="preserve"><value>{0:N0} 件</value></data>
+  <data name="UndoComplete" xml:space="preserve"><value>元に戻しました。</value></data>
+  <data name="UndoFailedPrefix" xml:space="preserve"><value>元に戻せませんでした: {0}</value></data>
+  <data name="UndoFailedTitle" xml:space="preserve"><value>元に戻せませんでした</value></data>
+  <data name="UndoNothing" xml:space="preserve"><value>元に戻す操作はありません。</value></data>
+  <data name="UndoUnsupported" xml:space="preserve"><value>この操作は元に戻せません。</value></data>
+  <data name="SelectedItemStatus" xml:space="preserve"><value>{0} | {1}{2} | 更新日時 {3} | {4}</value></data>
+  <data name="SelectedMultipleStatus" xml:space="preserve"><value>{0:N0} 件を選択中</value></data>
+  <data name="CopySuffix" xml:space="preserve"><value> - コピー</value></data>
+  <data name="CopySuffixNumbered" xml:space="preserve"><value> - コピー ({0})</value></data>
+  <data name="CopyNameFailure" xml:space="preserve"><value>利用可能なコピー名を生成できませんでした。</value></data>
+  <data name="SameNameExists" xml:space="preserve"><value>同じ名前の項目が既に存在します。</value></data>
+  <data name="CannotCopyFolderIntoItself" xml:space="preserve"><value>フォルダを自分自身の中へコピーできません。</value></data>
+  <data name="NewFolderName" xml:space="preserve"><value>新しいフォルダー</value></data>
+  <data name="NewTextDocumentName" xml:space="preserve"><value>新しいテキスト ドキュメント</value></data>
+  <data name="NewItemNumberedName" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="NewItemNameFailure" xml:space="preserve"><value>利用可能な新規作成名を生成できませんでした。</value></data>
+  <data name="CreatedItem" xml:space="preserve"><value>{0} を作成しました</value></data>
+  <data name="CreateFailedPrefix" xml:space="preserve"><value>作成失敗: {0}</value></data>
+  <data name="CreateFolderFailedTitle" xml:space="preserve"><value>フォルダ作成失敗</value></data>
+  <data name="CreateFileFailedTitle" xml:space="preserve"><value>ファイル作成失敗</value></data>
+  <data name="ContextOpen" xml:space="preserve"><value>開く</value></data>
+  <data name="ContextOpenInNewTab" xml:space="preserve"><value>新しいタブで開く</value></data>
+  <data name="ContextCopy" xml:space="preserve"><value>コピー</value></data>
+  <data name="ContextCut" xml:space="preserve"><value>切り取り</value></data>
+  <data name="ContextPaste" xml:space="preserve"><value>貼り付け</value></data>
+  <data name="ContextRename" xml:space="preserve"><value>名前変更</value></data>
+  <data name="ContextDelete" xml:space="preserve"><value>削除</value></data>
+  <data name="ContextCopyPath" xml:space="preserve"><value>パスをコピー</value></data>
+  <data name="ContextProperties" xml:space="preserve"><value>プロパティ</value></data>
+  <data name="PathCopied" xml:space="preserve"><value>パスをコピーしました: {0}</value></data>
+  <data name="PathsCopied" xml:space="preserve"><value>{0:N0} 件のパスをコピーしました。</value></data>
+  <data name="CopyPathFailedPrefix" xml:space="preserve"><value>パスのコピー失敗: {0}</value></data>
+  <data name="CopyPathFailedTitle" xml:space="preserve"><value>パスのコピー失敗</value></data>
+  <data name="PropertiesFailedPrefix" xml:space="preserve"><value>プロパティ表示失敗: {0}</value></data>
+  <data name="PropertiesFailedTitle" xml:space="preserve"><value>プロパティ表示失敗</value></data>
+  <data name="ToolLaunchStarted" xml:space="preserve"><value>{0} を {1:N0} 件の項目で起動しました。</value></data>
+  <data name="ToolLaunchConfirmTitle" xml:space="preserve"><value>ツール起動の確認</value></data>
+  <data name="ToolLaunchConfirmMessage" xml:space="preserve"><value>このツールを起動しますか?
+
+ツール: {0}
+項目数: {1:N0}</value></data>
+  <data name="ToolLaunchCanceled" xml:space="preserve"><value>ツール起動をキャンセルしました。</value></data>
+  <data name="ToolLaunchFailedPrefix" xml:space="preserve"><value>ツール起動失敗: {0}</value></data>
+  <data name="ToolLaunchFailedTitle" xml:space="preserve"><value>ツール起動失敗</value></data>
+  <data name="ShellContextMenuDeferred" xml:space="preserve"><value>Windows Shell の本物コンテキストメニューは未実装です。</value></data>
+  <data name="ContextView" xml:space="preserve"><value>表示</value></data>
+  <data name="ViewModeButton" xml:space="preserve"><value>表示モード</value></data>
+  <data name="ViewModeDetails" xml:space="preserve"><value>詳細</value></data>
+  <data name="ViewModeCompact" xml:space="preserve"><value>コンパクト</value></data>
+  <data name="ViewModeList" xml:space="preserve"><value>リスト</value></data>
+  <data name="SettingsButton" xml:space="preserve"><value>設定</value></data>
+  <data name="InternalPageMenuButton" xml:space="preserve"><value>内部ページ</value></data>
+  <data name="SettingsTitle" xml:space="preserve"><value>設定</value></data>
+  <data name="LogViewerTitle" xml:space="preserve"><value>ログ</value></data>
+  <data name="LogViewerButton" xml:space="preserve"><value>ログを表示</value></data>
+  <data name="LogViewerReload" xml:space="preserve"><value>再読み込み</value></data>
+  <data name="LogViewerOpenFolder" xml:space="preserve"><value>ログフォルダーを開く</value></data>
+  <data name="LogViewerOpenFolderFailedTitle" xml:space="preserve"><value>ログフォルダーを開けませんでした</value></data>
+  <data name="LogViewerLoading" xml:space="preserve"><value>ログを読み込んでいます...</value></data>
+  <data name="LogViewerPathNotConfigured" xml:space="preserve"><value>FILEKAKARI_PERF_LOG が未設定で、filekakari-perf.log も見つかりません。</value></data>
+  <data name="LogViewerFileNotFound" xml:space="preserve"><value>ログファイルが存在しません。</value></data>
+  <data name="LogViewerLoaded" xml:space="preserve"><value>末尾 {0} 行を読み込みました。</value></data>
+  <data name="LogViewerLoadFailed" xml:space="preserve"><value>ログを読み込めませんでした: {0}</value></data>
+  <data name="SettingsTheme" xml:space="preserve"><value>テーマ</value></data>
+  <data name="SettingsLanguage" xml:space="preserve"><value>言語</value></data>
+  <data name="SettingsFollowSystem" xml:space="preserve"><value>システムに従う</value></data>
+  <data name="SettingsLight" xml:space="preserve"><value>ライト</value></data>
+  <data name="SettingsDark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="SettingsThemeCappuccino" xml:space="preserve"><value>Cappuccino</value></data>
+  <data name="SettingsThemeCyberpunk" xml:space="preserve"><value>Cyberpunk</value></data>
+  <data name="SettingsThemeGray" xml:space="preserve"><value>Gray</value></data>
+  <data name="SettingsJapanese" xml:space="preserve"><value>日本語</value></data>
+  <data name="SettingsEnglish" xml:space="preserve"><value>English</value></data>
+  <data name="SettingsShowHiddenFiles" xml:space="preserve"><value>隠しファイルを表示</value></data>
+  <data name="SettingsShowSystemFiles" xml:space="preserve"><value>システムファイルを表示</value></data>
+  <data name="SettingsSortFoldersFirst" xml:space="preserve"><value>並べ替え時にフォルダを先に表示</value></data>
+  <data name="SettingsPreviewPanePlacement" xml:space="preserve"><value>プレビュー位置</value></data>
+  <data name="SettingsPreviewPanePlacementRight" xml:space="preserve"><value>右側</value></data>
+  <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>下側</value></data>
+  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>動画を自動再生</value></data>
+  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>動画ファイルを選択したときに自動で再生します。</value></data>
+  <data name="SettingsFontFamily" xml:space="preserve"><value>フォント ファミリー</value></data>
+  <data name="SettingsFontSize" xml:space="preserve"><value>フォント サイズ</value></data>
+  <data name="SettingsRowHeight" xml:space="preserve"><value>行の高さ</value></data>
+  <data name="SettingsColumns" xml:space="preserve"><value>表示列</value></data>
+  <data name="SettingsOpenFolder" xml:space="preserve"><value>設定フォルダを開く</value></data>
+  <data name="SettingsOpenFolderFailedTitle" xml:space="preserve"><value>設定フォルダを開けませんでした</value></data>
+  <data name="SettingsOpenThemesFolder" xml:space="preserve"><value>テーマフォルダを開く</value></data>
+  <data name="SettingsOpenThemesFolderFailedTitle" xml:space="preserve"><value>テーマフォルダを開けませんでした</value></data>
+  <data name="SettingsSave" xml:space="preserve"><value>保存</value></data>
+  <data name="SettingsCancel" xml:space="preserve"><value>キャンセル</value></data>
+  <data name="WorkspaceMenuOpen" xml:space="preserve"><value>Workspaceとして開く...</value></data>
+  <data name="WorkspaceMenuSaveNew" xml:space="preserve"><value>現在の状態をWorkspaceとして保存...</value></data>
+  <data name="WorkspaceMenuOverwrite" xml:space="preserve"><value>上書き保存</value></data>
+  <data name="WorkspaceMenuSaveAs" xml:space="preserve"><value>名前を付けて保存...</value></data>
+  <data name="WorkspaceMenuOpenJson" xml:space="preserve"><value>Workspace JSONを開く</value></data>
+  <data name="WorkspaceSaveTitle" xml:space="preserve"><value>Workspaceとして保存</value></data>
+  <data name="WorkspaceName" xml:space="preserve"><value>ワークスペース名</value></data>
+  <data name="Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Cancel" xml:space="preserve"><value>キャンセル</value></data>
+  <data name="WorkspaceSaveSuccess" xml:space="preserve"><value>ワークスペースを保存しました。</value></data>
+  <data name="WorkspaceSaveFailed" xml:space="preserve"><value>ワークスペースの保存に失敗しました: {0}</value></data>
+  <data name="WorkspaceMenu" xml:space="preserve"><value>ワークスペース</value></data>
+  <data name="WorkspaceMenuOpenLocal" xml:space="preserve"><value>Workspaceとして開く</value></data>
+  <data name="WorkspaceAvailableTooltip" xml:space="preserve"><value>このフォルダにはWorkspaceがあります。クリックしてメニューを開きます</value></data>
+  <data name="WorkspaceActiveTooltip" xml:space="preserve"><value>ワークスペース設定</value></data>
+  <data name="WorkspaceNormalTooltip" xml:space="preserve"><value>ワークスペース</value></data>
+  <data name="WorkspaceSaveButtonHeader" xml:space="preserve"><value>Workspaceファイル（.workspace.json）</value></data>
+  <data name="WorkspaceSaveButtonOverwrite" xml:space="preserve"><value>ワークスペースを上書き保存</value></data>
+  <data name="WorkspaceSaveButtonSaveAs" xml:space="preserve"><value>ワークスペースに名前を付けて保存...</value></data>
+  <data name="WorkspaceSaveButtonOpenJson" xml:space="preserve"><value>.workspace.json を開く</value></data>
+  <data name="SettingsThemeFileNotFound" xml:space="preserve"><value>テーマファイル '{0}' がThemesフォルダ内に見つかりません。</value></data>
+  <data name="SettingsThemeLoadFailed" xml:space="preserve"><value>テーマファイル '{0}' の読み込みに失敗しました:
+{1}</value></data>
+  <data name="SettingsThemeErrorTitle" xml:space="preserve"><value>テーマエラー</value></data>
+  <data name="ContextCommands" xml:space="preserve"><value>コマンド</value></data>
+  <data name="OpenCommandsFileMenu" xml:space="preserve"><value>commands.json を開く</value></data>
+  <data name="OpenCommandsLocationMenu" xml:space="preserve"><value>commands.json の場所を開く</value></data>
+  <data name="OpenCommandScriptsDirectoryMenu" xml:space="preserve"><value>コマンドスクリプトフォルダを開く</value></data>
+  <data name="UserCommandExecuteFailed" xml:space="preserve"><value>コマンド「{0}」の実行に失敗しました。
+
+詳細: {1}</value></data>
+  <data name="UserCommandErrorTitle" xml:space="preserve"><value>コマンド実行エラー</value></data>
+  <data name="PreviewTitle" xml:space="preserve"><value>プレビュー</value></data>
+  <data name="PreviewCloseButton" xml:space="preserve"><value>プレビューを閉じる</value></data>
+  <data name="PreviewMediaPlay" xml:space="preserve"><value>再生</value></data>
+  <data name="PreviewMediaPause" xml:space="preserve"><value>一時停止</value></data>
+  <data name="PreviewMediaStop" xml:space="preserve"><value>停止</value></data>
+  <data name="PreviewSelectFile" xml:space="preserve"><value>プレビューするファイルを選択してください。</value></data>
+  <data name="PreviewSingleFileOnly" xml:space="preserve"><value>プレビューするファイルを1つ選択してください。</value></data>
+  <data name="PreviewFoldersUnsupported" xml:space="preserve"><value>フォルダのプレビューには対応していません。</value></data>
+  <data name="PreviewLoading" xml:space="preserve"><value>プレビューを読み込んでいます...</value></data>
+  <data name="PreviewUnsupported" xml:space="preserve"><value>このファイル形式には対応していません。</value></data>
+  <data name="PreviewUnsupportedTitle" xml:space="preserve"><value>この形式はプレビュー未対応です</value></data>
+  <data name="PreviewUnsupportedHint" xml:space="preserve"><value>右クリックメニューの「コマンド」から外部ツールへ送れます</value></data>
+  <data name="PreviewInfoName" xml:space="preserve"><value>ファイル名</value></data>
+  <data name="PreviewInfoExtension" xml:space="preserve"><value>拡張子</value></data>
+  <data name="PreviewInfoSize" xml:space="preserve"><value>サイズ</value></data>
+  <data name="PreviewInfoModified" xml:space="preserve"><value>更新日時</value></data>
+  <data name="PreviewInfoPath" xml:space="preserve"><value>パス</value></data>
+  <data name="PreviewInfoNoExtension" xml:space="preserve"><value>なし</value></data>
+  <data name="PreviewTooLarge" xml:space="preserve"><value>ファイルが大きすぎるためプレビューできません。上限: {0}</value></data>
+  <data name="PreviewMissing" xml:space="preserve"><value>ファイルが見つかりません。</value></data>
+  <data name="PreviewLoadFailed" xml:space="preserve"><value>プレビューを読み込めませんでした: {0}</value></data>
+  <data name="PreviewUnknownError" xml:space="preserve"><value>不明なエラー</value></data>
+  <data name="SettingsGeneralTab" xml:space="preserve"><value>一般</value></data>
+  <data name="SettingsUserCommandsTab" xml:space="preserve"><value>ユーザーコマンド</value></data>
+  <data name="CmdEnabled" xml:space="preserve"><value>有効</value></data>
+  <data name="CmdName" xml:space="preserve"><value>名前</value></data>
+  <data name="CmdTarget" xml:space="preserve"><value>対象</value></data>
+  <data name="CmdExtensions" xml:space="preserve"><value>拡張子</value></data>
+  <data name="CmdExecutable" xml:space="preserve"><value>実行ファイル</value></data>
+  <data name="CmdArguments" xml:space="preserve"><value>引数</value></data>
+  <data name="CmdWorkingDirectory" xml:space="preserve"><value>作業フォルダー</value></data>
+  <data name="CmdUseShellExecute" xml:space="preserve"><value>シェル実行を使用</value></data>
+  <data name="CmdAllowFiles" xml:space="preserve"><value>ファイルを許可</value></data>
+  <data name="CmdAllowDirectories" xml:space="preserve"><value>フォルダーを許可</value></data>
+  <data name="CmdAllowMultiple" xml:space="preserve"><value>複数選択を許可</value></data>
+  <data name="BtnAdd" xml:space="preserve"><value>追加</value></data>
+  <data name="BtnDuplicate" xml:space="preserve"><value>複製</value></data>
+  <data name="BtnDelete" xml:space="preserve"><value>削除</value></data>
+  <data name="Reload" xml:space="preserve"><value>再読み込み</value></data>
+  <data name="UserCommandSaveFailed" xml:space="preserve"><value>ユーザーコマンドの保存に失敗しました: {0}</value></data>
+  <data name="UserCommandEditorTitle" xml:space="preserve"><value>ユーザーコマンド編集</value></data>
+  <data name="UserCommandsSavedStatus" xml:space="preserve"><value>ユーザーコマンドを保存しました。</value></data>
+  <data name="TargetSelectionDesc" xml:space="preserve"><value>Selection (選択中のアイテム)</value></data>
+  <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (現在のフォルダー)</value></data>
+</root>

@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="BackButton" xml:space="preserve"><value>Back</value></data>
+  <data name="ForwardButton" xml:space="preserve"><value>Forward</value></data>
+  <data name="UpButton" xml:space="preserve"><value>Up</value></data>
+  <data name="RefreshButton" xml:space="preserve"><value>Refresh</value></data>
+  <data name="PlacesButton" xml:space="preserve"><value>Locations</value></data>
+  <data name="NewTabButton" xml:space="preserve"><value>New Tab</value></data>
+  <data name="CloseTabButton" xml:space="preserve"><value>Close Tab</value></data>
+  <data name="CloseThisTabMenu" xml:space="preserve"><value>Close This Tab</value></data>
+  <data name="CloseOtherTabsMenu" xml:space="preserve"><value>Close Other Tabs</value></data>
+  <data name="CloseTabsToRightMenu" xml:space="preserve"><value>Close Tabs to the Right</value></data>
+  <data name="RestoreClosedTabMenu" xml:space="preserve"><value>Reopen Closed Tab</value></data>
+  <data name="OpenInExplorerMenu" xml:space="preserve"><value>Open in Explorer</value></data>
+  <data name="LockFolderTabMenu" xml:space="preserve"><value>Lock</value></data>
+  <data name="UnlockFolderTabMenu" xml:space="preserve"><value>Unlock</value></data>
+  <data name="NewFolderButton" xml:space="preserve"><value>New Folder</value></data>
+  <data name="NewFileButton" xml:space="preserve"><value>New File</value></data>
+  <data name="ColumnName" xml:space="preserve"><value>Name</value></data>
+  <data name="ColumnType" xml:space="preserve"><value>Type</value></data>
+  <data name="ColumnSize" xml:space="preserve"><value>Size</value></data>
+  <data name="ColumnModified" xml:space="preserve"><value>Modified</value></data>
+  <data name="ColumnCreated" xml:space="preserve"><value>Created</value></data>
+  <data name="ColumnExtension" xml:space="preserve"><value>Extension</value></data>
+  <data name="ColumnAttributes" xml:space="preserve"><value>Attributes</value></data>
+  <data name="ColumnFullPath" xml:space="preserve"><value>Full Path</value></data>
+  <data name="ColumnAccessed" xml:space="preserve"><value>Date accessed</value></data>
+  <data name="ColumnParentPath" xml:space="preserve"><value>Parent Path</value></data>
+  <data name="ColumnBaseName" xml:space="preserve"><value>Base Name</value></data>
+  <data name="ColumnDriveName" xml:space="preserve"><value>Drive</value></data>
+  <data name="ColumnDriveType" xml:space="preserve"><value>Type</value></data>
+  <data name="ColumnTotalSize" xml:space="preserve"><value>Total Size</value></data>
+  <data name="ColumnFreeAndUsage" xml:space="preserve"><value>Free / Used</value></data>
+  <data name="TypeFolder" xml:space="preserve"><value>Folder</value></data>
+  <data name="TypeFile" xml:space="preserve"><value>File</value></data>
+  <data name="DriveTypeFixed" xml:space="preserve"><value>Local Drive</value></data>
+  <data name="DriveTypeRemovable" xml:space="preserve"><value>Removable Drive</value></data>
+  <data name="DriveTypeNetwork" xml:space="preserve"><value>Network Drive</value></data>
+  <data name="DriveTypeCDRom" xml:space="preserve"><value>Optical Drive</value></data>
+  <data name="DriveTypeRam" xml:space="preserve"><value>RAM Drive</value></data>
+  <data name="DriveTypeNoRootDirectory" xml:space="preserve"><value>Drive</value></data>
+  <data name="DriveTypeUnknown" xml:space="preserve"><value>Drive</value></data>
+  <data name="LocationHome" xml:space="preserve"><value>Home</value></data>
+  <data name="LocationThisPc" xml:space="preserve"><value>PC</value></data>
+  <data name="LocationDesktop" xml:space="preserve"><value>Desktop</value></data>
+  <data name="LocationDocuments" xml:space="preserve"><value>Documents</value></data>
+  <data name="LocationDownloads" xml:space="preserve"><value>Downloads</value></data>
+  <data name="LocationPictures" xml:space="preserve"><value>Pictures</value></data>
+  <data name="LocationMusic" xml:space="preserve"><value>Music</value></data>
+  <data name="LocationVideos" xml:space="preserve"><value>Videos</value></data>
+  <data name="DrivesLoaded" xml:space="preserve"><value>{0:N0} drives loaded in {1:N0} ms</value></data>
+  <data name="DriveFreeAndUsage" xml:space="preserve"><value>{0} free / {1:N0}% used</value></data>
+  <data name="DriveNotReady" xml:space="preserve"><value>Not ready</value></data>
+  <data name="AttributeHidden" xml:space="preserve"><value>Hidden</value></data>
+  <data name="AttributeSystem" xml:space="preserve"><value>System</value></data>
+  <data name="AttributeReadOnly" xml:space="preserve"><value>ReadOnly</value></data>
+  <data name="AttributeArchive" xml:space="preserve"><value>Archive</value></data>
+  <data name="OperationUnavailableInSpecialLocation" xml:space="preserve"><value>This operation is not available in this view.</value></data>
+  <data name="PathNotFound" xml:space="preserve"><value>Path not found: {0}</value></data>
+  <data name="DriveDisconnectedStatus" xml:space="preserve"><value>Drive not found. Reconnect it, then refresh.</value></data>
+  <data name="LoadingZero" xml:space="preserve"><value>Loading... 0 items</value></data>
+  <data name="LoadingProgress" xml:space="preserve"><value>Loading... {0:N0} items, {1:N0} ms</value></data>
+  <data name="ItemsLoaded" xml:space="preserve"><value>{0:N0} items loaded in {1:N0} ms</value></data>
+  <data name="ItemsCount" xml:space="preserve"><value>{0:N0} items</value></data>
+  <data name="Filtering" xml:space="preserve"><value>Filtering... {0:N0} items</value></data>
+  <data name="FilterApplied" xml:space="preserve"><value>Filter applied / {0:N0} items</value></data>
+  <data name="FilterPlaceholder" xml:space="preserve"><value>Filter</value></data>
+  <data name="StatusFolderSummary" xml:space="preserve"><value>Total {0:N0} items</value></data>
+  <data name="StatusFilterSummary" xml:space="preserve"><value>Filtered {0:N0} / {1:N0} items</value></data>
+  <data name="StatusSelectionSummary" xml:space="preserve"><value>Selected {0:N0} items, {1}</value></data>
+  <data name="StatusPcSummary" xml:space="preserve"><value>{0:N0} drives, {1} free / {2} total</value></data>
+  <data name="DeletedMultiple" xml:space="preserve"><value>Deleted {0:N0} items.</value></data>
+  <data name="OpenFolderFailedTitle" xml:space="preserve"><value>Open folder failed</value></data>
+  <data name="OpenFileFailedTitle" xml:space="preserve"><value>Open file failed</value></data>
+  <data name="OpenFailedMissing" xml:space="preserve"><value>Open failed: item no longer exists.</value></data>
+  <data name="OpenFailedPrefix" xml:space="preserve"><value>Open failed: {0}</value></data>
+  <data name="OpenSingleSelectionOnly" xml:space="preserve"><value>Open works with a single selected item.</value></data>
+  <data name="RenameCanceled" xml:space="preserve"><value>Rename canceled.</value></data>
+  <data name="RenameSingleSelectionOnly" xml:space="preserve"><value>Rename works with a single selected item.</value></data>
+  <data name="RenameFailedEmpty" xml:space="preserve"><value>Rename failed: name cannot be empty.</value></data>
+  <data name="RenameFailedInvalid" xml:space="preserve"><value>Rename failed: name contains invalid characters.</value></data>
+  <data name="RenameFailedExists" xml:space="preserve"><value>Rename failed: an item with the same name already exists.</value></data>
+  <data name="RenameFailedPrefix" xml:space="preserve"><value>Rename failed: {0}</value></data>
+  <data name="RenameFailedTitle" xml:space="preserve"><value>Rename failed</value></data>
+  <data name="RenamedTo" xml:space="preserve"><value>Renamed to {0}</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>Move "{0}" to the Recycle Bin?</value></data>
+  <data name="DeleteConfirmMultipleMessage" xml:space="preserve"><value>Move {0:N0} selected items to the Recycle Bin?</value></data>
+  <data name="DeleteConfirmTitle" xml:space="preserve"><value>Confirm delete</value></data>
+  <data name="DeleteFailedTitle" xml:space="preserve"><value>Delete failed</value></data>
+  <data name="CopyFailedNoSelection" xml:space="preserve"><value>Copy failed: no item selected.</value></data>
+  <data name="CutFailedNoSelection" xml:space="preserve"><value>Cut failed: no item selected.</value></data>
+  <data name="OperationCopy" xml:space="preserve"><value>Copy</value></data>
+  <data name="OperationMove" xml:space="preserve"><value>Move</value></data>
+  <data name="OperationFailedSourceMissing" xml:space="preserve"><value>{0} failed: source no longer exists.</value></data>
+  <data name="CopyReady" xml:space="preserve"><value>Copy ready: {0}</value></data>
+  <data name="MoveReady" xml:space="preserve"><value>Move ready: {0}</value></data>
+  <data name="DragCopyConfirmTitle" xml:space="preserve"><value>Confirm copy</value></data>
+  <data name="DragCopyConfirmMessage" xml:space="preserve"><value>Copy {0:N0} selected items to:
+{1}</value></data>
+  <data name="PasteFailedNoPending" xml:space="preserve"><value>Paste failed: no copied or cut item.</value></data>
+  <data name="PasteFailedSourceMissing" xml:space="preserve"><value>Paste failed: source no longer exists.</value></data>
+  <data name="PasteFailedExists" xml:space="preserve"><value>Paste failed: an item with the same name already exists.</value></data>
+  <data name="PasteFailedPrefix" xml:space="preserve"><value>Paste failed: {0}</value></data>
+  <data name="PasteFailedTitle" xml:space="preserve"><value>Paste failed</value></data>
+  <data name="FileConflictTitle" xml:space="preserve"><value>Name conflict</value></data>
+  <data name="FileConflictMessage" xml:space="preserve"><value>An item with the same name already exists. Choose how to continue.</value></data>
+  <data name="FileConflictSource" xml:space="preserve"><value>Source: {0} ({1})</value></data>
+  <data name="FileConflictTarget" xml:space="preserve"><value>Existing: {0} ({1})</value></data>
+  <data name="FileConflictOverwrite" xml:space="preserve"><value>Overwrite</value></data>
+  <data name="FileConflictSkip" xml:space="preserve"><value>Skip</value></data>
+  <data name="FileConflictRename" xml:space="preserve"><value>Rename</value></data>
+  <data name="FileConflictOverwriteAll" xml:space="preserve"><value>Overwrite All</value></data>
+  <data name="FileConflictSkipAll" xml:space="preserve"><value>Skip All</value></data>
+  <data name="CopiedTo" xml:space="preserve"><value>Copied to {0}</value></data>
+  <data name="MovedTo" xml:space="preserve"><value>Moved to {0}</value></data>
+  <data name="CopiedMultiple" xml:space="preserve"><value>Copied {0:N0} items.</value></data>
+  <data name="MovedMultiple" xml:space="preserve"><value>Moved {0:N0} items.</value></data>
+  <data name="MultipleItems" xml:space="preserve"><value>{0:N0} items</value></data>
+  <data name="UndoComplete" xml:space="preserve"><value>Undo complete.</value></data>
+  <data name="UndoFailedPrefix" xml:space="preserve"><value>Undo failed: {0}</value></data>
+  <data name="UndoFailedTitle" xml:space="preserve"><value>Undo failed</value></data>
+  <data name="UndoNothing" xml:space="preserve"><value>Nothing to undo.</value></data>
+  <data name="UndoUnsupported" xml:space="preserve"><value>Unsupported undo action.</value></data>
+  <data name="SelectedItemStatus" xml:space="preserve"><value>{0} | {1}{2} | Modified {3} | {4}</value></data>
+  <data name="SelectedMultipleStatus" xml:space="preserve"><value>{0:N0} items selected</value></data>
+  <data name="CopySuffix" xml:space="preserve"><value> - Copy</value></data>
+  <data name="CopySuffixNumbered" xml:space="preserve"><value> - Copy ({0})</value></data>
+  <data name="CopyNameFailure" xml:space="preserve"><value>Could not generate an available copy name.</value></data>
+  <data name="SameNameExists" xml:space="preserve"><value>An item with the same name already exists.</value></data>
+  <data name="CannotCopyFolderIntoItself" xml:space="preserve"><value>Cannot copy a folder into itself.</value></data>
+  <data name="NewFolderName" xml:space="preserve"><value>New Folder</value></data>
+  <data name="NewTextDocumentName" xml:space="preserve"><value>New Text Document</value></data>
+  <data name="NewItemNumberedName" xml:space="preserve"><value>{0} ({1})</value></data>
+  <data name="NewItemNameFailure" xml:space="preserve"><value>Could not generate an available new item name.</value></data>
+  <data name="CreatedItem" xml:space="preserve"><value>Created {0}</value></data>
+  <data name="CreateFailedPrefix" xml:space="preserve"><value>Create failed: {0}</value></data>
+  <data name="CreateFolderFailedTitle" xml:space="preserve"><value>Create folder failed</value></data>
+  <data name="CreateFileFailedTitle" xml:space="preserve"><value>Create file failed</value></data>
+  <data name="ContextOpen" xml:space="preserve"><value>Open</value></data>
+  <data name="ContextOpenInNewTab" xml:space="preserve"><value>Open in New Tab</value></data>
+  <data name="ContextCopy" xml:space="preserve"><value>Copy</value></data>
+  <data name="ContextCut" xml:space="preserve"><value>Cut</value></data>
+  <data name="ContextPaste" xml:space="preserve"><value>Paste</value></data>
+  <data name="ContextRename" xml:space="preserve"><value>Rename</value></data>
+  <data name="ContextDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="ContextCopyPath" xml:space="preserve"><value>Copy Path</value></data>
+  <data name="ContextProperties" xml:space="preserve"><value>Properties</value></data>
+  <data name="PathCopied" xml:space="preserve"><value>Copied path: {0}</value></data>
+  <data name="PathsCopied" xml:space="preserve"><value>Copied {0:N0} paths.</value></data>
+  <data name="CopyPathFailedPrefix" xml:space="preserve"><value>Copy path failed: {0}</value></data>
+  <data name="CopyPathFailedTitle" xml:space="preserve"><value>Copy path failed</value></data>
+  <data name="PropertiesFailedPrefix" xml:space="preserve"><value>Properties failed: {0}</value></data>
+  <data name="PropertiesFailedTitle" xml:space="preserve"><value>Properties failed</value></data>
+  <data name="ToolLaunchStarted" xml:space="preserve"><value>Started {0} with {1:N0} item(s).</value></data>
+  <data name="ToolLaunchConfirmTitle" xml:space="preserve"><value>Confirm tool launch</value></data>
+  <data name="ToolLaunchConfirmMessage" xml:space="preserve"><value>Run this tool?
+
+Tool: {0}
+Items: {1:N0}</value></data>
+  <data name="ToolLaunchCanceled" xml:space="preserve"><value>Tool launch canceled.</value></data>
+  <data name="ToolLaunchFailedPrefix" xml:space="preserve"><value>Tool launch failed: {0}</value></data>
+  <data name="ToolLaunchFailedTitle" xml:space="preserve"><value>Tool launch failed</value></data>
+  <data name="ShellContextMenuDeferred" xml:space="preserve"><value>Windows Shell context menu is not implemented yet.</value></data>
+  <data name="ContextView" xml:space="preserve"><value>View</value></data>
+  <data name="ViewModeButton" xml:space="preserve"><value>View mode</value></data>
+  <data name="ViewModeDetails" xml:space="preserve"><value>Details</value></data>
+  <data name="ViewModeCompact" xml:space="preserve"><value>Compact</value></data>
+  <data name="ViewModeList" xml:space="preserve"><value>List</value></data>
+  <data name="SettingsButton" xml:space="preserve"><value>Settings</value></data>
+  <data name="InternalPageMenuButton" xml:space="preserve"><value>Internal pages</value></data>
+  <data name="SettingsTitle" xml:space="preserve"><value>Settings</value></data>
+  <data name="LogViewerTitle" xml:space="preserve"><value>Logs</value></data>
+  <data name="LogViewerButton" xml:space="preserve"><value>View logs</value></data>
+  <data name="LogViewerReload" xml:space="preserve"><value>Reload</value></data>
+  <data name="LogViewerOpenFolder" xml:space="preserve"><value>Open log folder</value></data>
+  <data name="LogViewerOpenFolderFailedTitle" xml:space="preserve"><value>Open log folder failed</value></data>
+  <data name="LogViewerLoading" xml:space="preserve"><value>Loading log...</value></data>
+  <data name="LogViewerPathNotConfigured" xml:space="preserve"><value>FILEKAKARI_PERF_LOG is not configured and filekakari-perf.log was not found.</value></data>
+  <data name="LogViewerFileNotFound" xml:space="preserve"><value>The log file does not exist.</value></data>
+  <data name="LogViewerLoaded" xml:space="preserve"><value>Loaded the latest {0} lines.</value></data>
+  <data name="LogViewerLoadFailed" xml:space="preserve"><value>Failed to load the log: {0}</value></data>
+  <data name="SettingsTheme" xml:space="preserve"><value>Theme</value></data>
+  <data name="SettingsLanguage" xml:space="preserve"><value>Language</value></data>
+  <data name="SettingsFollowSystem" xml:space="preserve"><value>Follow system</value></data>
+  <data name="SettingsLight" xml:space="preserve"><value>Light</value></data>
+  <data name="SettingsDark" xml:space="preserve"><value>Dark</value></data>
+  <data name="SettingsThemeCappuccino" xml:space="preserve"><value>Cappuccino</value></data>
+  <data name="SettingsThemeCyberpunk" xml:space="preserve"><value>Cyberpunk</value></data>
+  <data name="SettingsThemeGray" xml:space="preserve"><value>Gray</value></data>
+  <data name="SettingsJapanese" xml:space="preserve"><value>Japanese</value></data>
+  <data name="SettingsEnglish" xml:space="preserve"><value>English</value></data>
+  <data name="SettingsShowHiddenFiles" xml:space="preserve"><value>Show hidden files</value></data>
+  <data name="SettingsShowSystemFiles" xml:space="preserve"><value>Show system files</value></data>
+  <data name="SettingsSortFoldersFirst" xml:space="preserve"><value>Show folders first when sorting</value></data>
+  <data name="SettingsPreviewPanePlacement" xml:space="preserve"><value>Preview pane position</value></data>
+  <data name="SettingsPreviewPanePlacementRight" xml:space="preserve"><value>Right</value></data>
+  <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>Bottom</value></data>
+  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>Auto-play video previews</value></data>
+  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>Automatically start playback when a video file is selected.</value></data>
+  <data name="SettingsFontFamily" xml:space="preserve"><value>Font family</value></data>
+  <data name="SettingsFontSize" xml:space="preserve"><value>Font size</value></data>
+  <data name="SettingsRowHeight" xml:space="preserve"><value>Row height</value></data>
+  <data name="SettingsColumns" xml:space="preserve"><value>Columns</value></data>
+  <data name="SettingsOpenFolder" xml:space="preserve"><value>Open Settings Folder</value></data>
+  <data name="SettingsOpenFolderFailedTitle" xml:space="preserve"><value>Open settings folder failed</value></data>
+  <data name="SettingsOpenThemesFolder" xml:space="preserve"><value>Open Themes Folder</value></data>
+  <data name="SettingsOpenThemesFolderFailedTitle" xml:space="preserve"><value>Open themes folder failed</value></data>
+  <data name="SettingsSave" xml:space="preserve"><value>Save</value></data>
+  <data name="SettingsCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="WorkspaceMenuOpen" xml:space="preserve"><value>Open as Workspace...</value></data>
+  <data name="WorkspaceMenuSaveNew" xml:space="preserve"><value>Save Current State as Workspace...</value></data>
+  <data name="WorkspaceMenuOverwrite" xml:space="preserve"><value>Overwrite Workspace</value></data>
+  <data name="WorkspaceMenuSaveAs" xml:space="preserve"><value>Save Workspace As...</value></data>
+  <data name="WorkspaceMenuOpenJson" xml:space="preserve"><value>Open Workspace JSON</value></data>
+  <data name="WorkspaceSaveTitle" xml:space="preserve"><value>Save as Workspace</value></data>
+  <data name="WorkspaceName" xml:space="preserve"><value>Workspace Name</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="WorkspaceSaveSuccess" xml:space="preserve"><value>Workspace saved successfully.</value></data>
+  <data name="WorkspaceSaveFailed" xml:space="preserve"><value>Failed to save Workspace: {0}</value></data>
+  <data name="WorkspaceMenu" xml:space="preserve"><value>Workspace</value></data>
+  <data name="WorkspaceMenuOpenLocal" xml:space="preserve"><value>Workspaceとして開く</value></data>
+  <data name="WorkspaceAvailableTooltip" xml:space="preserve"><value>このフォルダにはWorkspaceがあります。クリックしてメニューを開きます</value></data>
+  <data name="WorkspaceActiveTooltip" xml:space="preserve"><value>ワークスペース設定</value></data>
+  <data name="WorkspaceNormalTooltip" xml:space="preserve"><value>ワークスペース</value></data>
+  <data name="WorkspaceSaveButtonHeader" xml:space="preserve"><value>Workspace File (.workspace.json)</value></data>
+  <data name="WorkspaceSaveButtonOverwrite" xml:space="preserve"><value>Overwrite Workspace</value></data>
+  <data name="WorkspaceSaveButtonSaveAs" xml:space="preserve"><value>Save Workspace As...</value></data>
+  <data name="WorkspaceSaveButtonOpenJson" xml:space="preserve"><value>Open .workspace.json</value></data>
+  <data name="SettingsThemeFileNotFound" xml:space="preserve"><value>Theme file '{0}' not found in Themes folder.</value></data>
+  <data name="SettingsThemeLoadFailed" xml:space="preserve"><value>Failed to load theme file '{0}':
+{1}</value></data>
+  <data name="SettingsThemeErrorTitle" xml:space="preserve"><value>Theme Error</value></data>
+  <data name="ContextCommands" xml:space="preserve"><value>Commands</value></data>
+  <data name="OpenCommandsFileMenu" xml:space="preserve"><value>Open commands.json</value></data>
+  <data name="OpenCommandsLocationMenu" xml:space="preserve"><value>Open commands.json Location</value></data>
+  <data name="OpenCommandScriptsDirectoryMenu" xml:space="preserve"><value>Open Command Scripts Folder</value></data>
+  <data name="UserCommandExecuteFailed" xml:space="preserve"><value>Failed to execute command '{0}'.
+
+Details: {1}</value></data>
+  <data name="UserCommandErrorTitle" xml:space="preserve"><value>Command Execution Error</value></data>
+  <data name="PreviewTitle" xml:space="preserve"><value>Preview</value></data>
+  <data name="PreviewCloseButton" xml:space="preserve"><value>Close preview</value></data>
+  <data name="PreviewMediaPlay" xml:space="preserve"><value>Play</value></data>
+  <data name="PreviewMediaPause" xml:space="preserve"><value>Pause</value></data>
+  <data name="PreviewMediaStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="PreviewSelectFile" xml:space="preserve"><value>Select a file to preview.</value></data>
+  <data name="PreviewSingleFileOnly" xml:space="preserve"><value>Select one file to preview.</value></data>
+  <data name="PreviewFoldersUnsupported" xml:space="preserve"><value>Folder preview is not supported.</value></data>
+  <data name="PreviewLoading" xml:space="preserve"><value>Loading preview...</value></data>
+  <data name="PreviewUnsupported" xml:space="preserve"><value>This file type is not supported.</value></data>
+  <data name="PreviewUnsupportedTitle" xml:space="preserve"><value>This format is not supported for preview.</value></data>
+  <data name="PreviewUnsupportedHint" xml:space="preserve"><value>You can send this file to an external tool from Commands in the context menu.</value></data>
+  <data name="PreviewInfoName" xml:space="preserve"><value>Name</value></data>
+  <data name="PreviewInfoExtension" xml:space="preserve"><value>Extension</value></data>
+  <data name="PreviewInfoSize" xml:space="preserve"><value>Size</value></data>
+  <data name="PreviewInfoModified" xml:space="preserve"><value>Modified</value></data>
+  <data name="PreviewInfoPath" xml:space="preserve"><value>Path</value></data>
+  <data name="PreviewInfoNoExtension" xml:space="preserve"><value>(none)</value></data>
+  <data name="PreviewTooLarge" xml:space="preserve"><value>This file is too large to preview. Limit: {0}</value></data>
+  <data name="PreviewMissing" xml:space="preserve"><value>The file no longer exists.</value></data>
+  <data name="PreviewLoadFailed" xml:space="preserve"><value>Preview could not be loaded: {0}</value></data>
+  <data name="PreviewUnknownError" xml:space="preserve"><value>Unknown error</value></data>
+  <data name="SettingsGeneralTab" xml:space="preserve"><value>General</value></data>
+  <data name="SettingsUserCommandsTab" xml:space="preserve"><value>User Commands</value></data>
+  <data name="CmdEnabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="CmdName" xml:space="preserve"><value>Name</value></data>
+  <data name="CmdTarget" xml:space="preserve"><value>Target</value></data>
+  <data name="CmdExtensions" xml:space="preserve"><value>Extensions</value></data>
+  <data name="CmdExecutable" xml:space="preserve"><value>Executable</value></data>
+  <data name="CmdArguments" xml:space="preserve"><value>Arguments</value></data>
+  <data name="CmdWorkingDirectory" xml:space="preserve"><value>Working Directory</value></data>
+  <data name="CmdUseShellExecute" xml:space="preserve"><value>Use Shell Execute</value></data>
+  <data name="CmdAllowFiles" xml:space="preserve"><value>Allow Files</value></data>
+  <data name="CmdAllowDirectories" xml:space="preserve"><value>Allow Directories</value></data>
+  <data name="CmdAllowMultiple" xml:space="preserve"><value>Allow Multiple</value></data>
+  <data name="BtnAdd" xml:space="preserve"><value>Add</value></data>
+  <data name="BtnDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="BtnDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="UserCommandSaveFailed" xml:space="preserve"><value>Failed to save user commands: {0}</value></data>
+  <data name="UserCommandEditorTitle" xml:space="preserve"><value>User Command Editor</value></data>
+  <data name="UserCommandsSavedStatus" xml:space="preserve"><value>User commands saved successfully.</value></data>
+  <data name="TargetSelectionDesc" xml:space="preserve"><value>Selection (Selected items)</value></data>
+  <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (Current directory)</value></data>
+</root>

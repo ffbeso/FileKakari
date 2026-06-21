@@ -1,0 +1,59 @@
+﻿name: バグ報告 (Bug Report)
+description: 問題の発生手順やエラーの報告
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        不具合を発見した場合は、以下のフォームに記入して報告をお願いします。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      placeholder: 何が発生したか、簡潔に記載してください
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. アプリを起動する
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+      placeholder: 本来どう動くべきだったかを記載してください
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+      placeholder: 実際に何が発生したか、エラーメッセージなどがあれば記載してください
+    validations:
+      required: true
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windowsバージョン
+      placeholder: e.g. Windows 11 23H2 (OS Build 22631)
+    validations:
+      required: false
+  - type: input
+    id: app_version
+    attributes:
+      label: FileKakariのバージョンまたはコミット
+      placeholder: e.g. commit 15c22fe, or branch name
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: 補足
+      placeholder: スクリーンショットやその他関連する情報を記載してください
+    validations:
+      required: false

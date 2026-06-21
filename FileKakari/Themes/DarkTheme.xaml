@@ -1,0 +1,71 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="AppBackgroundColor">#202124</Color>
+    <Color x:Key="PanelBackgroundColor">#25272b</Color>
+    <Color x:Key="ControlBackgroundColor">#2f3238</Color>
+    <Color x:Key="ControlHoverColor">#39414d</Color>
+    <Color x:Key="ControlPressedColor">#465366</Color>
+    <Color x:Key="ControlDisabledColor">#292b30</Color>
+    <Color x:Key="HeaderBackgroundColor">#2b2e34</Color>
+    <Color x:Key="HeaderHoverColor">#363d48</Color>
+    <Color x:Key="HeaderGripColor">#4A5058</Color>
+    <Color x:Key="HeaderGripHoverColor">#6A717C</Color>
+    <Color x:Key="RowBackgroundColor">#25272b</Color>
+    <Color x:Key="RowHoverColor">#303743</Color>
+    <Color x:Key="TabBackgroundColor">#17191d</Color>
+    <Color x:Key="TabSelectedBackgroundColor">#25272b</Color>
+    <Color x:Key="TabHoverBackgroundColor">#2a3038</Color>
+    <Color x:Key="TabSeparatorColor">#596170</Color>
+    <Color x:Key="TextColor">#f3f4f6</Color>
+    <Color x:Key="SubtleTextColor">#b7bdc7</Color>
+    <Color x:Key="BorderColor">#4b5563</Color>
+    <Color x:Key="GridLineColor">#363b44</Color>
+    <Color x:Key="SelectionBackgroundColor">#2f6ea5</Color>
+    <Color x:Key="SelectionInactiveBackgroundColor">#3b4656</Color>
+    <Color x:Key="SelectionTextColor">#ffffff</Color>
+    <Color x:Key="FolderIconColor">#f5c542</Color>
+    <Color x:Key="FileIconColor">#7ab7ff</Color>
+    <Color x:Key="ScrollBarTrackColor">#25272b</Color>
+    <Color x:Key="ScrollBarThumbColor">#555B64</Color>
+    <Color x:Key="ScrollBarThumbHoverColor">#6A717C</Color>
+    <Color x:Key="ScrollBarThumbPressedColor">#7A828E</Color>
+    <Color x:Key="StatusBarBackgroundColor">#25272b</Color>
+    <Color x:Key="MenuIconColumnBackgroundColor">#2f3238</Color>
+
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{DynamicResource AppBackgroundColor}" />
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{DynamicResource PanelBackgroundColor}" />
+    <SolidColorBrush x:Key="ControlBackgroundBrush" Color="{DynamicResource ControlBackgroundColor}" />
+    <SolidColorBrush x:Key="ControlHoverBrush" Color="{DynamicResource ControlHoverColor}" />
+    <SolidColorBrush x:Key="ControlPressedBrush" Color="{DynamicResource ControlPressedColor}" />
+    <SolidColorBrush x:Key="ControlDisabledBrush" Color="{DynamicResource ControlDisabledColor}" />
+    <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="{DynamicResource HeaderBackgroundColor}" />
+    <SolidColorBrush x:Key="HeaderHoverBrush" Color="{DynamicResource HeaderHoverColor}" />
+    <SolidColorBrush x:Key="HeaderGripBrush" Color="{DynamicResource HeaderGripColor}" />
+    <SolidColorBrush x:Key="HeaderGripHoverBrush" Color="{DynamicResource HeaderGripHoverColor}" />
+    <SolidColorBrush x:Key="RowBackgroundBrush" Color="{DynamicResource RowBackgroundColor}" />
+    <SolidColorBrush x:Key="RowHoverBrush" Color="{DynamicResource RowHoverColor}" />
+    <SolidColorBrush x:Key="TabBackgroundBrush" Color="{DynamicResource TabBackgroundColor}" />
+    <SolidColorBrush x:Key="TabSelectedBackgroundBrush" Color="{DynamicResource TabSelectedBackgroundColor}" />
+    <SolidColorBrush x:Key="TabHoverBackgroundBrush" Color="{DynamicResource TabHoverBackgroundColor}" />
+    <SolidColorBrush x:Key="TabSeparatorBrush" Color="{DynamicResource TabSeparatorColor}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{DynamicResource TextColor}" />
+    <SolidColorBrush x:Key="SubtleTextBrush" Color="{DynamicResource SubtleTextColor}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{DynamicResource BorderColor}" />
+    <SolidColorBrush x:Key="GridLineBrush" Color="{DynamicResource GridLineColor}" />
+    <SolidColorBrush x:Key="SelectionBackgroundBrush" Color="{DynamicResource SelectionBackgroundColor}" />
+    <SolidColorBrush x:Key="SelectionInactiveBackgroundBrush" Color="{DynamicResource SelectionInactiveBackgroundColor}" />
+    <SolidColorBrush x:Key="SelectionTextBrush" Color="{DynamicResource SelectionTextColor}" />
+    <SolidColorBrush x:Key="FolderIconBrush" Color="{DynamicResource FolderIconColor}" />
+    <SolidColorBrush x:Key="FileIconBrush" Color="{DynamicResource FileIconColor}" />
+    <SolidColorBrush x:Key="ScrollBarTrackBrush" Color="{DynamicResource ScrollBarTrackColor}" />
+    <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="{DynamicResource ScrollBarThumbColor}" />
+    <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="{DynamicResource ScrollBarThumbHoverColor}" />
+    <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="{DynamicResource ScrollBarThumbPressedColor}" />
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="{DynamicResource StatusBarBackgroundColor}" />
+
+    <!-- Active/inactive pane chrome -->
+    <SolidColorBrush x:Key="ActivePaneBorderBrush" Color="#4A6278" />
+    <SolidColorBrush x:Key="InactivePaneBorderBrush" Color="#303642" />
+    <SolidColorBrush x:Key="ActivePaneAccentBrush" Color="#2F9FD6" />
+    <SolidColorBrush x:Key="InactivePaneAccentBrush" Color="#3A4352" />
+</ResourceDictionary>

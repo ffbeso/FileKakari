@@ -104,7 +104,13 @@ public partial class MainWindow
             }
             else if (navigationKind is NavigationKind.Back or NavigationKind.Forward)
             {
-                policy = FileListRestorePolicy.ExactRestore;
+                bool hasSavedState = activeTab.State.TryGetNavigationViewState(
+                    normalizedPath,
+                    MainWindow.NormalizeSortColumn(activeTab.State.SortColumn),
+                    activeTab.State.SortAscending,
+                    activeTab.State.FilterText,
+                    out _);
+                policy = hasSavedState ? FileListRestorePolicy.ExactRestore : FileListRestorePolicy.FocusPathFallback;
             }
             else if (navigationKind == NavigationKind.Up)
             {
@@ -126,40 +132,44 @@ public partial class MainWindow
             UpdateNavigationButtons();
         }
 
-        public async Task NavigateBackAsync()
+        public async Task NavigateHistoryAsync(NavigationDirection direction, FolderPane pane)
         {
-            var path = _owner.ActiveNavigation?.PeekBack();
-            if (path is null)
+            var tab = _owner.GetActiveFolderPaneTab(pane);
+            if (tab is null)
             {
                 return;
             }
 
-            if (!NavigationState.IsExistingDirectory(path))
-            {
-                _owner.StatusText.Text = _owner._text.Format("PathNotFound", path);
-                UpdateNavigationButtons();
-                return;
-            }
-
-            await NavigateToFolderAsync(path, NavigationKind.Back);
-        }
-
-        public async Task NavigateForwardAsync()
-        {
-            var path = _owner.ActiveNavigation?.PeekForward();
-            if (path is null)
+            var navigation = tab.Navigation;
+            var canNavigate = direction == NavigationDirection.Back ? navigation.CanGoBack : navigation.CanGoForward;
+            if (!canNavigate)
             {
                 return;
             }
 
-            if (!NavigationState.IsExistingDirectory(path))
+            var targetPath = direction == NavigationDirection.Back ? navigation.PeekBack() : navigation.PeekForward();
+            if (targetPath is null)
             {
-                _owner.StatusText.Text = _owner._text.Format("PathNotFound", path);
-                UpdateNavigationButtons();
                 return;
             }
 
-            await NavigateToFolderAsync(path, NavigationKind.Forward);
+            var navigationKind = direction == NavigationDirection.Back ? NavigationKind.Back : NavigationKind.Forward;
+
+            if (ReferenceEquals(pane, _owner.GetNormalFolderPane()))
+            {
+                if (!NavigationState.IsExistingDirectory(targetPath))
+                {
+                    _owner.StatusText.Text = _owner._text.Format("PathNotFound", targetPath);
+                    UpdateNavigationButtons();
+                    return;
+                }
+
+                await NavigateToFolderAsync(targetPath, navigationKind);
+            }
+            else
+            {
+                await NavigateWorkspacePaneToFolderAsync(pane, targetPath, navigationKind);
+            }
         }
 
         public async Task<bool> TryOpenWorkspaceFileAsync(FileEntry entry)
@@ -314,7 +324,13 @@ public partial class MainWindow
             }
             else if (navigationKind is NavigationKind.Back or NavigationKind.Forward)
             {
-                policy = FileListRestorePolicy.ExactRestore;
+                bool hasSavedState = targetTab.State.TryGetNavigationViewState(
+                    normalizedPath,
+                    MainWindow.NormalizeSortColumn(targetTab.State.SortColumn),
+                    targetTab.State.SortAscending,
+                    "",
+                    out _);
+                policy = hasSavedState ? FileListRestorePolicy.ExactRestore : FileListRestorePolicy.FocusPathFallback;
             }
             else if (navigationKind == NavigationKind.Up)
             {

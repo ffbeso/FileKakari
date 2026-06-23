@@ -1338,14 +1338,18 @@ public partial class MainWindow : Window
         var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
         var hasAlt = (modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
-        var altForNavigation = hasAlt || _isAltNavigationModifierDown;
-        var isAltLeft = altForNavigation && (e.Key == Key.Left || e.SystemKey == Key.Left)
-            || e.Key == Key.BrowserBack
-            || e.SystemKey == Key.BrowserBack;
-        var isAltRight = altForNavigation && (e.Key == Key.Right || e.SystemKey == Key.Right)
-            || e.Key == Key.BrowserForward
-            || e.SystemKey == Key.BrowserForward;
-        var isAltUp = altForNavigation && (e.Key == Key.Up || e.SystemKey == Key.Up);
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Alt単体（他の修飾キーなし）の判定を厳密に行う
+        var isAltOnly = (modifiers == ModifierKeys.Alt)
+            || (_isAltNavigationModifierDown && !hasControl && !hasShift);
+
+        var isAltLeft = (isAltOnly && key == Key.Left)
+            || key == Key.BrowserBack;
+        var isAltRight = (isAltOnly && key == Key.Right)
+            || key == Key.BrowserForward;
+        var isAltUp = isAltOnly && key == Key.Up;
 
         if (GetSelectedInternalPage() is not null)
         {
@@ -1480,7 +1484,7 @@ public partial class MainWindow : Window
             }
         }
 
-        if (altForNavigation && (e.Key == Key.D || e.SystemKey == Key.D))
+        if (isAltOnly && key == Key.D)
         {
             e.Handled = true;
             BeginPanePathEdit();
@@ -5492,29 +5496,48 @@ public partial class MainWindow : Window
             }
         }
 
-        if (navigationKind is not (NavigationKind.Back or NavigationKind.Forward)
-            || !tab.State.TryGetNavigationViewState(
+        if (navigationKind is NavigationKind.Back or NavigationKind.Forward)
+        {
+            var sourcePath = tab.Navigation.CurrentPath;
+            bool hasSavedState = tab.State.TryGetNavigationViewState(
                 path,
                 NormalizeSortColumn(tab.State.SortColumn),
                 tab.State.SortAscending,
                 tab.State.FilterText,
-                out var viewState)
-            || (viewState.VerticalOffset <= 0 && viewState.SelectedPaths.Count == 0))
-        {
-            return null;
+                out var viewState);
+
+            if (hasSavedState)
+            {
+                tab.State.VerticalOffset = viewState.VerticalOffset;
+                tab.State.SelectedPaths = viewState.SelectedPaths.ToList();
+                return new ListViewRestoreState(
+                    tab.State.Id,
+                    path,
+                    viewState.SelectedPaths,
+                    viewState.SelectedPaths.FirstOrDefault(),
+                    null,
+                    viewState.VerticalOffset,
+                    _selectionUserVersion,
+                    _scrollUserVersion);
+            }
+            else
+            {
+                var fallbackPaths = IsItemDirectChildOfFolder(sourcePath, path)
+                    ? new List<string> { sourcePath }
+                    : new List<string>();
+                return new ListViewRestoreState(
+                    tab.State.Id,
+                    path,
+                    fallbackPaths,
+                    fallbackPaths.FirstOrDefault(),
+                    null,
+                    0,
+                    _selectionUserVersion,
+                    _scrollUserVersion);
+            }
         }
 
-        tab.State.VerticalOffset = viewState.VerticalOffset;
-        tab.State.SelectedPaths = viewState.SelectedPaths.ToList();
-        return new ListViewRestoreState(
-            tab.State.Id,
-            path,
-            viewState.SelectedPaths,
-            viewState.SelectedPaths.FirstOrDefault(),
-            null,
-            viewState.VerticalOffset,
-            _selectionUserVersion,
-            _scrollUserVersion);
+        return null;
     }
 
 
@@ -5636,15 +5659,29 @@ public partial class MainWindow : Window
             }
         }
 
-        return navigationKind is NavigationKind.Back or NavigationKind.Forward
-            && tab.State.TryGetNavigationViewState(
+        if (navigationKind is NavigationKind.Back or NavigationKind.Forward)
+        {
+            bool hasSavedState = tab.State.TryGetNavigationViewState(
                 path,
                 NormalizeSortColumn(tab.State.SortColumn),
                 tab.State.SortAscending,
                 "",
-                out var viewState)
-            ? viewState
-            : NavigationViewState.Empty;
+                out var viewState);
+
+            if (hasSavedState)
+            {
+                return viewState;
+            }
+            else
+            {
+                var fallbackPaths = IsItemDirectChildOfFolder(tab.Navigation.CurrentPath, path)
+                    ? new List<string> { tab.Navigation.CurrentPath }
+                    : new List<string>();
+                return new NavigationViewState(0, fallbackPaths);
+            }
+        }
+
+        return NavigationViewState.Empty;
     }
 
     private void SaveNavigationViewState(

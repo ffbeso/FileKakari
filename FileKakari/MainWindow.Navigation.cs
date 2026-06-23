@@ -5,6 +5,12 @@ using System.Windows.Input;
 
 namespace FileKakari;
 
+public enum NavigationDirection
+{
+    Back,
+    Forward
+}
+
 public partial class MainWindow
 {
     private async Task NavigateToFolderAsync(string path, NavigationKind navigationKind)
@@ -14,23 +20,126 @@ public partial class MainWindow
 
     private async void BackButton_Click(object sender, RoutedEventArgs e)
     {
-        await NavigateBackAsync();
+        await NavigateHistoryAsync(NavigationDirection.Back);
     }
 
     private async Task NavigateBackAsync()
     {
-        await _navigationController.NavigateBackAsync();
+        await NavigateHistoryAsync(NavigationDirection.Back);
     }
 
     private async void ForwardButton_Click(object sender, RoutedEventArgs e)
     {
-        await NavigateForwardAsync();
+        await NavigateHistoryAsync(NavigationDirection.Forward);
     }
 
     private async Task NavigateForwardAsync()
     {
-        await _navigationController.NavigateForwardAsync();
+        await NavigateHistoryAsync(NavigationDirection.Forward);
     }
+
+    private async Task NavigateHistoryAsync(
+        NavigationDirection direction,
+        FolderPane? explicitPane = null)
+    {
+        FolderPane? targetPane = null;
+        if (explicitPane is not null && IsValidFolderPane(explicitPane))
+        {
+            targetPane = explicitPane;
+        }
+        else
+        {
+            targetPane = GetActiveFolderPane();
+        }
+
+        if (!IsValidFolderPane(targetPane))
+        {
+            return;
+        }
+
+        var context = GetActiveNavigationContext(targetPane);
+        var pane = context.Pane;
+        var tab = context.Tab;
+        if (pane is null || tab is null)
+        {
+            return;
+        }
+
+        var isPaneLoading = ReferenceEquals(pane, GetNormalFolderPane()) ? _isLoading : pane.IsLoading;
+        if (isPaneLoading)
+        {
+            _performanceLogger.Write($"history-navigation-blocked reason=pane-loading paneId={pane.Id}");
+            return;
+        }
+
+        await _navigationController.NavigateHistoryAsync(direction, pane);
+    }
+
+    private bool IsValidFolderPane(FolderPane? pane)
+    {
+        if (pane is null)
+        {
+            return false;
+        }
+
+        if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+        {
+            return _workspaceDisplayPanes.Contains(pane);
+        }
+        else
+        {
+            return ReferenceEquals(pane, GetNormalFolderPane());
+        }
+    }
+
+    private static bool IsItemDirectChildOfFolder(string itemPath, string folderPath)
+    {
+        if (string.IsNullOrWhiteSpace(itemPath) || string.IsNullOrWhiteSpace(folderPath))
+        {
+            return false;
+        }
+
+        var itemNormalized = NavigationState.NormalizePath(itemPath);
+        var folderNormalized = NavigationState.NormalizePath(folderPath);
+
+        if (itemNormalized is null || folderNormalized is null)
+        {
+            return false;
+        }
+
+        if (SpecialLocationService.IsSpecialUri(folderNormalized))
+        {
+            if (SpecialLocationService.IsSpecialUri(itemNormalized))
+            {
+                return false;
+            }
+            try
+            {
+                return NavigationState.IsFileSystemRoot(itemNormalized);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        try
+        {
+            var parent = Directory.GetParent(itemNormalized);
+            if (parent is null)
+            {
+                return false;
+            }
+
+            var parentNormalized = NavigationState.NormalizePath(parent.FullName);
+            return string.Equals(parentNormalized, folderNormalized, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
 
     private async void UpButton_Click(object sender, RoutedEventArgs e)
     {
@@ -85,25 +194,19 @@ public partial class MainWindow
     private async void WorkspacePaneBackButton_Click(object sender, RoutedEventArgs e)
     {
         _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is not { } pane
-            || pane.ActiveTab?.Navigation.PeekBack() is not { } path)
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
         {
-            return;
+            await NavigateHistoryAsync(NavigationDirection.Back, pane);
         }
-
-        await NavigateWorkspacePaneToFolderAsync(pane, path, NavigationKind.Back);
     }
 
     private async void WorkspacePaneForwardButton_Click(object sender, RoutedEventArgs e)
     {
         _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is not { } pane
-            || pane.ActiveTab?.Navigation.PeekForward() is not { } path)
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
         {
-            return;
+            await NavigateHistoryAsync(NavigationDirection.Forward, pane);
         }
-
-        await NavigateWorkspacePaneToFolderAsync(pane, path, NavigationKind.Forward);
     }
 
     private async void WorkspacePaneUpButton_Click(object sender, RoutedEventArgs e)

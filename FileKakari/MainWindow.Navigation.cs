@@ -52,8 +52,11 @@ public partial class MainWindow
             targetPane = GetActiveFolderPane();
         }
 
+        WriteDiagLog($"navigate-history-entry targetPaneId={targetPane?.Id ?? "null"}");
+
         if (!IsValidFolderPane(targetPane))
         {
+            WriteDiagLog($"navigate-history-failed reason=invalid-pane targetPaneId={targetPane?.Id ?? "null"}");
             return;
         }
 
@@ -62,13 +65,18 @@ public partial class MainWindow
         var tab = context.Tab;
         if (pane is null || tab is null)
         {
+            WriteDiagLog($"navigate-history-failed reason=null-pane-or-tab paneId={pane?.Id ?? "null"} tab={tab is not null}");
             return;
         }
+
+        var canNavigate = direction == NavigationDirection.Back ? tab.Navigation.CanGoBack : tab.Navigation.CanGoForward;
+        WriteDiagLog($"navigate-history direction={direction} can-navigate={canNavigate} active-pane-id={pane.Id} active-path={tab.Navigation.CurrentPath}");
 
         var isPaneLoading = ReferenceEquals(pane, GetNormalFolderPane()) ? _isLoading : pane.IsLoading;
         if (isPaneLoading)
         {
             _performanceLogger.Write($"history-navigation-blocked reason=pane-loading paneId={pane.Id}");
+            WriteDiagLog($"navigate-history-blocked reason=pane-loading paneId={pane.Id}");
             return;
         }
 

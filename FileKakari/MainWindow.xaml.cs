@@ -1285,8 +1285,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void WriteDiagLog(string message)
+    {
+        try
+        {
+            var line = $"[DIAG] {DateTime.Now:HH:mm:ss.fff} {message}";
+            System.IO.File.AppendAllText(@"d:\Works\VScode\FileKakari-public\perf.log", line + Environment.NewLine);
+        }
+        catch { }
+    }
+
     private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        var focused = Keyboard.FocusedElement;
+        var focusedType = focused?.GetType().FullName ?? "null";
+        WriteDiagLog($"event=PreviewKeyDown key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
+
         var focusedTextBox = Keyboard.FocusedElement as TextBox;
         var isRenameTextBoxFocused = focusedTextBox?.DataContext is FileEntry
             || GetWorkspaceSession(focusedTextBox?.DataContext) is not null;
@@ -1297,6 +1311,7 @@ public partial class MainWindow : Window
             e.Handled = true;
             _ = ProcessPendingFolderWatchRefreshAsync();
             _ = ProcessPendingDriveListRefreshAsync();
+            WriteDiagLog("PreviewKeyDown handled Escape auto-scroll");
             return;
         }
 
@@ -1306,11 +1321,13 @@ public partial class MainWindow : Window
             e.Handled = true;
             _ = ProcessPendingFolderWatchRefreshAsync();
             _ = ProcessPendingDriveListRefreshAsync();
+            WriteDiagLog("PreviewKeyDown handled Escape selecting");
             return;
         }
 
         if (isRenameTextBoxFocused)
         {
+            WriteDiagLog("PreviewKeyDown discarded reason=rename-focused");
             return;
         }
 
@@ -1341,9 +1358,16 @@ public partial class MainWindow : Window
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        // Alt単体（他の修飾キーなし）の判定を厳密に行う
-        var isAltOnly = (modifiers == ModifierKeys.Alt)
-            || (_isAltNavigationModifierDown && !hasControl && !hasShift);
+        // Alt判定を単純化し、 IsKeyDown や Modifiers の両方を参照して厳密に Alt単独 を取得する
+        var altDown = Keyboard.IsKeyDown(Key.LeftAlt)
+            || Keyboard.IsKeyDown(Key.RightAlt)
+            || modifiers.HasFlag(ModifierKeys.Alt);
+
+        var disallowedModifier = modifiers.HasFlag(ModifierKeys.Control)
+            || modifiers.HasFlag(ModifierKeys.Shift)
+            || modifiers.HasFlag(ModifierKeys.Windows);
+
+        var isAltOnly = altDown && !disallowedModifier;
 
         var isAltLeft = (isAltOnly && key == Key.Left)
             || key == Key.BrowserBack;
@@ -1353,6 +1377,7 @@ public partial class MainWindow : Window
 
         if (GetSelectedInternalPage() is not null)
         {
+            WriteDiagLog($"PreviewKeyDown internal-page-focused. Check key={e.Key}");
             if (hasControl && e.Key == Key.Tab)
             {
                 e.Handled = true;
@@ -1398,6 +1423,7 @@ public partial class MainWindow : Window
 
         if (isAltLeft)
         {
+            WriteDiagLog("shortcut=alt-left matched=true");
             e.Handled = true;
             await NavigateBackAsync();
             return;
@@ -1405,6 +1431,7 @@ public partial class MainWindow : Window
 
         if (isAltRight)
         {
+            WriteDiagLog("shortcut=alt-right matched=true");
             e.Handled = true;
             await NavigateForwardAsync();
             return;
@@ -1412,6 +1439,7 @@ public partial class MainWindow : Window
 
         if (isAltUp)
         {
+            WriteDiagLog("shortcut=alt-up matched=true");
             e.Handled = true;
             ClearFilterIfNeeded();
             await OpenParentAsync();
@@ -1590,6 +1618,10 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
     {
+        var focused = Keyboard.FocusedElement;
+        var focusedType = focused?.GetType().FullName ?? "null";
+        WriteDiagLog($"event=PreviewKeyUp key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
+
         if (IsAltKey(e))
         {
             _isAltNavigationModifierDown = false;
@@ -6643,6 +6675,83 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
         ThemeManager.UpdateWindowTitleBar(this);
+        WriteDiagLog("OnSourceInitialized called");
+
+        System.Windows.Interop.ComponentDispatcher.ThreadPreprocessMessage += ComponentDispatcher_ThreadPreprocessMessage;
+        WriteDiagLog("ComponentDispatcher registered successfully");
+    }
+
+    private void ComponentDispatcher_ThreadPreprocessMessage(ref System.Windows.Interop.MSG msg, ref bool handled)
+    {
+        const int WM_KEYDOWN = 0x0100;
+        const int WM_SYSKEYDOWN = 0x0104;
+        const int VK_MENU = 0x12;
+        const int VK_LEFT = 0x25;
+        const int VK_RIGHT = 0x27;
+        const int VK_UP = 0x26;
+
+        if (msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN)
+        {
+            int vk = (int)msg.wParam;
+            WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} vk=0x{vk:X} lParam=0x{msg.lParam.ToInt64():X}");
+
+            if (msg.message == WM_SYSKEYDOWN && vk == VK_MENU)
+            {
+                WriteDiagLog("ThreadPreprocessMessage vk=VK_MENU");
+                return;
+            }
+
+            if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP)
+            {
+                var modifiers = Keyboard.Modifiers;
+                var hasControl = modifiers.HasFlag(ModifierKeys.Control);
+                var hasShift = modifiers.HasFlag(ModifierKeys.Shift);
+                var hasWin = modifiers.HasFlag(ModifierKeys.Windows);
+
+                var altDown = modifiers.HasFlag(ModifierKeys.Alt)
+                    || Keyboard.IsKeyDown(Key.LeftAlt)
+                    || Keyboard.IsKeyDown(Key.RightAlt);
+
+                if (altDown && !hasControl && !hasShift && !hasWin)
+                {
+                    var focusedTextBox = Keyboard.FocusedElement as TextBox;
+                    var isRenameTextBoxFocused = focusedTextBox?.DataContext is FileEntry
+                        || GetWorkspaceSession(focusedTextBox?.DataContext) is not null;
+
+                    if (isRenameTextBoxFocused)
+                    {
+                        WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=rename-focused");
+                        return;
+                    }
+
+                    if (GetSelectedInternalPage() is not null)
+                    {
+                        WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=internal-page-focused");
+                        return;
+                    }
+
+                    if (vk == VK_LEFT)
+                    {
+                        WriteDiagLog($"shortcut=alt-left matched=true (msg=0x{msg.message:X4})");
+                        _ = NavigateBackAsync();
+                        handled = true;
+                    }
+                    else if (vk == VK_RIGHT)
+                    {
+                        WriteDiagLog($"shortcut=alt-right matched=true (msg=0x{msg.message:X4})");
+                        _ = NavigateForwardAsync();
+                        handled = true;
+                    }
+                    else if (vk == VK_UP)
+                    {
+                        WriteDiagLog($"shortcut=alt-up matched=true (msg=0x{msg.message:X4})");
+                        ClearFilterIfNeeded();
+                        _ = OpenParentAsync();
+                        handled = true;
+                    }
+                }
+            }
+        }
     }
 
     private void SaveWorkspacePanesViewState()

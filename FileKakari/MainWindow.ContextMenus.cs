@@ -518,8 +518,11 @@ public partial class MainWindow
 
         if (GetClipboardSequenceNumber() != _internalClipboardSequence)
         {
-            _pendingFileOperation = null;
-            return false;
+            if (ClipboardContainsFileDropList())
+            {
+                _pendingFileOperation = null;
+                return false;
+            }
         }
 
         return true;

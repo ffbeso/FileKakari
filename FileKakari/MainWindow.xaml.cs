@@ -111,6 +111,7 @@ public partial class MainWindow : Window
     private bool _isRestoringTabState;
     private bool _isSwitchingTabs;
     private bool _isSwitchingWorkspacePane;
+    private bool _isSwitchingSubTabByKey;
     private bool _suppressSelectionStatusUpdates;
     private bool _itemsFilterEnabled;
     private bool _isMutatingItemsForLoad;
@@ -1285,8 +1286,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private static readonly bool IsDiagLogEnabled =
+#if DEBUG
+        true;
+#else
+        System.Environment.GetEnvironmentVariable("FILEKAKARI_DIAG_LOG") == "1";
+#endif
+
     private static void WriteDiagLog(string message)
     {
+        if (!IsDiagLogEnabled) return;
         try
         {
             var line = $"[DIAG] {DateTime.Now:HH:mm:ss.fff} {message}";
@@ -1299,7 +1308,7 @@ public partial class MainWindow : Window
     {
         var focused = Keyboard.FocusedElement;
         var focusedType = focused?.GetType().FullName ?? "null";
-        WriteDiagLog($"event=PreviewKeyDown key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
+        if (IsDiagLogEnabled) WriteDiagLog($"event=PreviewKeyDown key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
 
         var focusedTextBox = Keyboard.FocusedElement as TextBox;
         var isRenameTextBoxFocused = focusedTextBox?.DataContext is FileEntry
@@ -1311,7 +1320,7 @@ public partial class MainWindow : Window
             e.Handled = true;
             _ = ProcessPendingFolderWatchRefreshAsync();
             _ = ProcessPendingDriveListRefreshAsync();
-            WriteDiagLog("PreviewKeyDown handled Escape auto-scroll");
+            if (IsDiagLogEnabled) WriteDiagLog("PreviewKeyDown handled Escape auto-scroll");
             return;
         }
 
@@ -1321,13 +1330,13 @@ public partial class MainWindow : Window
             e.Handled = true;
             _ = ProcessPendingFolderWatchRefreshAsync();
             _ = ProcessPendingDriveListRefreshAsync();
-            WriteDiagLog("PreviewKeyDown handled Escape selecting");
+            if (IsDiagLogEnabled) WriteDiagLog("PreviewKeyDown handled Escape selecting");
             return;
         }
 
         if (isRenameTextBoxFocused)
         {
-            WriteDiagLog("PreviewKeyDown discarded reason=rename-focused");
+            if (IsDiagLogEnabled) WriteDiagLog("PreviewKeyDown discarded reason=rename-focused");
             return;
         }
 
@@ -1358,7 +1367,6 @@ public partial class MainWindow : Window
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        // Alt判定を単純化し、 IsKeyDown や Modifiers の両方を参照して厳密に Alt単独 を取得する
         var altDown = Keyboard.IsKeyDown(Key.LeftAlt)
             || Keyboard.IsKeyDown(Key.RightAlt)
             || modifiers.HasFlag(ModifierKeys.Alt);
@@ -1369,15 +1377,9 @@ public partial class MainWindow : Window
 
         var isAltOnly = altDown && !disallowedModifier;
 
-        var isAltLeft = (isAltOnly && key == Key.Left)
-            || key == Key.BrowserBack;
-        var isAltRight = (isAltOnly && key == Key.Right)
-            || key == Key.BrowserForward;
-        var isAltUp = isAltOnly && key == Key.Up;
-
         if (GetSelectedInternalPage() is not null)
         {
-            WriteDiagLog($"PreviewKeyDown internal-page-focused. Check key={e.Key}");
+            if (IsDiagLogEnabled) WriteDiagLog($"PreviewKeyDown internal-page-focused. Check key={e.Key}");
             if (hasControl && e.Key == Key.Tab)
             {
                 e.Handled = true;
@@ -1421,28 +1423,71 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (isAltLeft)
+        // BrowserBack / BrowserForward keys mapping
+        if (key == Key.BrowserBack)
         {
-            WriteDiagLog("shortcut=alt-left matched=true");
+            if (IsDiagLogEnabled) WriteDiagLog("shortcut=browser-back matched=true");
             e.Handled = true;
             await NavigateBackAsync();
             return;
         }
 
-        if (isAltRight)
+        if (key == Key.BrowserForward)
         {
-            WriteDiagLog("shortcut=alt-right matched=true");
+            if (IsDiagLogEnabled) WriteDiagLog("shortcut=browser-forward matched=true");
             e.Handled = true;
             await NavigateForwardAsync();
             return;
         }
 
-        if (isAltUp)
+        // Ctrl+[` (戻る) / `Ctrl+]` (進む) の処理
+        // JISキーボード（Key.OemOpenBrackets / Key.OemCloseBrackets）に対応
+        if (hasControl && !hasShift && !hasAlt)
         {
-            WriteDiagLog("shortcut=alt-up matched=true");
+            if (key == Key.OemOpenBrackets)
+            {
+                e.Handled = true;
+                if (IsDiagLogEnabled) WriteDiagLog("shortcut=ctrl-[ matched=true");
+                await NavigateBackAsync();
+                return;
+            }
+            if (key == Key.OemCloseBrackets)
+            {
+                e.Handled = true;
+                if (IsDiagLogEnabled) WriteDiagLog("shortcut=ctrl-] matched=true");
+                await NavigateForwardAsync();
+                return;
+            }
+        }
+
+        // サブタブ操作 (Ctrl+PageUp / PageDown, Ctrl+Shift+W)
+        if (hasControl)
+        {
+            if (e.Key == Key.PageDown && !hasAlt && !hasShift)
+            {
+                e.Handled = true;
+                await SwitchSubTabByOffsetAsync(1);
+                return;
+            }
+            if (e.Key == Key.PageUp && !hasAlt && !hasShift)
+            {
+                e.Handled = true;
+                await SwitchSubTabByOffsetAsync(-1);
+                return;
+            }
+            if (e.Key == Key.W && hasShift && !hasAlt)
+            {
+                e.Handled = true;
+                await CloseActiveSubTabAsync();
+                return;
+            }
+        }
+
+        // ペイン間移動 (F6, Shift+F6)
+        if (e.Key == Key.F6 && !hasControl && !hasAlt)
+        {
             e.Handled = true;
-            ClearFilterIfNeeded();
-            await OpenParentAsync();
+            await SwitchPaneFocusByOffsetAsync(hasShift ? -1 : 1);
             return;
         }
 
@@ -1583,10 +1628,28 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Back)
         {
-            e.Handled = true;
-            ClearFilterIfNeeded();
-            await OpenParentAsync();
-            return;
+            var focusedElement = Keyboard.FocusedElement as DependencyObject;
+            bool isInputControl = focusedElement is TextBox 
+                || focusedElement is ComboBox 
+                || focusedElement is System.Windows.Controls.Primitives.TextBoxBase
+                || focusedElement is PasswordBox;
+
+            bool isRenameActive = _activeRenameEntry?.IsRenaming == true 
+                || (ActiveSession ?? _activeWorkspaceSession)?.IsRenaming == true;
+
+            bool isImeComposing = e.Key == Key.ImeProcessed;
+
+            if (IsInsideItemsList(focusedElement) 
+                && !isRenameActive 
+                && !isInputControl 
+                && GetSelectedInternalPage() is null 
+                && !isImeComposing)
+            {
+                e.Handled = true;
+                ClearFilterIfNeeded();
+                await OpenParentAsync();
+                return;
+            }
         }
 
         if (e.Key == Key.F2)
@@ -1616,11 +1679,145 @@ public partial class MainWindow : Window
         }
     }
 
+    private ListBox? FindSubTabBarListBoxForPane(FolderPane pane)
+    {
+        return FindVisualChildren<ListBox>(WorkspaceSessionsHost)
+            .FirstOrDefault(lb => lb.DataContext is FolderPane p && string.Equals(p.Id, pane.Id, StringComparison.Ordinal));
+    }
+
+    private async Task SwitchSubTabByOffsetAsync(int offset)
+    {
+        var pane = GetActiveFolderPane();
+        if (pane is null || pane.Tabs.Count <= 1)
+        {
+            return;
+        }
+
+        var newIndex = (pane.ActiveTabIndex + offset + pane.Tabs.Count) % pane.Tabs.Count;
+        if (IsDiagLogEnabled) WriteDiagLog($"SwitchSubTabByOffsetAsync index={pane.ActiveTabIndex}->{newIndex}");
+
+        var previousTab = pane.ActiveTab;
+        var targetTab = pane.Tabs[newIndex];
+
+        _isSwitchingSubTabByKey = true;
+        try
+        {
+            if (previousTab is not null)
+            {
+                SaveWorkspacePaneColumnWidthsForTab(pane, previousTab);
+                SaveWorkspacePaneNavigationViewState(pane, previousTab);
+            }
+
+            pane.SelectedTabId = targetTab.Id;
+
+            var listBox = FindSubTabBarListBoxForPane(pane);
+            if (listBox is not null)
+            {
+                if (!ReferenceEquals(listBox.SelectedItem, targetTab))
+                {
+                    listBox.SelectedItem = targetTab;
+                }
+                BringWorkspacePaneSelectedSubTabIntoView(listBox);
+            }
+
+            if (_activeWorkspaceSession is not null)
+            {
+                await ActivateWorkspacePaneFromSenderAsync(listBox ?? (object)pane);
+            }
+
+            targetTab.State.CurrentPath = targetTab.Navigation.CurrentPath;
+            ApplyDisplayModeToPane(pane);
+            pane.RefreshDisplay();
+
+            await LoadFolderPaneItemsAsync(pane);
+
+            UpdateFolderWatchForWorkspacePanes();
+            ApplyColumnSettingsToWorkspacePane(pane);
+            UpdateWindowTitle();
+            ScheduleSessionSave("subtab-selection-changed-offset");
+        }
+        finally
+        {
+            _isSwitchingSubTabByKey = false;
+        }
+
+        FocusActiveFileList();
+        FocusSelectedListViewItemOfActivePane();
+    }
+
+    private async Task CloseActiveSubTabAsync()
+    {
+        var pane = GetActiveFolderPane();
+        if (pane is null || pane.ActiveTab is null)
+        {
+            return;
+        }
+
+        if (IsDiagLogEnabled) WriteDiagLog($"CloseActiveSubTabAsync path={pane.ActiveTab.Navigation.CurrentPath}");
+        var listBox = FindSubTabBarListBoxForPane(pane);
+        await CloseWorkspacePaneSubTabAsync(pane, pane.ActiveTab, listBox);
+    }
+
+    private async Task SwitchPaneFocusByOffsetAsync(int offset)
+    {
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var panes = _workspaceDisplayPanes;
+        if (panes is null || panes.Count <= 1)
+        {
+            return;
+        }
+
+        var activePane = GetActiveFolderPane();
+        if (activePane is null)
+        {
+            return;
+        }
+        var currentIndex = panes.IndexOf(activePane);
+        if (currentIndex < 0)
+        {
+            currentIndex = 0;
+        }
+
+        var nextIndex = (currentIndex + offset + panes.Count) % panes.Count;
+        var targetPane = panes[nextIndex];
+
+        if (IsDiagLogEnabled) WriteDiagLog($"SwitchPaneFocusByOffsetAsync index={currentIndex}->{nextIndex} paneId={targetPane.Id}");
+
+        // 既存のペインアクティブ化処理を通す
+        await ActivateWorkspacePaneFromSenderAsync(targetPane);
+
+        // アクティブ表示更新
+        UpdateWorkspacePaneActiveStates();
+
+        // リストビューにフォーカスを当て、選択項目へフォーカスを復元する
+        FocusActiveFileList();
+        FocusSelectedListViewItemOfActivePane();
+    }
+
+    private void FocusSelectedListViewItemOfActivePane()
+    {
+        if (GetActivePreviewListView() is { IsVisible: true, IsEnabled: true } listView)
+        {
+            if (listView.SelectedItem is not null)
+            {
+                var container = listView.ItemContainerGenerator.ContainerFromItem(listView.SelectedItem) as ListViewItem;
+                if (container is not null)
+                {
+                    container.Focus();
+                }
+            }
+        }
+    }
+
     private void Window_PreviewKeyUp(object sender, KeyEventArgs e)
     {
         var focused = Keyboard.FocusedElement;
         var focusedType = focused?.GetType().FullName ?? "null";
-        WriteDiagLog($"event=PreviewKeyUp key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
+        if (IsDiagLogEnabled) WriteDiagLog($"event=PreviewKeyUp key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
 
         if (IsAltKey(e))
         {
@@ -3485,6 +3682,11 @@ public partial class MainWindow : Window
 
     private async void WorkspacePaneSubTabBar_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_isSwitchingSubTabByKey)
+        {
+            return;
+        }
+
         if (sender is ListBox listBox
             && listBox.DataContext is FolderPane pane)
         {
@@ -6683,24 +6885,14 @@ public partial class MainWindow : Window
 
     private void ComponentDispatcher_ThreadPreprocessMessage(ref System.Windows.Interop.MSG msg, ref bool handled)
     {
-        const int WM_KEYDOWN = 0x0100;
         const int WM_SYSKEYDOWN = 0x0104;
-        const int VK_MENU = 0x12;
         const int VK_LEFT = 0x25;
         const int VK_RIGHT = 0x27;
         const int VK_UP = 0x26;
 
-        if (msg.message == WM_SYSKEYDOWN || msg.message == WM_KEYDOWN)
+        if (msg.message == WM_SYSKEYDOWN)
         {
             int vk = (int)msg.wParam;
-            WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} vk=0x{vk:X} lParam=0x{msg.lParam.ToInt64():X}");
-
-            if (msg.message == WM_SYSKEYDOWN && vk == VK_MENU)
-            {
-                WriteDiagLog("ThreadPreprocessMessage vk=VK_MENU");
-                return;
-            }
-
             if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP)
             {
                 var modifiers = Keyboard.Modifiers;
@@ -6720,31 +6912,31 @@ public partial class MainWindow : Window
 
                     if (isRenameTextBoxFocused)
                     {
-                        WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=rename-focused");
+                        if (IsDiagLogEnabled) WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=rename-focused");
                         return;
                     }
 
                     if (GetSelectedInternalPage() is not null)
                     {
-                        WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=internal-page-focused");
+                        if (IsDiagLogEnabled) WriteDiagLog($"ThreadPreprocessMessage msg=0x{msg.message:X4} discarded vk={vk} reason=internal-page-focused");
                         return;
                     }
 
                     if (vk == VK_LEFT)
                     {
-                        WriteDiagLog($"shortcut=alt-left matched=true (msg=0x{msg.message:X4})");
+                        if (IsDiagLogEnabled) WriteDiagLog($"shortcut=alt-left matched=true (msg=0x{msg.message:X4})");
                         _ = NavigateBackAsync();
                         handled = true;
                     }
                     else if (vk == VK_RIGHT)
                     {
-                        WriteDiagLog($"shortcut=alt-right matched=true (msg=0x{msg.message:X4})");
+                        if (IsDiagLogEnabled) WriteDiagLog($"shortcut=alt-right matched=true (msg=0x{msg.message:X4})");
                         _ = NavigateForwardAsync();
                         handled = true;
                     }
                     else if (vk == VK_UP)
                     {
-                        WriteDiagLog($"shortcut=alt-up matched=true (msg=0x{msg.message:X4})");
+                        if (IsDiagLogEnabled) WriteDiagLog($"shortcut=alt-up matched=true (msg=0x{msg.message:X4})");
                         ClearFilterIfNeeded();
                         _ = OpenParentAsync();
                         handled = true;

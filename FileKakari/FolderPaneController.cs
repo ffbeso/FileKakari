@@ -128,6 +128,7 @@ sealed class FolderPaneController
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, cachedSortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
+            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
@@ -195,6 +196,7 @@ sealed class FolderPaneController
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt);
+            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
@@ -341,6 +343,7 @@ sealed class FolderPaneController
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
+            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
@@ -373,6 +376,7 @@ sealed class FolderPaneController
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _sortFoldersFirst(), null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt);
+            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;

@@ -466,15 +466,24 @@ public partial class MainWindow
 
     private async Task LoadWorkspaceDisplayPanesOnSwitchAsync(int switchId, WorkspaceSession workspaceSession, CancellationToken cancellationToken)
     {
-        var panes = _workspaceDisplayPanes.ToList();
+        var panes = workspaceSession.PaneGroups.ToList();
         var loadTasks = new List<Task>();
         foreach (var pane in panes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("pane-load-discard", switchId, workspaceSession.Id, "stale-before-schedule");
+                return;
+            }
+
             var targetState = pane.ActiveTabState;
             if (targetState is null) continue;
 
             if (targetState.HasPendingExternalChange || pane.FileList.Items.Count == 0)
             {
+                WriteDiagLog($"event=pane-load-schedule switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" itemsCountBefore={pane.FileList.Items.Count} pendingExternalChange={targetState.HasPendingExternalChange}");
                 loadTasks.Add(LoadFolderPaneItemsAsync(pane, cancellationToken, FileListRestorePolicy.ExactRestore));
             }
         }
@@ -484,7 +493,7 @@ public partial class MainWindow
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (switchId != _workspaceSwitchGeneration)
+        if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
         {
             return;
         }
@@ -530,6 +539,11 @@ public partial class MainWindow
 
     private void SynchronizeWorkspacePaneSelectionAfterLoad(FolderPane pane)
     {
+        if (!IsWorkspaceDisplayPane(pane))
+        {
+            return;
+        }
+
         var currentSelection = GetFolderPaneListView(pane)?.SelectedItems
             .OfType<FileEntry>()
             .Select(entry => entry.FullPath)

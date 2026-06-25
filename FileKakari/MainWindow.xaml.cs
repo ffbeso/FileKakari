@@ -1311,7 +1311,7 @@ public partial class MainWindow : Window
         System.Environment.GetEnvironmentVariable("FILEKAKARI_DIAG_LOG") == "1";
 #endif
 
-    private static void WriteDiagLog(string message)
+    internal static void WriteDiagLog(string message)
     {
         if (!IsDiagLogEnabled) return;
         try
@@ -3734,13 +3734,80 @@ public partial class MainWindow : Window
         }
     }
 
+    private void WriteWorkspaceListViewDiagnostics(string eventName, ListView listView)
+    {
+        try
+        {
+            var pane = listView.DataContext as FolderPane;
+
+            var owningSession = pane is null
+                ? null
+                : _workspaceSessions.FirstOrDefault(session =>
+                    session.PaneGroups.Any(candidate =>
+                        ReferenceEquals(candidate, pane)));
+
+            var expectedPane = pane is null
+                ? null
+                : _activeWorkspaceSession?.PaneGroups.FirstOrDefault(candidate =>
+                    string.Equals(
+                        candidate.Id,
+                        pane.Id,
+                        StringComparison.Ordinal));
+
+            var itemsSource = listView.ItemsSource;
+            var dcPaneItems = pane?.FileList?.Items;
+            var expectedItems = expectedPane?.FileList?.Items;
+
+            WriteDiagLog(
+                $"event={eventName} " +
+                $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+                $"dataContextOwningSessionId={owningSession?.Id ?? "not-found"} " +
+                $"paneId={pane?.Id ?? "null"} " +
+                $"paneHash={pane?.GetHashCode() ?? 0} " +
+                $"expectedPaneHash={expectedPane?.GetHashCode() ?? 0} " +
+                $"refEqualsDcExpected={ReferenceEquals(pane, expectedPane)} " +
+                $"itemsSourceHash={itemsSource?.GetHashCode() ?? 0} " +
+                $"dcPaneItemsHash={dcPaneItems?.GetHashCode() ?? 0} " +
+                $"expectedItemsHash={expectedItems?.GetHashCode() ?? 0} " +
+                $"refEqualsItemsDcPane={ReferenceEquals(itemsSource, dcPaneItems)} " +
+                $"refEqualsItemsExpected={ReferenceEquals(itemsSource, expectedItems)} " +
+                $"lvCount={listView.Items?.Count ?? -1} " +
+                $"dcPaneCount={dcPaneItems?.Count ?? -1} " +
+                $"expectedPaneCount={expectedItems?.Count ?? -1}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                WriteDiagLog($"event=workspace-listview-diag-error message=\"{ex.Message}\"");
+            }
+            catch { }
+        }
+    }
+
     private void WorkspacePaneFileList_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is ListView listView && listView.DataContext is FolderPane pane)
+        if (sender is ListView listView)
         {
-            ApplyDisplayModeToPane(listView, pane);
-            ApplyColumnSettingsToWorkspacePane(listView, pane);
-            HookWorkspacePaneColumnWidthChanges(listView, pane);
+            try
+            {
+                WriteWorkspaceListViewDiagnostics("workspace-listview-loaded", listView);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    WriteDiagLog($"event=workspace-listview-diag-error message=\"{ex.Message}\"");
+                }
+                catch { }
+            }
+
+            if (listView.DataContext is FolderPane pane)
+            {
+                ApplyDisplayModeToPane(listView, pane);
+                ApplyColumnSettingsToWorkspacePane(listView, pane);
+                HookWorkspacePaneColumnWidthChanges(listView, pane);
+            }
         }
     }
 
@@ -6088,6 +6155,25 @@ public partial class MainWindow : Window
             {
                 WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-after-load");
                 return;
+            }
+
+            try
+            {
+                if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+                {
+                    foreach (var lv in FindVisualChildren<ListView>(WorkspaceSplitGrid))
+                    {
+                        WriteWorkspaceListViewDiagnostics("workspace-listview-final", lv);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    WriteDiagLog($"event=workspace-listview-final-scan-error message=\"{ex.Message}\"");
+                }
+                catch { }
             }
 
             ApplyWorkspacePostLoadState(workspaceSession);

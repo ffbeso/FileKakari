@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -464,7 +464,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task LoadWorkspaceDisplayPanesOnSwitchAsync()
+    private async Task LoadWorkspaceDisplayPanesOnSwitchAsync(int switchId, WorkspaceSession workspaceSession, CancellationToken cancellationToken)
     {
         var panes = _workspaceDisplayPanes.ToList();
         var loadTasks = new List<Task>();
@@ -475,23 +475,38 @@ public partial class MainWindow
 
             if (targetState.HasPendingExternalChange || pane.FileList.Items.Count == 0)
             {
-                loadTasks.Add(LoadFolderPaneItemsAsync(pane, FileListRestorePolicy.ExactRestore));
+                loadTasks.Add(LoadFolderPaneItemsAsync(pane, cancellationToken, FileListRestorePolicy.ExactRestore));
             }
         }
         if (loadTasks.Count > 0)
         {
             await Task.WhenAll(loadTasks);
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        if (switchId != _workspaceSwitchGeneration)
+        {
+            return;
+        }
+
         UpdateFolderWatchForWorkspacePanes();
     }
 
-    private async Task LoadFolderPaneItemsAsync(FolderPane pane, FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore)
+    private Task LoadFolderPaneItemsAsync(FolderPane pane, FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore)
+    {
+        return LoadFolderPaneItemsAsync(pane, CancellationToken.None, policy);
+    }
+
+    private async Task LoadFolderPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken, FileListRestorePolicy policy)
     {
         _suppressWorkspaceSelectionSync = true;
         _suppressWorkspaceScrollSync = true;
         try
         {
-            await _folderPaneController.LoadPaneItemsAsync(pane);
+            await _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
+            
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (policy != FileListRestorePolicy.None && WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
                 await RestoreWorkspacePaneStateAsync(pane, policy);
@@ -504,6 +519,8 @@ public partial class MainWindow
 
             RestoreWorkspacePaneListViewOpacityIfNeeded(pane);
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         if (policy != FileListRestorePolicy.None)
         {

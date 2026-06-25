@@ -80,7 +80,12 @@ sealed class FolderPaneController
         _performanceLogger.Write($"folder-pane-display-load-complete panes={panes.Count} detail=\"{string.Join("|", panes.Select(pane => $"{pane.Id}:{pane.FileList.Items.Count}"))}\"");
     }
 
-    internal async Task LoadPaneItemsAsync(FolderPane pane)
+    internal Task LoadPaneItemsAsync(FolderPane pane)
+    {
+        return LoadPaneItemsAsync(pane, CancellationToken.None);
+    }
+
+    internal async Task LoadPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken)
     {
         if (pane.IsLoading)
         {
@@ -94,9 +99,11 @@ sealed class FolderPaneController
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (SpecialLocationService.IsSpecialUri(targetState.CurrentPath))
         {
-            await LoadSpecialLocationItemsAsync(pane, targetState);
+            await LoadSpecialLocationItemsAsync(pane, targetState, cancellationToken);
             return;
         }
 
@@ -109,6 +116,7 @@ sealed class FolderPaneController
             var cachedSortFoldersFirst = _sortFoldersFirst();
             if (CanReuseDisplayedItems(pane, targetState, cachedItems, cachedSortFoldersFirst))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 UpdateStatus(pane);
                 pane.RefreshDisplay();
                 _performanceLogger.Write(
@@ -117,6 +125,7 @@ sealed class FolderPaneController
                 return;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, cachedSortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
             ApplyFilter(pane, targetState.FilterText);
@@ -133,35 +142,42 @@ sealed class FolderPaneController
 
         if (!await _driveAvailabilityService.DirectoryExistsAsync(targetState.CurrentPath))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.StatusText = _text.Format("PathNotFound", targetState.CurrentPath);
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         pane.IsLoading = true;
-        pane.FileList.StatusText = _text.Get("LoadingZero");
-        var sortColumn = _devListPerfOptions.SortEnabled ? targetState.SortColumn : "__none";
-        var sortAscending = targetState.SortAscending;
-        var sortFoldersFirst = _sortFoldersFirst();
-        var extraColumnsEnabled = _shouldLoadExtraColumns(sortColumn);
-        _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" sort={sortColumn}:{sortAscending} shellIcons={_devListPerfOptions.ShellIconsEnabled}");
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            pane.FileList.StatusText = _text.Get("LoadingZero");
+            var sortColumn = _devListPerfOptions.SortEnabled ? targetState.SortColumn : "__none";
+            var sortAscending = targetState.SortAscending;
+            var sortFoldersFirst = _sortFoldersFirst();
+            var extraColumnsEnabled = _shouldLoadExtraColumns(sortColumn);
+            _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" sort={sortColumn}:{sortAscending} shellIcons={_devListPerfOptions.ShellIconsEnabled}");
+
             var iconLoadMilliseconds = 0L;
             var iconLoadCount = 0;
             var items = await Task.Run(async () =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var entries = _fileService.Enumerate(
                     targetState.CurrentPath,
                     sortColumn,
                     sortAscending,
                     sortFoldersFirst,
                     extraColumnsEnabled,
-                    CancellationToken.None).ToList();
+                    cancellationToken).ToList();
 
                 if (_devListPerfOptions.ShellIconsEnabled)
                 {
                     foreach (var entry in entries)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var iconStopwatch = Stopwatch.StartNew();
                         await entry.LoadIconAsync();
                         iconStopwatch.Stop();
@@ -171,7 +187,9 @@ sealed class FolderPaneController
                 }
 
                 return entries;
-            });
+            }, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
@@ -183,6 +201,11 @@ sealed class FolderPaneController
             UpdateStatus(pane);
             pane.RefreshDisplay();
             _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _performanceLogger.Write($"folder-pane-load-cancelled paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" message=\"{ex.Message}\"");
+            throw;
         }
         catch (Exception ex)
         {
@@ -297,7 +320,7 @@ sealed class FolderPaneController
             isSpecialLocation: pane.ActiveTabState is { } state && SpecialLocationService.IsSpecialUri(state.CurrentPath));
     }
 
-    private async Task LoadSpecialLocationItemsAsync(FolderPane pane, WorkspaceTabState targetState)
+    private async Task LoadSpecialLocationItemsAsync(FolderPane pane, WorkspaceTabState targetState, CancellationToken cancellationToken)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         if (CanRestorePaneCache(pane, targetState)
@@ -306,6 +329,7 @@ sealed class FolderPaneController
             var sortFoldersFirst = _sortFoldersFirst();
             if (CanReuseDisplayedItems(pane, targetState, cachedItems, sortFoldersFirst))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 UpdateStatus(pane);
                 pane.RefreshDisplay();
                 _performanceLogger.Write(
@@ -314,6 +338,7 @@ sealed class FolderPaneController
                 return;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
             ApplyFilter(pane, targetState.FilterText);
@@ -328,12 +353,22 @@ sealed class FolderPaneController
             return;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         pane.IsLoading = true;
-        pane.FileList.StatusText = _text.Get("LoadingZero");
-        _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" view=this-pc");
         try
         {
-            var items = await Task.Run(() => _specialLocationService.EnumerateThisPc().ToList());
+            cancellationToken.ThrowIfCancellationRequested();
+            pane.FileList.StatusText = _text.Get("LoadingZero");
+            _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" view=this-pc");
+
+            var items = await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return _specialLocationService.EnumerateThisPc().ToList();
+            }, cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _sortFoldersFirst(), null);
@@ -344,6 +379,11 @@ sealed class FolderPaneController
             UpdateStatus(pane);
             pane.RefreshDisplay();
             _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} view=this-pc lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
+        }
+        catch (OperationCanceledException ex)
+        {
+            _performanceLogger.Write($"folder-pane-load-cancelled paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" message=\"{ex.Message}\" view=this-pc");
+            throw;
         }
         catch (Exception ex)
         {

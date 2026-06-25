@@ -230,6 +230,24 @@ public partial class MainWindow : Window
     private uint _internalClipboardSequence;
     private Dictionary<string, GridViewColumn> _columnsById = [];
 
+    private int _workspaceSwitchGeneration;
+    private CancellationTokenSource? _workspaceSwitchCancellation;
+
+    private void WriteWorkspaceSwitchLog(string eventName, int switchId, string requestedSessionId, string reason)
+    {
+        var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
+        var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
+        var loadingStateId = _loadingStateId ?? "null";
+        var isLoadingStr = _isLoading.ToString();
+        var msg = $"event={eventName} switchId={switchId} requestedSessionId={requestedSessionId} selectedSessionId={selectedSessionId} activeSessionId={activeSessionId} loadingStateId={loadingStateId} isLoading={isLoadingStr} reason={reason}";
+        
+        _performanceLogger.Write(msg);
+        if (IsDiagLogEnabled)
+        {
+            WriteDiagLog(msg);
+        }
+    }
+
     public ICollectionView ItemsView { get; }
 
     public ObservableCollection<FolderPane> WorkspaceDisplayPanes => _workspaceDisplayPanes;
@@ -5989,26 +6007,151 @@ public partial class MainWindow : Window
 
     private async Task RestoreWorkspaceTabAsync(WorkspaceSession workspaceSession)
     {
-        UpdateCrashContextSnapshot("workspace-tab-restore");
-        var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, workspaceSession);
-        if (!result.Success)
+        var switchId = System.Threading.Interlocked.Increment(ref _workspaceSwitchGeneration);
+        var previousCancellation = _workspaceSwitchCancellation;
+        var currentCancellation = new CancellationTokenSource();
+        _workspaceSwitchCancellation = currentCancellation;
+
+        var requestedSessionId = workspaceSession.Id;
+
+        WriteWorkspaceSwitchLog("workspace-switch-request", switchId, requestedSessionId, "selection-requested");
+
+        if (previousCancellation is not null)
         {
-            return;
+            WriteWorkspaceSwitchLog("workspace-switch-cancel", switchId, requestedSessionId, "previous-switch-superseded");
+            previousCancellation.Cancel();
         }
 
-        if (result.RequiresSaveActiveLocalState)
+        try
         {
-            _workspaceLocalState.SaveActiveLocalState();
-        }
+            var token = currentCancellation.Token;
 
-        if (result.ActiveSessionChanged)
+            var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, workspaceSession);
+            if (!result.Success)
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selection-rejected");
+                return;
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            if (switchId != _workspaceSwitchGeneration)
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "generation-mismatch-before-ui");
+                return;
+            }
+
+            UpdateCrashContextSnapshot("workspace-tab-restore");
+
+            if (result.RequiresSaveActiveLocalState)
+            {
+                _workspaceLocalState.SaveActiveLocalState();
+            }
+
+            if (result.ActiveSessionChanged)
+            {
+                CancelActiveLoadForWorkspaceSwitch(workspaceSession, "workspace-restore");
+            }
+
+            ApplyWorkspaceSessionSelection(result.ActiveSession!);
+
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag", switchId, workspaceSession);
+
+            if (HasUnresolvedWorkspacePaneViews(workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-wait-ui", switchId, workspaceSession.Id, "pane-view-unresolved");
+                await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Loaded);
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-after-ui-wait");
+                return;
+            }
+
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag-post", switchId, workspaceSession);
+
+            if (HasUnresolvedWorkspacePaneViews(workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-container-unresolved", switchId, workspaceSession.Id, "pane-view-still-unresolved");
+            }
+
+            _performanceLogger.Write($"workspace-tab-restore sessionId={workspaceSession.Id} root=\"{workspaceSession.RootPath}\" panes={workspaceSession.PaneGroups.Count} selected={TabsControl.SelectedIndex}");
+            
+            await LoadWorkspaceDisplayPanesOnSwitchAsync(switchId, workspaceSession, token);
+
+            token.ThrowIfCancellationRequested();
+
+            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-after-load");
+                return;
+            }
+
+            ApplyWorkspacePostLoadState(workspaceSession);
+
+            WriteWorkspaceSwitchLog("workspace-switch-apply", switchId, requestedSessionId, "completed");
+        }
+        catch (OperationCanceledException)
         {
-            CancelActiveLoadForWorkspaceSwitch(workspaceSession, "workspace-restore");
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "cancelled");
         }
+        finally
+        {
+            if (ReferenceEquals(_workspaceSwitchCancellation, currentCancellation))
+            {
+                _workspaceSwitchCancellation = null;
+            }
+            currentCancellation.Dispose();
+        }
+    }
 
-        var activeSession = result.ActiveSession!;
-        _activeWorkspaceSession = activeSession;
-        UpdateActiveWorkspaceSessionUi(activeSession);
+    private static bool IsSameWorkspaceSession(WorkspaceSession? left, WorkspaceSession? right)
+    {
+        if (left is null || right is null)
+        {
+            return false;
+        }
+        return !string.IsNullOrWhiteSpace(left.Id)
+            && string.Equals(left.Id, right.Id, StringComparison.Ordinal);
+    }
+
+    private bool HasUnresolvedWorkspacePaneViews(WorkspaceSession workspaceSession)
+    {
+        return workspaceSession.PaneGroups.Any(pane => GetFolderPaneListView(pane) == null);
+    }
+
+    private void WriteWorkspacePaneDiagnostics(string eventName, int switchId, WorkspaceSession workspaceSession)
+    {
+        try
+        {
+            int displayPanesCount = _workspaceDisplayPanes.Count;
+            int paneGroupsCount = workspaceSession.PaneGroups.Count;
+            bool splitGridLoaded = WorkspaceSplitGrid.IsLoaded;
+            bool splitGridVisible = WorkspaceSplitGrid.Visibility == Visibility.Visible;
+            
+            var listViewsStatus = string.Join(", ", workspaceSession.PaneGroups.Select(p => {
+                var lv = GetFolderPaneListView(p);
+                return lv != null ? $"pane={p.Id}:lv=Found(Loaded={lv.IsLoaded},Visible={lv.IsVisible})" : $"pane={p.Id}:lv=Null";
+            }));
+
+            WriteWorkspaceSwitchLog(eventName, switchId, workspaceSession.Id, 
+                $"displayPanesCount={displayPanesCount} paneGroupsCount={paneGroupsCount} " +
+                $"splitGridLoaded={splitGridLoaded} splitGridVisible={splitGridVisible} " +
+                $"listViews=[{listViewsStatus}]");
+        }
+        catch (Exception ex)
+        {
+            _performanceLogger.Write($"workspace-switch-diag-error message={ex.Message}");
+        }
+    }
+
+    private void ApplyWorkspaceSessionSelection(WorkspaceSession workspaceSession)
+    {
+        _activeWorkspaceSession = workspaceSession;
+        UpdateActiveWorkspaceSessionUi(workspaceSession);
         ApplyWorkspaceSessionToFolderTabs();
         _workspacePaneGroups.Clear();
         foreach (var paneGroup in workspaceSession.PaneGroups)
@@ -6027,9 +6170,10 @@ public partial class MainWindow : Window
         _workspacePaneUiController.ShowWorkspace(workspaceSession.ActivePaneGroup);
         UpdatePathDisplay(workspaceSession.RootPath);
         RefreshWorkspaceDisplayPanes();
-        _performanceLogger.Write($"workspace-tab-restore sessionId={workspaceSession.Id} root=\"{workspaceSession.RootPath}\" panes={workspaceSession.PaneGroups.Count} selected={TabsControl.SelectedIndex}");
-        await LoadWorkspaceDisplayPanesOnSwitchAsync();
+    }
 
+    private void ApplyWorkspacePostLoadState(WorkspaceSession workspaceSession)
+    {
         if (workspaceSession.IsWorkspace)
         {
             foreach (var pane in _workspaceDisplayPanes)

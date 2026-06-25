@@ -52,6 +52,9 @@ public partial class MainWindow
             return;
         }
 
+        _activeWorkspaceSession = selectedSession;
+        UpdateActiveWorkspaceSessionUi(selectedSession);
+
         var wasInternalPage = e.RemovedItems
             .OfType<MainTabItem>()
             .Any(tab => tab.IsInternalPage);
@@ -105,8 +108,6 @@ public partial class MainWindow
 
         _workspaceLocalState.Capture(markDirty: true, reason: "selected-tab");
         CancelActiveLoadForWorkspaceSwitch(selectedSession, "workspace-switch");
-        _activeWorkspaceSession = result.ActiveSession!;
-        UpdateActiveWorkspaceSessionUi(_activeWorkspaceSession);
         ApplyWorkspaceSessionToFolderTabs();
         try
         {

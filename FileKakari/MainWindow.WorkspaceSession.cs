@@ -466,25 +466,35 @@ public partial class MainWindow
 
     private async Task LoadWorkspaceDisplayPanesOnSwitchAsync(int switchId, WorkspaceSession workspaceSession, CancellationToken cancellationToken)
     {
+        if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
+            return;
+        }
+
         var panes = workspaceSession.PaneGroups.ToList();
         var loadTasks = new List<Task>();
         foreach (var pane in panes)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
             {
-                WriteWorkspaceSwitchLog("pane-load-discard", switchId, workspaceSession.Id, "stale-before-schedule");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
                 return;
             }
 
             var targetState = pane.ActiveTabState;
             if (targetState is null) continue;
 
-            if (targetState.HasPendingExternalChange || pane.FileList.Items.Count == 0)
+            if (!pane.IsActiveStateLoaded)
             {
-                WriteDiagLog($"event=pane-load-schedule switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" itemsCountBefore={pane.FileList.Items.Count} pendingExternalChange={targetState.HasPendingExternalChange}");
+                WriteDiagLog($"event=pane-load-schedule switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCountBefore={pane.FileList.Items.Count} pendingExternalChange={targetState.HasPendingExternalChange} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
                 loadTasks.Add(LoadFolderPaneItemsAsync(pane, cancellationToken, FileListRestorePolicy.ExactRestore));
+            }
+            else
+            {
+                WriteDiagLog($"event=pane-load-skip switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCount={pane.FileList.Items.Count} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
             }
         }
         if (loadTasks.Count > 0)
@@ -493,12 +503,18 @@ public partial class MainWindow
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+        if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
         {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
             return;
         }
 
         UpdateFolderWatchForWorkspacePanes();
+    }
+
+    private static string GetPaneFirstItemPath(FolderPane pane)
+    {
+        return pane.FileList.Items.FirstOrDefault()?.FullPath ?? "";
     }
 
     private Task LoadFolderPaneItemsAsync(FolderPane pane, FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore)

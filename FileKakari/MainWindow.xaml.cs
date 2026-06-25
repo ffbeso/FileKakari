@@ -6102,9 +6102,9 @@ public partial class MainWindow : Window
 
             token.ThrowIfCancellationRequested();
 
-            if (switchId != _workspaceSwitchGeneration)
+            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "generation-mismatch-before-ui");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
                 return;
             }
 
@@ -6132,9 +6132,9 @@ public partial class MainWindow : Window
 
             token.ThrowIfCancellationRequested();
 
-            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-after-ui-wait");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
                 return;
             }
 
@@ -6151,9 +6151,9 @@ public partial class MainWindow : Window
 
             token.ThrowIfCancellationRequested();
 
-            if (switchId != _workspaceSwitchGeneration || !IsSameWorkspaceSession(_activeWorkspaceSession, workspaceSession))
+            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-after-load");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
                 return;
             }
 
@@ -6176,7 +6176,19 @@ public partial class MainWindow : Window
                 catch { }
             }
 
+            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
+                return;
+            }
+
             ApplyWorkspacePostLoadState(workspaceSession);
+
+            if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
+                return;
+            }
 
             WriteWorkspaceSwitchLog("workspace-switch-apply", switchId, requestedSessionId, "completed");
         }
@@ -6202,6 +6214,20 @@ public partial class MainWindow : Window
         }
         return !string.IsNullOrWhiteSpace(left.Id)
             && string.Equals(left.Id, right.Id, StringComparison.Ordinal);
+    }
+
+    private bool IsLatestWorkspaceSwitchRequest(int switchId, WorkspaceSession requestedSession)
+    {
+        return switchId == _workspaceSwitchGeneration
+            && IsSameWorkspaceSession(_activeWorkspaceSession, requestedSession)
+            && IsSameWorkspaceSession(GetSelectedWorkspaceSession(), requestedSession);
+    }
+
+    private bool CanApplyWorkspaceSwitch(int switchId, WorkspaceSession requestedSession)
+    {
+        return IsLatestWorkspaceSwitchRequest(switchId, requestedSession)
+            && _workspaceSessions.All(session =>
+                session.IsActiveSession == IsSameWorkspaceSession(session, requestedSession));
     }
 
     private bool HasUnresolvedWorkspacePaneViews(WorkspaceSession workspaceSession)

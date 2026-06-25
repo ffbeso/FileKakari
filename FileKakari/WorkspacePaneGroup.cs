@@ -13,6 +13,8 @@ public sealed class FileListState : INotifyPropertyChanged
     private IReadOnlyList<string> _selectedPaths = [];
     private DateTimeOffset? _lastLoadedAt;
     private DateTimeOffset? _lastExternalChangeAt;
+    private string? _loadedPath;
+    private string? _loadedStateId;
     private string _statusText = "";
     private string? _statusMessagePrefix;
     private string _displaySortColumn = "";
@@ -107,6 +109,36 @@ public sealed class FileListState : INotifyPropertyChanged
         }
     }
 
+    public string? LoadedPath
+    {
+        get => _loadedPath;
+        private set
+        {
+            if (string.Equals(_loadedPath, value, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _loadedPath = value;
+            OnPropertyChanged(nameof(LoadedPath));
+        }
+    }
+
+    public string? LoadedStateId
+    {
+        get => _loadedStateId;
+        private set
+        {
+            if (string.Equals(_loadedStateId, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _loadedStateId = value;
+            OnPropertyChanged(nameof(LoadedStateId));
+        }
+    }
+
     public DateTimeOffset? LastExternalChangeAt
     {
         get => _lastExternalChangeAt;
@@ -153,13 +185,22 @@ public sealed class FileListState : INotifyPropertyChanged
         }
     }
 
-    public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null)
+    public bool IsLoadedFor(string stateId, string path)
+    {
+        return LastLoadedAt is not null
+            && string.Equals(LoadedStateId, stateId, StringComparison.Ordinal)
+            && string.Equals(LoadedPath, path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null, string? loadedStateId = null)
     {
         Items.Clear();
         Items.AddRange(items);
         ItemsView.Refresh();
         CurrentPath = path;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
+        LoadedPath = path;
+        LoadedStateId = loadedStateId;
     }
 
     public void MarkExternalChange(DateTimeOffset? changedAt = null)
@@ -373,6 +414,11 @@ public class FolderPane : INotifyPropertyChanged
         get => FileList.IsLoading;
         set => FileList.IsLoading = value;
     }
+
+    public bool IsActiveStateLoaded =>
+        ActiveTabState is { } state
+        && !state.HasPendingExternalChange
+        && FileList.IsLoadedFor(state.Id, state.CurrentPath);
 
     public string CurrentPathSummary
     {

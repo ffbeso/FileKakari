@@ -127,7 +127,7 @@ sealed class FolderPaneController
 
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, cachedSortFoldersFirst, null);
-            pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
+            pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
@@ -195,7 +195,7 @@ sealed class FolderPaneController
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
-            pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt);
+            pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
@@ -342,7 +342,7 @@ sealed class FolderPaneController
 
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
-            pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt);
+            pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
@@ -375,7 +375,7 @@ sealed class FolderPaneController
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _sortFoldersFirst(), null);
-            pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt);
+            pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
@@ -416,7 +416,7 @@ sealed class FolderPaneController
         IReadOnlyList<FileEntry> cachedItems,
         bool sortFoldersFirst)
     {
-        return string.Equals(pane.FileList.CurrentPath, targetState.CurrentPath, StringComparison.OrdinalIgnoreCase)
+        return pane.FileList.IsLoadedFor(targetState.Id, targetState.CurrentPath)
             && pane.FileList.LastLoadedAt == targetState.LastLoadedAt
             && pane.FileList.Items.Count == cachedItems.Count
             && string.Equals(pane.FileList.DisplaySortColumn, targetState.SortColumn, StringComparison.Ordinal)

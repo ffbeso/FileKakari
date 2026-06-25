@@ -4842,6 +4842,11 @@ public partial class MainWindow : Window
 
     private static FolderPane? GetWorkspacePaneFromSender(object sender)
     {
+        if (sender is FolderPane folderPane)
+        {
+            return folderPane;
+        }
+
         var current = sender as DependencyObject;
         while (current is not null)
         {

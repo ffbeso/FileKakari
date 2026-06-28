@@ -188,7 +188,7 @@ public partial class MainWindow
             var cleanLayoutNode = WorkspaceService.StripRootPane(targetLayoutTree);
             var serializedLayout = WorkspaceService.BuildSessionLayoutState(targetLayoutTree);
             var layoutJson = serializedLayout is null ? "null" : System.Text.Json.JsonSerializer.Serialize(serializedLayout);
-            _performanceLogger.Write($"session-save-layout-debug sessionId={session.Id} " +
+            PerfLog.WriteVerbose($"session-save-layout-debug sessionId={session.Id} " +
                 $"layoutRoot=\"{DebugDumpLayout(session.LayoutRoot)}\" " +
                 $"displayLayoutRoot=\"{DebugDumpLayout(session.DisplayLayoutRoot)}\" " +
                 $"cleanLayoutNode=\"{DebugDumpLayout(cleanLayoutNode)}\" " +

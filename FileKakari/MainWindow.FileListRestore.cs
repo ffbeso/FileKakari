@@ -241,7 +241,11 @@ public partial class MainWindow
         }, DispatcherPriority.Render);
     }
 
-    private async Task RestoreWorkspacePaneScrollOffsetAsync(FolderPane pane, double offset)
+    private async Task RestoreWorkspacePaneScrollOffsetAsync(
+        FolderPane pane,
+        double offset,
+        int workspaceSwitchId = 0,
+        WorkspaceSession? session = null)
     {
         if (offset < 0)
         {
@@ -251,6 +255,13 @@ public partial class MainWindow
         // First Stage: ContextIdle
         await Dispatcher.InvokeAsync(() =>
         {
+            if (workspaceSwitchId > 0
+                && session is not null
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+            {
+                return;
+            }
+
             if (GetFolderPaneListView(pane) is { } listView
                 && FindVisualChild<ScrollViewer>(listView) is { } scrollViewer)
             {
@@ -267,6 +278,13 @@ public partial class MainWindow
         // Second Stage: Render (to override any virtualization adjustments or ScrollIntoView side-effects)
         await Dispatcher.InvokeAsync(() =>
         {
+            if (workspaceSwitchId > 0
+                && session is not null
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+            {
+                return;
+            }
+
             if (GetFolderPaneListView(pane) is { } listView
                 && FindVisualChild<ScrollViewer>(listView) is { } scrollViewer)
             {
@@ -292,13 +310,13 @@ public partial class MainWindow
                 tab.State.ClearItems();
                 tab.State.SelectedPaths = targetPaths;
                 tab.State.VerticalOffset = 0;
-                await LoadFolderPaneItemsAsync(pane, FileListRestorePolicy.RevealAndSelectPaths);
+                await LoadFolderPaneItemsAsync(pane, FileListRestorePolicy.RevealAndSelectPaths, "pane-load-complete");
             }
             else
             {
                 var preservedState = CaptureWorkspacePanePreservedState(pane);
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-                await LoadFolderPaneItemsAsync(pane, policy);
+                await LoadFolderPaneItemsAsync(pane, policy, "pane-load-complete");
             }
         }
         else
@@ -445,7 +463,11 @@ public partial class MainWindow
         return preferredPaneReloadedWithPolicy;
     }
 
-    private async Task RestoreWorkspacePaneStateAsync(FolderPane pane, FileListRestorePolicy policy)
+    private async Task RestoreWorkspacePaneStateAsync(
+        FolderPane pane,
+        FileListRestorePolicy policy,
+        string trigger = "viewstate-restore",
+        int workspaceSwitchId = 0)
     {
         if (policy == FileListRestorePolicy.None)
         {
@@ -457,7 +479,38 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                _performanceLogger.Write($"workspace-restore-skip paneId={pane.Id} reason=targetState-null");
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} reason=targetState-null trigger={trigger} workspaceSwitchId={workspaceSwitchId}");
+            }
+            return;
+        }
+
+        var session = FindSessionContainingPane(pane);
+        if (workspaceSwitchId > 0
+            && session is not null
+            && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, session.Id, "stale-switch");
+            return;
+        }
+
+        if (policy == FileListRestorePolicy.ExactRestore
+            && IsWorkspaceSwitchRestoreInProgress
+            && IsProgrammaticWorkspaceRestoreTrigger(trigger))
+        {
+            if (_performanceLogger.IsEnabled)
+            {
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=switch-restore-reentry trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            }
+            return;
+        }
+
+        if (policy == FileListRestorePolicy.ExactRestore
+            && string.Equals(trigger, "active-pane-change", StringComparison.Ordinal)
+            && !IsSameWorkspaceSession(_activeWorkspaceSession, GetSelectedWorkspaceSession()))
+        {
+            if (_performanceLogger.IsEnabled)
+            {
+                _performanceLogger.Write($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=active-selected-session-mismatch trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             }
             return;
         }
@@ -472,7 +525,7 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                _performanceLogger.Write($"workspace-restore-skip paneId={pane.Id} reason=guard-mismatch-path " +
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} reason=guard-mismatch-path trigger={trigger} workspaceSwitchId={workspaceSwitchId} " +
                     $"pane:\"{pane.FileList.CurrentPath}\" vs state:\"{targetState.CurrentPath}\"");
             }
             return;
@@ -482,47 +535,85 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                _performanceLogger.Write($"workspace-restore-warning-mismatch paneId={pane.Id} " +
+                PerfLog.WriteVerbose($"workspace-restore-warning-mismatch paneId={pane.Id} " +
                     $"sortColMatch={sortColMatch}(pane:\"{pane.FileList.DisplaySortColumn}\" vs state:\"{targetState.SortColumn}\") " +
                     $"sortDirMatch={sortDirMatch}(pane:{pane.FileList.DisplaySortAscending} vs state:{targetState.SortAscending}) " +
                     $"filterMatch={filterMatch}(pane:\"{pane.FileList.DisplayFilterText}\" vs state:\"{targetState.FilterText}\")");
             }
         }
 
-        if (_performanceLogger.IsEnabled)
+        var restoreKey = session is null
+            ? null
+            : $"{session.Id}|{pane.Id}|{targetState.Id}";
+        if (policy == FileListRestorePolicy.ExactRestore
+            && restoreKey is not null
+            && !_activeWorkspaceRestoreKeys.Add(restoreKey))
         {
-            var listView = GetFolderPaneListView(pane);
-            var scrollViewer = listView != null ? FindVisualChild<ScrollViewer>(listView) : null;
-            _performanceLogger.Write($"workspace-restore-start paneId={pane.Id} path=\"{targetState.CurrentPath}\" policy={policy} " +
-                $"listViewExists={listView != null} scrollViewerExists={scrollViewer != null} itemsCount={listView?.Items.Count ?? -1} " +
-                $"offset={targetState.VerticalOffset} selectedCount={targetState.SelectedPaths.Count}");
+            if (_performanceLogger.IsEnabled)
+            {
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=duplicate-inflight trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            }
+            return;
         }
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var restoreId = System.Threading.Interlocked.Increment(ref _workspaceRestoreGeneration);
+        var listView = GetFolderPaneListView(pane);
 
-        policy = ResolveWorkspacePaneRestorePolicy(pane, targetState, policy);
+        try
+        {
+            if (_performanceLogger.IsEnabled)
+            {
+                var scrollViewer = listView != null ? FindVisualChild<ScrollViewer>(listView) : null;
+                PerfLog.WriteVerbose($"workspace-restore-start restoreId={restoreId} workspaceSwitchId={workspaceSwitchId} " +
+                    $"sessionId={session?.Id ?? "not-found"} paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" policy={policy} " +
+                    $"caller={trigger} trigger={trigger} threadId={Environment.CurrentManagedThreadId} " +
+                    $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
+                    $"isActiveSession={session?.IsActiveSession.ToString() ?? "null"} listViewHash={listView?.GetHashCode() ?? 0} paneHash={pane.GetHashCode()} " +
+                    $"listViewExists={listView != null} scrollViewerExists={scrollViewer != null} itemsCount={listView?.Items.Count ?? -1} " +
+                    $"offset={targetState.VerticalOffset} selectedCount={targetState.SelectedPaths.Count}");
+            }
 
-        if (policy == FileListRestorePolicy.ExactRestore)
-        {
-            await RestoreWorkspacePaneExactStateAsync(pane, targetState);
-        }
-        else if (policy == FileListRestorePolicy.ScrollOnly)
-        {
-            await RestoreWorkspacePaneScrollOnlyStateAsync(pane, targetState.VerticalOffset);
-        }
-        else if (policy == FileListRestorePolicy.FocusPathFallback)
-        {
-            await RestoreWorkspacePaneFocusedSelectionAsync(pane, targetState.SelectedPaths);
-        }
-        else if (policy == FileListRestorePolicy.RevealAndSelectPaths)
-        {
-            await RevealWorkspacePaneSelectionAsync(pane, targetState.SelectedPaths);
-        }
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        stopwatch.Stop();
-        if (_performanceLogger.IsEnabled)
+            policy = ResolveWorkspacePaneRestorePolicy(pane, targetState, policy);
+
+            if (workspaceSwitchId > 0
+                && session is not null
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, session.Id, "stale-switch");
+                return;
+            }
+
+            if (policy == FileListRestorePolicy.ExactRestore)
+            {
+                await RestoreWorkspacePaneExactStateAsync(pane, targetState, workspaceSwitchId, session);
+            }
+            else if (policy == FileListRestorePolicy.ScrollOnly)
+            {
+                await RestoreWorkspacePaneScrollOnlyStateAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session);
+            }
+            else if (policy == FileListRestorePolicy.FocusPathFallback)
+            {
+                await RestoreWorkspacePaneFocusedSelectionAsync(pane, targetState.SelectedPaths, workspaceSwitchId, session);
+            }
+            else if (policy == FileListRestorePolicy.RevealAndSelectPaths)
+            {
+                await RevealWorkspacePaneSelectionAsync(pane, targetState.SelectedPaths, workspaceSwitchId, session);
+            }
+
+            stopwatch.Stop();
+            if (_performanceLogger.IsEnabled)
+            {
+                PerfLog.WriteVerbose($"workspace-restore-complete restoreId={restoreId} workspaceSwitchId={workspaceSwitchId} paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" policy={policy} trigger={trigger} elapsedMs={stopwatch.ElapsedMilliseconds}");
+            }
+        }
+        finally
         {
-            _performanceLogger.Write($"workspace-restore-complete paneId={pane.Id} elapsedMs={stopwatch.ElapsedMilliseconds}");
+            if (restoreKey is not null)
+            {
+                _activeWorkspaceRestoreKeys.Remove(restoreKey);
+            }
         }
     }
 
@@ -541,12 +632,23 @@ public partial class MainWindow
         return anySelectedPathExists ? policy : FileListRestorePolicy.ScrollOnly;
     }
 
-    private async Task RestoreWorkspacePaneExactStateAsync(FolderPane pane, WorkspaceTabState targetState)
+    private async Task RestoreWorkspacePaneExactStateAsync(
+        FolderPane pane,
+        WorkspaceTabState targetState,
+        int workspaceSwitchId = 0,
+        WorkspaceSession? session = null)
     {
         if (targetState.SelectedPaths.Count > 0)
         {
             var selectedEntries = await Dispatcher.InvokeAsync(() =>
             {
+                if (workspaceSwitchId > 0
+                    && session is not null
+                    && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+                {
+                    return Array.Empty<FileEntry>();
+                }
+
                 return SelectItemsInPaneByPaths(
                     pane,
                     targetState.SelectedPaths,
@@ -556,19 +658,38 @@ public partial class MainWindow
 
             if (_performanceLogger.IsEnabled)
             {
-                _performanceLogger.Write($"workspace-restore-selection-done paneId={pane.Id} count={selectedEntries.Count}");
+                PerfLog.WriteVerbose($"workspace-restore-selection-done paneId={pane.Id} count={selectedEntries.Count}");
             }
         }
 
         // Wait for container layout generation before restoring scroll offset.
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-        await RestoreWorkspacePaneScrollOffsetAsync(pane, targetState.VerticalOffset);
+        if (workspaceSwitchId > 0
+            && session is not null
+            && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, session.Id, "stale-switch");
+            return;
+        }
+
+        await RestoreWorkspacePaneScrollOffsetAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session);
     }
 
-    private async Task RestoreWorkspacePaneScrollOnlyStateAsync(FolderPane pane, double verticalOffset)
+    private async Task RestoreWorkspacePaneScrollOnlyStateAsync(
+        FolderPane pane,
+        double verticalOffset,
+        int workspaceSwitchId = 0,
+        WorkspaceSession? session = null)
     {
         await Dispatcher.InvokeAsync(() =>
         {
+            if (workspaceSwitchId > 0
+                && session is not null
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+            {
+                return;
+            }
+
             if (GetFolderPaneListView(pane) is { } listView)
             {
                 listView.SelectedItems.Clear();
@@ -577,15 +698,32 @@ public partial class MainWindow
 
         // Wait for container layout generation before restoring scroll offset.
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-        await RestoreWorkspacePaneScrollOffsetAsync(pane, verticalOffset);
+        if (workspaceSwitchId > 0
+            && session is not null
+            && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, session.Id, "stale-switch");
+            return;
+        }
+
+        await RestoreWorkspacePaneScrollOffsetAsync(pane, verticalOffset, workspaceSwitchId, session);
     }
 
     private async Task RestoreWorkspacePaneFocusedSelectionAsync(
         FolderPane pane,
-        IReadOnlyCollection<string> selectedPaths)
+        IReadOnlyCollection<string> selectedPaths,
+        int workspaceSwitchId = 0,
+        WorkspaceSession? session = null)
     {
         var selectedEntries = await Dispatcher.InvokeAsync(() =>
         {
+            if (workspaceSwitchId > 0
+                && session is not null
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+            {
+                return Array.Empty<FileEntry>();
+            }
+
             return SelectItemsInPaneByPaths(
                 pane,
                 selectedPaths,
@@ -601,6 +739,14 @@ public partial class MainWindow
 
         // Wait for container layout generation before centering the selected item.
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        if (workspaceSwitchId > 0
+            && session is not null
+            && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, session.Id, "stale-switch");
+            return;
+        }
+
         await ListViewRestoreService.CenterItemAsync(
             listView,
             firstSelected,
@@ -610,14 +756,16 @@ public partial class MainWindow
 
     private async Task RevealWorkspacePaneSelectionAsync(
         FolderPane pane,
-        IReadOnlyCollection<string> selectedPaths)
+        IReadOnlyCollection<string> selectedPaths,
+        int workspaceSwitchId = 0,
+        WorkspaceSession? session = null)
     {
         if (selectedPaths.Count == 0)
         {
             return;
         }
 
-        await RestoreWorkspacePaneFocusedSelectionAsync(pane, selectedPaths);
+        await RestoreWorkspacePaneFocusedSelectionAsync(pane, selectedPaths, workspaceSwitchId, session);
     }
 
     private sealed record WorkspacePanePreservedState(

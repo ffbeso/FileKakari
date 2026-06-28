@@ -27,7 +27,7 @@ public partial class MainWindow
             ItemsList.PreviewMouseWheel += ItemsList_PreviewMouseWheelForDiagnostics;
         }
 
-        _performanceLogger.Write($"dev-list-options {_devListPerfOptions.Describe()}");
+        PerfLog.WriteVerbose($"dev-list-options {_devListPerfOptions.Describe()}");
     }
 
     private async void ItemsList_PreviewMouseWheelForDiagnostics(object sender, MouseWheelEventArgs e)
@@ -195,7 +195,7 @@ public partial class MainWindow
             var gcMb = GC.GetTotalMemory(false) / 1024d / 1024d;
             var handles = process.HandleCount;
 
-            _performanceLogger.Write($"memory-metrics trigger={trigger} workingSetMb={workingSetMb:N1} privateMb={privateMb:N1} gcMb={gcMb:N1} handles={handles}");
+            PerfLog.WriteVerbose($"memory-metrics trigger={trigger} workingSetMb={workingSetMb:N1} privateMb={privateMb:N1} gcMb={gcMb:N1} handles={handles}");
         }
         catch
         {

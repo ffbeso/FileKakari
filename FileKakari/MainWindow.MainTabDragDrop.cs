@@ -62,7 +62,7 @@ public partial class MainWindow
             && string.Equals(tag, "WorkspaceTabTitle", StringComparison.Ordinal);
     }
 
-    private void TabsControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private async void TabsControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         var pendingRenameSession = _pendingWorkspaceRenameSession;
         var shouldBeginRename = e.ChangedButton == MouseButton.Left
@@ -74,7 +74,22 @@ public partial class MainWindow
 
         if (_draggedTab is not null)
         {
-            SelectWorkspaceSession(_draggedTab);
+            var targetSession = _draggedTab;
+            var selectedSession = GetSelectedWorkspaceSession();
+            var isAlreadySynchronized = IsWorkspaceSessionSelectionSynchronized(targetSession);
+            PerfLog.WriteVerbose(
+                $"main-tab-preview-mouse-up targetSessionId={targetSession.Id} " +
+                $"currentSelectedSessionId={selectedSession?.Id ?? "null"} " +
+                $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+                $"targetIsActiveSession={targetSession.IsActiveSession} " +
+                $"alreadySynchronized={isAlreadySynchronized}");
+
+            SelectWorkspaceSession(targetSession);
+            if (IsSameWorkspaceSession(selectedSession, targetSession) && !isAlreadySynchronized)
+            {
+                await RestoreWorkspaceTabAsync(targetSession);
+            }
+
             e.Handled = true;
         }
 

@@ -93,7 +93,7 @@ public partial class MainWindow
         UpdatePathDisplay(workspace.SourceDirectory);
         RefreshWorkspaceDisplayPanes();
         _performanceLogger.Write($"workspace-applied root=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup.Id}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup.Tabs.Count} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
-        await LoadWorkspaceDisplayPanesAsync();
+        await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
         UpdateWorkspaceButtonState();
         return true;
     }
@@ -184,7 +184,7 @@ public partial class MainWindow
         UpdatePathDisplay(workspace.RootPath ?? workspaceSession.RootPath);
         RefreshWorkspaceDisplayPanes();
         _performanceLogger.Write($"workspace-file-opened root=\"{workspace.RootPath ?? ""}\" source=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup?.Id ?? ""}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup?.Tabs.Count ?? 0} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
-        await LoadWorkspaceDisplayPanesAsync();
+        await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
         UpdateWorkspaceButtonState();
         return true;
     }
@@ -285,7 +285,7 @@ public partial class MainWindow
         UpdatePathDisplay(workspace.RootPath ?? workspaceSession.RootPath);
         RefreshWorkspaceDisplayPanes();
         _performanceLogger.Write($"{logReason} root=\"{workspace.RootPath ?? ""}\" source=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup?.Id ?? ""}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup?.Tabs.Count ?? 0} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
-        await LoadWorkspaceDisplayPanesAsync();
+        await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
         UpdateWorkspaceButtonState();
     }
 
@@ -378,13 +378,27 @@ public partial class MainWindow
 
     private void RefreshWorkspaceDisplayPanes()
     {
+        RefreshWorkspaceDisplayPanes("RefreshWorkspaceDisplayPanes", 0, _activeWorkspaceSession);
+    }
+
+    private void RefreshWorkspaceDisplayPanes(string trigger, int switchId = 0, WorkspaceSession? sourceSession = null)
+    {
+        var displaySession = sourceSession ?? _activeWorkspaceSession;
+        if (displaySession is null)
+        {
+            return;
+        }
+
+        WriteWorkspaceLayoutSyncDiagnostics($"{trigger}:before-refresh-display-panes", switchId, displaySession);
         _folderPaneController.RefreshDisplayPanes(
-            _activeWorkspaceSession,
+            displaySession,
             isActivePaneActive: true);
-        EnsureWorkspaceLayoutRoot(_activeWorkspaceSession);
-        EnsureWorkspaceDisplayLayoutRoot(_activeWorkspaceSession);
-        WorkspaceDisplayLayoutRoot = _activeWorkspaceSession.DisplayLayoutRoot;
-        _workspacePaneUiController.ShowWorkspace(_activeWorkspaceSession.ActivePaneGroup);
+        EnsureWorkspaceLayoutRoot(displaySession);
+        EnsureWorkspaceDisplayLayoutRoot(displaySession);
+        WorkspaceDisplayLayoutRoot = displaySession.DisplayLayoutRoot;
+        _workspacePaneUiController.ShowWorkspace(displaySession.ActivePaneGroup);
+        SynchronizeWorkspaceSessionHostVisibility(displaySession);
+        WriteWorkspaceLayoutSyncDiagnostics($"{trigger}:after-refresh-display-panes", switchId, displaySession);
     }
 
     private void UpdateWorkspacePaneActiveStates()
@@ -450,37 +464,57 @@ public partial class MainWindow
         return secondUpdated ? split with { Second = second } : split;
     }
 
-    private async Task LoadWorkspaceDisplayPanesAsync()
+    private async Task LoadWorkspaceDisplayPanesAsync(string restoreTrigger = "viewstate-restore")
     {
-        await _folderPaneController.LoadDisplayPanesAsync(Dispatcher);
-        UpdateFolderWatchForWorkspacePanes();
-
-        if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+        var shouldMarkRestoreInProgress = string.Equals(restoreTrigger, "viewstate-restore", StringComparison.Ordinal)
+            && !IsWorkspaceSwitchRestoreInProgress;
+        if (shouldMarkRestoreInProgress)
         {
-            foreach (var pane in _workspaceDisplayPanes)
+            _workspaceSwitchRestoreDepth++;
+        }
+
+        try
+        {
+            await _folderPaneController.LoadDisplayPanesAsync(Dispatcher);
+            UpdateFolderWatchForWorkspacePanes();
+
+            if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
-                await RestoreWorkspacePaneStateAsync(pane, FileListRestorePolicy.ExactRestore);
+                foreach (var pane in _workspaceDisplayPanes)
+                {
+                    await RestoreWorkspacePaneStateAsync(pane, FileListRestorePolicy.ExactRestore, restoreTrigger);
+                }
+            }
+        }
+        finally
+        {
+            if (shouldMarkRestoreInProgress && _workspaceSwitchRestoreDepth > 0)
+            {
+                _workspaceSwitchRestoreDepth--;
             }
         }
     }
 
-    private async Task LoadWorkspaceDisplayPanesOnSwitchAsync(int switchId, WorkspaceSession workspaceSession, CancellationToken cancellationToken)
+    private async Task LoadWorkspaceDisplayPanesOnSwitchAsync(
+        int switchId,
+        WorkspaceSession workspaceSession,
+        IReadOnlyList<WorkspacePaneGroup> targetPanes,
+        CancellationToken cancellationToken)
     {
-        if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+        if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
         {
-            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
             return;
         }
 
-        var panes = workspaceSession.PaneGroups.ToList();
         var loadTasks = new List<Task>();
-        foreach (var pane in panes)
+        foreach (var pane in targetPanes)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+            if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
                 return;
             }
 
@@ -490,7 +524,7 @@ public partial class MainWindow
             if (!pane.IsActiveStateLoaded)
             {
                 WriteDiagLog($"event=pane-load-schedule switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCountBefore={pane.FileList.Items.Count} pendingExternalChange={targetState.HasPendingExternalChange} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
-                loadTasks.Add(LoadFolderPaneItemsAsync(pane, cancellationToken, FileListRestorePolicy.ExactRestore));
+                loadTasks.Add(LoadFolderPaneItemsAsync(pane, cancellationToken, FileListRestorePolicy.ExactRestore, "workspace-switch", switchId));
             }
             else
             {
@@ -503,9 +537,9 @@ public partial class MainWindow
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+        if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
         {
-            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
             return;
         }
 
@@ -517,12 +551,20 @@ public partial class MainWindow
         return pane.FileList.Items.FirstOrDefault()?.FullPath ?? "";
     }
 
-    private Task LoadFolderPaneItemsAsync(FolderPane pane, FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore)
+    private Task LoadFolderPaneItemsAsync(
+        FolderPane pane,
+        FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore,
+        string restoreTrigger = "pane-load-complete")
     {
-        return LoadFolderPaneItemsAsync(pane, CancellationToken.None, policy);
+        return LoadFolderPaneItemsAsync(pane, CancellationToken.None, policy, restoreTrigger, 0);
     }
 
-    private async Task LoadFolderPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken, FileListRestorePolicy policy)
+    private async Task LoadFolderPaneItemsAsync(
+        FolderPane pane,
+        CancellationToken cancellationToken,
+        FileListRestorePolicy policy,
+        string restoreTrigger = "pane-load-complete",
+        int workspaceSwitchId = 0)
     {
         _suppressWorkspaceSelectionSync = true;
         _suppressWorkspaceScrollSync = true;
@@ -532,9 +574,17 @@ public partial class MainWindow
             
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (workspaceSwitchId > 0
+                && FindSessionContainingPane(pane) is { } switchSession
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, switchSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, switchSession.Id, "stale-switch");
+                return;
+            }
+
             if (policy != FileListRestorePolicy.None && WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
-                await RestoreWorkspacePaneStateAsync(pane, policy);
+                await RestoreWorkspacePaneStateAsync(pane, policy, restoreTrigger, workspaceSwitchId);
             }
         }
         finally
@@ -542,13 +592,26 @@ public partial class MainWindow
             _suppressWorkspaceSelectionSync = false;
             _suppressWorkspaceScrollSync = false;
 
-            RestoreWorkspacePaneListViewOpacityIfNeeded(pane);
+            if (workspaceSwitchId == 0
+                || FindSessionContainingPane(pane) is not { } switchSession
+                || CanApplyWorkspaceSwitch(workspaceSwitchId, switchSession))
+            {
+                RestoreWorkspacePaneListViewOpacityIfNeeded(pane);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         if (policy != FileListRestorePolicy.None)
         {
+            if (workspaceSwitchId > 0
+                && FindSessionContainingPane(pane) is { } switchSession
+                && !CanApplyWorkspaceSwitch(workspaceSwitchId, switchSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", workspaceSwitchId, switchSession.Id, "stale-switch");
+                return;
+            }
+
             SynchronizeWorkspacePaneSelectionAfterLoad(pane);
         }
     }
@@ -759,15 +822,17 @@ public partial class MainWindow
     {
         foreach (var s in _workspaceSessions)
         {
-            s.IsActiveSession = ReferenceEquals(s, session);
+            s.IsActiveSession = IsSameWorkspaceSession(s, session);
         }
+
+        SynchronizeWorkspaceSessionHostVisibility(session);
 
         if (session.ActivePaneGroup is { } activePaneGroup)
         {
             _activeWorkspacePaneGroup = activePaneGroup;
         }
 
-        _performanceLogger.Write($"workspace-session-active id={session.Id} workspace={session.IsWorkspace} root=\"{session.RootPath}\" header=\"{session.Header}\" activePaneId=\"{session.ActivePaneId}\" panes={session.PaneGroups.Count} tabs={session.Tabs.Count}");
+        PerfLog.WriteVerbose($"workspace-session-active id={session.Id} workspace={session.IsWorkspace} root=\"{session.RootPath}\" header=\"{session.Header}\" activePaneId=\"{session.ActivePaneId}\" panes={session.PaneGroups.Count} tabs={session.Tabs.Count}");
     }
 
     private void ApplyWorkspaceSessionToFolderTabs()
@@ -789,6 +854,7 @@ public partial class MainWindow
 
         if (_activeWorkspaceSession?.IsWorkspace != true
             || paneGroup.Workspace is null
+            || !IsPaneOwnedByActiveWorkspaceSession(paneGroup)
             || ReferenceEquals(paneGroup, _activeWorkspacePaneGroup))
         {
             return;
@@ -799,8 +865,8 @@ public partial class MainWindow
         {
             ClearLastClosedStates();
             LoadWorkspacePaneGroup(paneGroup);
-            _performanceLogger.Write($"workspace-pane-switch paneId=\"{paneGroup.Id}\" activePaneId=\"{_activeWorkspaceSession.ActivePaneId}\" tabs={paneGroup.Tabs.Count} selected={TabsControl.SelectedIndex}");
-            await LoadWorkspaceDisplayPanesAsync();
+            PerfLog.WriteVerbose($"workspace-pane-switch paneId=\"{paneGroup.Id}\" activePaneId=\"{_activeWorkspaceSession.ActivePaneId}\" tabs={paneGroup.Tabs.Count} selected={TabsControl.SelectedIndex}");
+            await LoadWorkspaceDisplayPanesAsync("active-pane-change");
             UpdateFolderWatchForWorkspacePanes();
             ScheduleSessionSave("active-pane");
             UpdateWindowTitle();
@@ -974,7 +1040,7 @@ public partial class MainWindow
                 selectedTab?.Id);
             if (wasActiveInSource && selectedTab is not null)
             {
-                await LoadFolderPaneItemsAsync(sourcePane);
+                await LoadFolderPaneItemsAsync(sourcePane, restoreTrigger: "subtab-selection-changed");
             }
         }
     }
@@ -1086,7 +1152,7 @@ public partial class MainWindow
         if (ReferenceEquals(targetPane, _activeWorkspacePaneGroup))
         {
             targetPane.RefreshDisplay();
-            await LoadFolderPaneItemsAsync(targetPane);
+            await LoadFolderPaneItemsAsync(targetPane, restoreTrigger: "subtab-selection-changed");
         }
         else
         {

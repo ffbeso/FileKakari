@@ -113,7 +113,7 @@ public partial class MainWindow
 
             var preservedState = CaptureWorkspacePanePreservedState(pane);
             ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-            await LoadFolderPaneItemsAsync(pane);
+            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
             pane.ActiveTabState?.ClearPendingExternalChange();
             _performanceLogger.Write($"folder-pane-watch-refresh paneId={pane.Id} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" items={pane.FileList.Items.Count}");
         }

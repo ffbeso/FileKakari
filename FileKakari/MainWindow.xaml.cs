@@ -32,6 +32,9 @@ public partial class MainWindow : Window
     private readonly BulkObservableCollection<FileEntry> _items = [];
     private readonly LocalizationService _text = new();
     private readonly PerformanceLogger _performanceLogger = new();
+    private int _workspaceRestoreGeneration;
+    private int _workspaceSwitchRestoreDepth;
+    private readonly HashSet<string> _activeWorkspaceRestoreKeys = new(StringComparer.Ordinal);
     private readonly DevListPerfOptions _devListPerfOptions = DevListPerfOptions.FromEnvironment();
     private readonly FileOperationService _fileOperationService = new();
     private readonly SettingsService _settingsService;
@@ -237,15 +240,28 @@ public partial class MainWindow : Window
     {
         var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
         var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
-        var loadingStateId = _loadingStateId ?? "null";
-        var isLoadingStr = _isLoading.ToString();
-        var msg = $"event={eventName} switchId={switchId} requestedSessionId={requestedSessionId} selectedSessionId={selectedSessionId} activeSessionId={activeSessionId} loadingStateId={loadingStateId} isLoading={isLoadingStr} reason={reason}";
+        var msg = $"event={eventName} switchId={switchId} requestedSessionId={requestedSessionId} selectedSessionId={selectedSessionId} activeSessionId={activeSessionId} reason={reason}";
         
-        _performanceLogger.Write(msg);
+        if (IsWorkspaceSwitchSummaryEvent(eventName))
+        {
+            _performanceLogger.Write(msg);
+        }
+        else
+        {
+            PerfLog.WriteVerbose(msg);
+        }
+
         if (IsDiagLogEnabled)
         {
             WriteDiagLog(msg);
         }
+    }
+
+    private static bool IsWorkspaceSwitchSummaryEvent(string eventName)
+    {
+        return string.Equals(eventName, "workspace-switch-request", StringComparison.Ordinal)
+            || string.Equals(eventName, "workspace-switch-apply", StringComparison.Ordinal)
+            || string.Equals(eventName, "workspace-switch-discard", StringComparison.Ordinal);
     }
 
     public ICollectionView ItemsView { get; }
@@ -1305,11 +1321,9 @@ public partial class MainWindow : Window
     }
 
     private static readonly bool IsDiagLogEnabled =
-#if DEBUG
-        true;
-#else
         System.Environment.GetEnvironmentVariable("FILEKAKARI_DIAG_LOG") == "1";
-#endif
+
+    internal static bool IsVerbosePerfLogEnabled => PerfLog.IsVerboseEnabled;
 
     internal static void WriteDiagLog(string message)
     {
@@ -1747,7 +1761,7 @@ public partial class MainWindow : Window
             ApplyDisplayModeToPane(pane);
             pane.RefreshDisplay();
 
-            await LoadFolderPaneItemsAsync(pane);
+            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
 
             UpdateFolderWatchForWorkspacePanes();
             ApplyColumnSettingsToWorkspacePane(pane);
@@ -2734,7 +2748,7 @@ public partial class MainWindow : Window
                 ApplyColumnSettingsToWorkspacePane(pane);
                 if (needsReload)
                 {
-                    await LoadFolderPaneItemsAsync(pane);
+                    await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
                 }
             }
         }
@@ -2771,6 +2785,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!IsPaneOwnedByActiveWorkspaceSession(paneGroup))
+        {
+            PerfLog.WriteVerbose($"workspace-pane-button-skip reason=inactive-session-pane paneId={paneGroup.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            return;
+        }
+
         await SwitchWorkspacePaneGroupAsync(paneGroup);
     }
 
@@ -2780,6 +2800,12 @@ public partial class MainWindow : Window
             || sender is not ListView listView
             || listView.DataContext is not FolderPane pane)
         {
+            return;
+        }
+
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        {
+            PerfLog.WriteVerbose($"workspace-pane-input-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             return;
         }
 
@@ -2944,7 +2970,7 @@ public partial class MainWindow : Window
             var pane = _workspacePendingRangeSelectionPane;
             ClearFileDragStart();
 
-            if (listView is not null && pane is not null)
+            if (listView is not null && pane is not null && IsPaneOwnedByActiveWorkspaceSession(pane))
             {
                 var modifiers = Keyboard.Modifiers;
                 var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
@@ -2979,6 +3005,13 @@ public partial class MainWindow : Window
             && upListView.DataContext is FolderPane upPane
             && _renameInteraction.PendingClickEntry is { } renameEntry)
         {
+            if (!IsPaneOwnedByActiveWorkspaceSession(upPane))
+            {
+                ClearPendingRenameClick();
+                ClearFileDragStart();
+                return;
+            }
+
             var currentPoint = e.GetPosition(upListView);
             var startPoint = _renameInteraction.PendingClickPoint;
             ClearPendingRenameClick();
@@ -3028,7 +3061,8 @@ public partial class MainWindow : Window
             || _pendingSingleSelectionClickPoint is not { } startPoint
             || _pendingSingleSelectionClickPane is not { } pane
             || !ReferenceEquals(_pendingSingleSelectionClickListView, listView)
-            || !ReferenceEquals(listView.DataContext, pane))
+            || !ReferenceEquals(listView.DataContext, pane)
+            || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
             return false;
         }
@@ -3106,7 +3140,8 @@ public partial class MainWindow : Window
     private bool HandleWorkspacePaneRangeSelectionMove(object sender, MouseEventArgs e)
     {
         if (sender is not ListView listView
-            || listView.DataContext is not FolderPane pane)
+            || listView.DataContext is not FolderPane pane
+            || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
             return false;
         }
@@ -3173,7 +3208,8 @@ public partial class MainWindow : Window
             || _workspaceRangeSelectionStartPoint is null
             || !ReferenceEquals(_workspaceRangeSelectionListView, listView)
             || _workspaceRangeSelectionPane is not { } pane
-            || !ReferenceEquals(listView.DataContext, pane))
+            || !ReferenceEquals(listView.DataContext, pane)
+            || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
             return false;
         }
@@ -3570,7 +3606,7 @@ public partial class MainWindow : Window
         ApplyWorkspaceSessionToFolderTabs();
         ApplyDisplayModeToPane(pane);
         pane.RefreshDisplay();
-        await LoadFolderPaneItemsAsync(pane);
+        await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
         UpdateWorkspacePaneActiveStates();
         UpdateFolderWatchForWorkspacePanes();
         ApplyColumnSettingsToWorkspacePane(pane);
@@ -3598,7 +3634,7 @@ public partial class MainWindow : Window
         RestoreWorkspacePaneSubTabSelection(listBox, pane, targetTab);
         ApplyWorkspaceSessionToFolderTabs();
         pane.RefreshDisplay();
-        await LoadFolderPaneItemsAsync(pane);
+        await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
         UpdateFolderWatchForWorkspacePanes();
         ApplyColumnSettingsToWorkspacePane(pane);
         RefreshPreviewForActiveSelection();
@@ -3661,8 +3697,15 @@ public partial class MainWindow : Window
         }
 
         ApplyWorkspacePaneSubTabSelection(listBox, pane, selectedTabId, selectedTab);
+        var scheduledSwitchGeneration = _workspaceSwitchGeneration;
         _ = Dispatcher.InvokeAsync(() =>
         {
+            if (scheduledSwitchGeneration != _workspaceSwitchGeneration)
+            {
+                PerfLog.WriteVerbose($"workspace-subtab-selection-restore-skip reason=switch-generation-mismatch scheduledGeneration={scheduledSwitchGeneration} currentGeneration={_workspaceSwitchGeneration} paneId={pane.Id}");
+                return;
+            }
+
             ApplyWorkspacePaneSubTabSelection(listBox, pane, selectedTabId, selectedTab);
         }, DispatcherPriority.ContextIdle);
     }
@@ -3711,6 +3754,12 @@ public partial class MainWindow : Window
         if (sender is ListBox listBox
             && listBox.DataContext is FolderPane pane)
         {
+            if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+            {
+                PerfLog.WriteVerbose($"workspace-subtab-selection-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                return;
+            }
+
             if (e.RemovedItems.OfType<FolderTab>().FirstOrDefault() is { } previousTab)
             {
                 SaveWorkspacePaneColumnWidthsForTab(pane, previousTab);
@@ -3727,7 +3776,7 @@ public partial class MainWindow : Window
                 activeTab.State.CurrentPath = activeTab.Navigation.CurrentPath;
                 ApplyDisplayModeToPane(pane);
                 pane.RefreshDisplay();
-                await LoadFolderPaneItemsAsync(pane);
+                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
                 UpdateFolderWatchForWorkspacePanes();
                 ApplyColumnSettingsToWorkspacePane(pane);
 
@@ -3807,6 +3856,12 @@ public partial class MainWindow : Window
 
             if (listView.DataContext is FolderPane pane)
             {
+                if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+                {
+                    WriteDiagLog($"event=workspace-listview-loaded-skip reason=inactive-session-pane paneId={pane.Id} paneHash={pane.GetHashCode()} activeSessionId={_activeWorkspaceSession?.Id ?? "null"}");
+                    return;
+                }
+
                 ApplyDisplayModeToPane(listView, pane);
                 ApplyColumnSettingsToWorkspacePane(listView, pane);
                 HookWorkspacePaneColumnWidthChanges(listView, pane);
@@ -3868,28 +3923,7 @@ public partial class MainWindow : Window
     private ListView? FindListViewForPane(FolderPane pane)
     {
         return FindVisualChildren<ListView>(WorkspaceSessionsHost)
-            .FirstOrDefault(lv =>
-            {
-                if (lv.DataContext is FolderPane p)
-                {
-                    return string.Equals(p.Id, pane.Id, StringComparison.Ordinal);
-                }
-                if (lv.DataContext is not null)
-                {
-                    var dcType = lv.DataContext.GetType();
-                    var idProp = dcType.GetProperty("Id") ?? dcType.GetProperty("PaneId");
-                    if (idProp is not null && idProp.GetValue(lv.DataContext) is string idVal)
-                    {
-                        return string.Equals(idVal, pane.Id, StringComparison.Ordinal);
-                    }
-                    var paneProp = dcType.GetProperties().FirstOrDefault(prop => typeof(FolderPane).IsAssignableFrom(prop.PropertyType));
-                    if (paneProp is not null && paneProp.GetValue(lv.DataContext) is FolderPane wrappedPane)
-                    {
-                        return string.Equals(wrappedPane.Id, pane.Id, StringComparison.Ordinal);
-                    }
-                }
-                return false;
-            });
+            .FirstOrDefault(lv => ReferenceEquals(lv.DataContext, pane));
     }
 
     private void WorkspacePaneSubTabBar_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -4468,7 +4502,7 @@ public partial class MainWindow : Window
 
         if (wasActiveInSource && pane.Tabs.Count > 0)
         {
-            await LoadFolderPaneItemsAsync(pane);
+            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
         }
 
         // 3. Remove tab's state from the original session dictionary
@@ -4753,7 +4787,7 @@ public partial class MainWindow : Window
         session.PaneSplitOrientation = orientation;
         session.ActivePaneGroup = newPaneGroup;
         RefreshWorkspaceDisplayPanes();
-        await LoadFolderPaneItemsAsync(newPaneGroup);
+        await LoadFolderPaneItemsAsync(newPaneGroup, restoreTrigger: "active-pane-change");
         ScheduleSessionSave("split-pane");
         UpdateWindowTitle();
     }
@@ -4859,6 +4893,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        {
+            PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            return;
+        }
+
         _lastInteractedWorkspaceDisplayPane = pane;
         if (pane is not WorkspacePaneGroup paneGroup)
         {
@@ -4881,14 +4921,26 @@ public partial class MainWindow : Window
 
     private void ScheduleWorkspacePaneActivation(FolderPane pane)
     {
+        var scheduledSwitchGeneration = _workspaceSwitchGeneration;
         Dispatcher.BeginInvoke(
-            new Action(() => ActivateWorkspacePaneAfterDeferredInput(pane)),
+            new Action(() =>
+            {
+                if (scheduledSwitchGeneration != _workspaceSwitchGeneration)
+                {
+                    PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=switch-generation-mismatch scheduledGeneration={scheduledSwitchGeneration} currentGeneration={_workspaceSwitchGeneration} paneId={pane.Id}");
+                    return;
+                }
+
+                ActivateWorkspacePaneAfterDeferredInput(pane);
+            }),
             DispatcherPriority.Background);
     }
 
     private void RememberWorkspacePaneInteraction(FolderPane pane)
     {
-        if (_activeWorkspaceSession is null || !IsWorkspaceDisplayPane(pane))
+        if (_activeWorkspaceSession is null
+            || !IsWorkspaceDisplayPane(pane)
+            || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
             return;
         }
@@ -4904,8 +4956,21 @@ public partial class MainWindow : Window
 
     private void ActivateWorkspacePaneAfterDeferredInput(FolderPane pane)
     {
-        if (_activeWorkspaceSession is null || !IsWorkspaceDisplayPane(pane))
+        if (_activeWorkspaceSession is null
+            || !IsWorkspaceDisplayPane(pane)
+            || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
+            return;
+        }
+
+        if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
+        {
+            return;
+        }
+
+        if (!IsSameWorkspaceSession(_activeWorkspaceSession, GetSelectedWorkspaceSession()))
+        {
+            PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=selected-session-mismatch paneId={pane.Id} activeSessionId={_activeWorkspaceSession.Id} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             return;
         }
 
@@ -5009,10 +5074,17 @@ public partial class MainWindow : Window
             && _workspaceDisplayPanes.Contains(pane);
     }
 
+    private bool IsPaneOwnedByActiveWorkspaceSession(FolderPane? pane)
+    {
+        return pane is not null
+            && _activeWorkspaceSession is not null
+            && _activeWorkspaceSession.PaneGroups.Any(candidate => ReferenceEquals(candidate, pane));
+    }
+
     private ListView? GetFolderPaneListView(FolderPane pane)
     {
-        return IsWorkspaceDisplayPane(pane)
-            ? FindWorkspacePaneListView(WorkspaceSplitGrid, pane)
+        return WorkspaceSplitGrid.Visibility == Visibility.Visible
+            ? FindWorkspacePaneListView(WorkspaceSessionsHost, pane)
             : ItemsList;
     }
 
@@ -5749,9 +5821,9 @@ public partial class MainWindow : Window
 
     private void SaveActiveTabViewState()
     {
-        SaveWorkspacePanesViewState();
         if (GetSelectedWorkspaceSession() is not null)
         {
+            SaveWorkspacePanesViewState(_activeWorkspaceSession);
             var tab = ActiveTab;
             if (tab is null || _activeWorkspaceSession is null)
             {
@@ -5958,7 +6030,7 @@ public partial class MainWindow : Window
         {
             var firstPath = selectedPaths.Count > 0 ? selectedPaths[0] : "";
             var lastPath = selectedPaths.Count > 0 ? selectedPaths[^1] : "";
-            _performanceLogger.Write($"workspace-save-state paneId={pane.Id} path=\"{tab.Navigation.CurrentPath}\" offset={verticalOffset} selectedCount={selectedPaths.Count} first=\"{firstPath}\" last=\"{lastPath}\"");
+            PerfLog.WriteVerbose($"workspace-save-state paneId={pane.Id} path=\"{tab.Navigation.CurrentPath}\" offset={verticalOffset} selectedCount={selectedPaths.Count} first=\"{firstPath}\" last=\"{lastPath}\"");
         }
     }
 
@@ -6083,6 +6155,11 @@ public partial class MainWindow : Window
         _workspaceSwitchCancellation = currentCancellation;
 
         var requestedSessionId = workspaceSession.Id;
+        var requestedSession = workspaceSession;
+        var oldSession = _activeWorkspaceSession;
+        var targetPanes = requestedSession.PaneGroups.ToList();
+        var targetLayoutRoot = requestedSession.LayoutRoot;
+        var targetDisplayLayoutRoot = requestedSession.DisplayLayoutRoot;
 
         WriteWorkspaceSwitchLog("workspace-switch-request", switchId, requestedSessionId, "selection-requested");
 
@@ -6094,9 +6171,10 @@ public partial class MainWindow : Window
 
         try
         {
+            _workspaceSwitchRestoreDepth++;
             var token = currentCancellation.Token;
 
-            var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, workspaceSession);
+            var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, requestedSession);
             if (!result.Success)
             {
                 WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selection-rejected");
@@ -6105,58 +6183,63 @@ public partial class MainWindow : Window
 
             token.ThrowIfCancellationRequested();
 
-            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
-            {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
-                return;
-            }
-
             UpdateCrashContextSnapshot("workspace-tab-restore");
 
             if (result.RequiresSaveActiveLocalState)
             {
+                SaveWorkspacePanesViewState(oldSession);
                 _workspaceLocalState.SaveActiveLocalState();
+            }
+
+            _activeWorkspaceSession = requestedSession;
+            UpdateActiveWorkspaceSessionUi(requestedSession);
+            RefreshWorkspaceDisplayPanes("workspace-switch-active-session-set", switchId, requestedSession);
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
             }
 
             if (result.ActiveSessionChanged)
             {
-                CancelActiveLoadForWorkspaceSwitch(workspaceSession, "workspace-restore");
+                CancelActiveLoadForWorkspaceSwitch(requestedSession, "workspace-restore");
             }
 
-            ApplyWorkspaceSessionSelection(result.ActiveSession!);
+            ApplyWorkspaceSessionSelection(requestedSession, switchId);
 
-            WriteWorkspacePaneDiagnostics("workspace-switch-diag", switchId, workspaceSession);
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag", switchId, requestedSession);
 
-            if (HasUnresolvedWorkspacePaneViews(workspaceSession))
+            if (HasUnresolvedWorkspacePaneViews(requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-wait-ui", switchId, workspaceSession.Id, "pane-view-unresolved");
+                WriteWorkspaceSwitchLog("workspace-switch-wait-ui", switchId, requestedSession.Id, "pane-view-unresolved");
                 await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Loaded);
             }
 
             token.ThrowIfCancellationRequested();
 
-            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "selected-session-mismatch");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSession.Id, "stale-switch");
                 return;
             }
 
-            WriteWorkspacePaneDiagnostics("workspace-switch-diag-post", switchId, workspaceSession);
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag-post", switchId, requestedSession);
 
-            if (HasUnresolvedWorkspacePaneViews(workspaceSession))
+            if (HasUnresolvedWorkspacePaneViews(requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-container-unresolved", switchId, workspaceSession.Id, "pane-view-still-unresolved");
+                WriteWorkspaceSwitchLog("workspace-switch-container-unresolved", switchId, requestedSession.Id, "pane-view-still-unresolved");
             }
 
-            _performanceLogger.Write($"workspace-tab-restore sessionId={workspaceSession.Id} root=\"{workspaceSession.RootPath}\" panes={workspaceSession.PaneGroups.Count} selected={TabsControl.SelectedIndex}");
+            PerfLog.WriteVerbose($"workspace-tab-restore sessionId={requestedSession.Id} root=\"{requestedSession.RootPath}\" panes={targetPanes.Count} selected={TabsControl.SelectedIndex} targetLayoutRoot=\"{DebugDumpLayout(targetLayoutRoot)}\" targetDisplayLayoutRoot=\"{DebugDumpLayout(targetDisplayLayoutRoot)}\"");
             
-            await LoadWorkspaceDisplayPanesOnSwitchAsync(switchId, workspaceSession, token);
+            await LoadWorkspaceDisplayPanesOnSwitchAsync(switchId, requestedSession, targetPanes, token);
 
             token.ThrowIfCancellationRequested();
 
-            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
                 return;
             }
 
@@ -6179,18 +6262,50 @@ public partial class MainWindow : Window
                 catch { }
             }
 
-            if (!IsLatestWorkspaceSwitchRequest(switchId, workspaceSession))
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
                 return;
             }
 
-            ApplyWorkspacePostLoadState(workspaceSession);
+            ApplyWorkspacePostLoadState(requestedSession, switchId);
 
-            if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
             {
-                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selected-session-mismatch");
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
                 return;
+            }
+
+            if (!EnsureWorkspaceSwitchDisplayState(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "display-binding-mismatch");
+                return;
+            }
+
+            var visibleHostDiagnostics = WriteWorkspaceVisibleHostDiagnostics("workspace-visible-host-final", switchId, requestedSession);
+            var hitTestDiagnostics = WriteWorkspaceHitTestDiagnostics("workspace-hit-test-final", switchId, requestedSession);
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            if (!EnsureWorkspaceSwitchDisplayState(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "display-binding-mismatch");
+                return;
+            }
+
+            WriteWorkspaceLayoutSyncDiagnostics("workspace-switch-apply:before", switchId, requestedSession);
+
+            if (!IsVisibleWorkspaceHostMatch(requestedSession, hitTestDiagnostics))
+            {
+                WriteWorkspaceVisibleHostMismatchDiagnostics(
+                    switchId,
+                    requestedSessionId,
+                    visibleHostDiagnostics,
+                    hitTestDiagnostics);
             }
 
             WriteWorkspaceSwitchLog("workspace-switch-apply", switchId, requestedSessionId, "completed");
@@ -6201,6 +6316,11 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (_workspaceSwitchRestoreDepth > 0)
+            {
+                _workspaceSwitchRestoreDepth--;
+            }
+
             if (ReferenceEquals(_workspaceSwitchCancellation, currentCancellation))
             {
                 _workspaceSwitchCancellation = null;
@@ -6233,6 +6353,170 @@ public partial class MainWindow : Window
                 session.IsActiveSession == IsSameWorkspaceSession(session, requestedSession));
     }
 
+    private bool IsVisibleWorkspaceHostMatch(WorkspaceSession requestedSession, WorkspaceHitTestDiagnostics hitTestDiagnostics)
+    {
+        return hitTestDiagnostics.IsResolved
+            && string.Equals(hitTestDiagnostics.SessionId, requestedSession.Id, StringComparison.Ordinal);
+    }
+
+    private bool EnsureWorkspaceSwitchDisplayState(int switchId, WorkspaceSession requestedSession)
+    {
+        if (IsWorkspaceSwitchDisplayStateValid(switchId, requestedSession))
+        {
+            return true;
+        }
+
+        WriteWorkspaceSwitchLog("workspace-switch-rebuild-display", switchId, requestedSession.Id, "display-binding-mismatch");
+        RebuildWorkspaceSwitchDisplayState(switchId, requestedSession);
+        return IsWorkspaceSwitchDisplayStateValid(switchId, requestedSession);
+    }
+
+    private void RebuildWorkspaceSwitchDisplayState(int switchId, WorkspaceSession requestedSession)
+    {
+        _activeWorkspaceSession = requestedSession;
+        UpdateActiveWorkspaceSessionUi(requestedSession);
+        EnsureWorkspaceLayoutRoot(requestedSession);
+        EnsureWorkspaceDisplayLayoutRoot(requestedSession);
+        RefreshWorkspaceDisplayPanes("workspace-switch-rebuild-display", switchId, requestedSession);
+        SynchronizeWorkspaceSessionHostVisibility(requestedSession);
+    }
+
+    private bool IsWorkspaceSwitchDisplayStateValid(int switchId, WorkspaceSession requestedSession)
+    {
+        var selectedMatches = IsSameWorkspaceSession(GetSelectedWorkspaceSession(), requestedSession);
+        var activeMatches = IsSameWorkspaceSession(_activeWorkspaceSession, requestedSession);
+        var activeTrueSessionIds = _workspaceSessions
+            .Where(session => session.IsActiveSession)
+            .Select(session => session.Id)
+            .ToList();
+        var onlyRequestedActive = activeTrueSessionIds.Count == 1
+            && string.Equals(activeTrueSessionIds[0], requestedSession.Id, StringComparison.Ordinal);
+        var visibleHostSessionIds = GetVisibleWorkspaceHostSessionIds();
+        var onlyRequestedVisibleHost = visibleHostSessionIds.Count == 1
+            && string.Equals(visibleHostSessionIds[0], requestedSession.Id, StringComparison.Ordinal);
+        var visibleListViewSessionIds = GetVisibleWorkspaceListViewOwnerSessionIds();
+        var onlyRequestedVisibleListViews = visibleListViewSessionIds.Count > 0
+            && visibleListViewSessionIds.All(id => string.Equals(id, requestedSession.Id, StringComparison.Ordinal));
+        var displayPaneMatches = WorkspacePaneIdsMatch(_workspaceDisplayPanes.Select(pane => pane.Id), requestedSession.PaneGroups.Select(pane => pane.Id));
+        var displayLayoutMatches = ReferenceEquals(WorkspaceDisplayLayoutRoot, requestedSession.DisplayLayoutRoot);
+
+        var isValid = selectedMatches
+            && activeMatches
+            && onlyRequestedActive
+            && onlyRequestedVisibleHost
+            && onlyRequestedVisibleListViews
+            && displayPaneMatches
+            && displayLayoutMatches;
+
+        if (!isValid)
+        {
+            WriteDiagLog(
+                $"event=workspace-switch-display-mismatch " +
+                $"switchId={switchId} " +
+                $"requestedSessionId={requestedSession.Id} " +
+                $"selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
+                $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+                $"activeTrueSessionIds=[{string.Join("|", activeTrueSessionIds)}] " +
+                $"visibleHosts=[{string.Join("|", visibleHostSessionIds)}] " +
+                $"visibleListViewOwnerSessionIds=[{string.Join("|", visibleListViewSessionIds)}] " +
+                $"displayPaneIds=[{string.Join("|", _workspaceDisplayPanes.Select(pane => pane.Id))}] " +
+                $"requestedPaneIds=[{string.Join("|", requestedSession.PaneGroups.Select(pane => pane.Id))}] " +
+                $"displayLayoutMatches={displayLayoutMatches}");
+        }
+
+        return isValid;
+    }
+
+    private List<string> GetVisibleWorkspaceHostSessionIds()
+    {
+        return _workspaceSessions
+            .Select(session => (session, host: GetWorkspaceSessionHostElement(session)))
+            .Select(item => (item.session, item.host, rect: item.host is null ? Rect.Empty : GetRectRelativeToWorkspaceSessionsHost(item.host)))
+            .Where(item => HasDisplayRect(item.host, item.rect))
+            .Select(item => item.session.Id)
+            .ToList();
+    }
+
+    private List<string> GetVisibleWorkspaceListViewOwnerSessionIds()
+    {
+        var result = new List<string>();
+        foreach (var listView in FindVisualChildren<ListView>(WorkspaceSessionsHost))
+        {
+            var rect = GetRectRelativeToWorkspaceSessionsHost(listView);
+            if (!HasDisplayRect(listView, rect))
+            {
+                continue;
+            }
+
+            var owner = ResolveWorkspaceVisualOwner(listView);
+            if (owner.Session is not null)
+            {
+                result.Add(owner.Session.Id);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool WorkspacePaneIdsMatch(IEnumerable<string> left, IEnumerable<string> right)
+    {
+        return left.SequenceEqual(right, StringComparer.Ordinal);
+    }
+
+    private void SynchronizeWorkspaceSessionHostVisibility(WorkspaceSession requestedSession)
+    {
+        foreach (var session in _workspaceSessions)
+        {
+            if (GetWorkspaceSessionHostElement(session) is not { } host)
+            {
+                continue;
+            }
+
+            host.Visibility = IsSameWorkspaceSession(session, requestedSession)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+    }
+
+    private bool IsWorkspaceSwitchRestoreInProgress => _workspaceSwitchRestoreDepth > 0;
+
+    private static bool IsProgrammaticWorkspaceRestoreTrigger(string trigger)
+    {
+        return string.Equals(trigger, "subtab-selection-changed", StringComparison.Ordinal)
+            || string.Equals(trigger, "active-pane-change", StringComparison.Ordinal);
+    }
+
+    private void WriteWorkspaceVisibleHostMismatchDiagnostics(
+        int switchId,
+        string requestedSessionId,
+        IReadOnlyList<WorkspaceHostDiagnostics> visibleHostDiagnostics,
+        WorkspaceHitTestDiagnostics hitTestDiagnostics)
+    {
+        if (!hitTestDiagnostics.IsResolved)
+        {
+            return;
+        }
+
+        var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
+        var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
+        var activeTrueSessionIds = string.Join(
+            "|",
+            _workspaceSessions.Where(session => session.IsActiveSession).Select(session => session.Id));
+        var visibleHostSessionIds = string.Join(
+            "|",
+            visibleHostDiagnostics.Where(info => info.HasDisplayRect).Select(info => info.SessionId));
+
+        WriteDiagLog(
+            $"event=workspace-visible-host-mismatch " +
+            $"switchId={switchId} " +
+            $"requestedSessionId={requestedSessionId} " +
+            $"selectedSessionId={selectedSessionId} " +
+            $"activeSessionId={activeSessionId} " +
+            $"isActiveSessionIds=[{activeTrueSessionIds}] " +
+            $"visibleHostSessionIds=[{visibleHostSessionIds}] " +
+            $"hitTestSessionId={hitTestDiagnostics.SessionId}");
+    }
+
     private bool HasUnresolvedWorkspacePaneViews(WorkspaceSession workspaceSession)
     {
         return workspaceSession.PaneGroups.Any(pane => GetFolderPaneListView(pane) == null);
@@ -6259,12 +6543,328 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            _performanceLogger.Write($"workspace-switch-diag-error message={ex.Message}");
+            PerfLog.WriteVerbose($"workspace-switch-diag-error message={ex.Message}");
         }
     }
 
-    private void ApplyWorkspaceSessionSelection(WorkspaceSession workspaceSession)
+    private void WriteWorkspaceLayoutSyncDiagnostics(string trigger, int switchId, WorkspaceSession? sourceSession)
     {
+        try
+        {
+            var activeSession = _activeWorkspaceSession;
+            var selectedSession = GetSelectedWorkspaceSession();
+            var displayPaneIds = string.Join(",", _workspaceDisplayPanes.Select(pane => pane.Id));
+            var paneGroupIds = string.Join(",", _workspacePaneGroups.Select(pane => pane.Id));
+
+            WriteDiagLog(
+                $"event=workspace-layout-sync " +
+                $"trigger=\"{trigger}\" " +
+                $"switchId={switchId} " +
+                $"activeSessionId={activeSession?.Id ?? "null"} " +
+                $"selectedSessionId={selectedSession?.Id ?? "null"} " +
+                $"sourceSessionId={sourceSession?.Id ?? "null"} " +
+                $"activeLayoutRoot=\"{DebugDumpLayout(activeSession?.LayoutRoot)}\" " +
+                $"activeDisplayLayoutRoot=\"{DebugDumpLayout(activeSession?.DisplayLayoutRoot)}\" " +
+                $"selectedLayoutRoot=\"{DebugDumpLayout(selectedSession?.LayoutRoot)}\" " +
+                $"selectedDisplayLayoutRoot=\"{DebugDumpLayout(selectedSession?.DisplayLayoutRoot)}\" " +
+                $"sourceLayoutRoot=\"{DebugDumpLayout(sourceSession?.LayoutRoot)}\" " +
+                $"sourceDisplayLayoutRoot=\"{DebugDumpLayout(sourceSession?.DisplayLayoutRoot)}\" " +
+                $"sharedLayoutRoot=\"not-present\" " +
+                $"sharedDisplayLayoutRoot=\"{DebugDumpLayout(WorkspaceDisplayLayoutRoot)}\" " +
+                $"displayPaneIds=[{displayPaneIds}] " +
+                $"paneGroupIds=[{paneGroupIds}]");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                WriteDiagLog($"event=workspace-layout-sync-error trigger=\"{EscapeDiagValue(trigger)}\" switchId={switchId} message=\"{EscapeDiagValue(ex.Message)}\"");
+            }
+            catch { }
+        }
+    }
+
+    private List<WorkspaceHostDiagnostics> WriteWorkspaceVisibleHostDiagnostics(
+        string eventName,
+        int switchId,
+        WorkspaceSession requestedSession)
+    {
+        var results = new List<WorkspaceHostDiagnostics>();
+        try
+        {
+            var selectedSession = GetSelectedWorkspaceSession();
+            var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
+            var selectedSessionId = selectedSession?.Id ?? "null";
+            var activeTrueSessionIds = string.Join(
+                "|",
+                _workspaceSessions.Where(session => session.IsActiveSession).Select(session => session.Id));
+
+            foreach (var session in _workspaceSessions)
+            {
+                var host = GetWorkspaceSessionHostElement(session);
+                var rect = host is null ? Rect.Empty : GetRectRelativeToWorkspaceSessionsHost(host);
+                var hasDisplayRect = HasDisplayRect(host, rect);
+                var info = new WorkspaceHostDiagnostics(session.Id, hasDisplayRect);
+                results.Add(info);
+
+                WriteDiagLog(
+                    $"event={eventName} " +
+                    $"switchId={switchId} " +
+                    $"requestedSessionId={requestedSession.Id} " +
+                    $"selectedSessionId={selectedSessionId} " +
+                    $"activeSessionId={activeSessionId} " +
+                    $"activeTrueSessionIds=[{activeTrueSessionIds}] " +
+                    $"sessionId={session.Id} " +
+                    $"isActiveSession={session.IsActiveSession} " +
+                    $"hostFound={host is not null} " +
+                    $"visibility={host?.Visibility.ToString() ?? "null"} " +
+                    $"isVisible={host?.IsVisible.ToString() ?? "null"} " +
+                    $"opacity={FormatDouble(host?.Opacity)} " +
+                    $"zIndex={FormatZIndex(host)} " +
+                    $"actualWidth={FormatDouble(host?.ActualWidth)} " +
+                    $"actualHeight={FormatDouble(host?.ActualHeight)} " +
+                    $"rect={FormatRect(rect)} " +
+                    $"hasDisplayRect={hasDisplayRect} " +
+                    $"presentationSourceNull={FormatPresentationSourceNull(host)} " +
+                    $"isHitTestVisible={host?.IsHitTestVisible.ToString() ?? "null"}");
+
+                WriteWorkspacePrimaryListViewDiagnostics(eventName, switchId, requestedSession, session);
+            }
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                WriteDiagLog($"event=workspace-visible-host-diag-error switchId={switchId} requestedSessionId={requestedSession.Id} message=\"{EscapeDiagValue(ex.Message)}\"");
+            }
+            catch { }
+        }
+
+        return results;
+    }
+
+    private void WriteWorkspacePrimaryListViewDiagnostics(
+        string eventName,
+        int switchId,
+        WorkspaceSession requestedSession,
+        WorkspaceSession owningSession)
+    {
+        var primaryPane = owningSession.PaneGroups.FirstOrDefault(pane =>
+            string.Equals(pane.Id, "primary", StringComparison.Ordinal));
+        var listView = primaryPane is null ? null : GetFolderPaneListView(primaryPane);
+        var rect = listView is null ? Rect.Empty : GetRectRelativeToWorkspaceSessionsHost(listView);
+        var collapsedAncestor = listView is not null && HasCollapsedAncestor(listView);
+
+        WriteDiagLog(
+            $"event={eventName}-primary-listview " +
+            $"switchId={switchId} " +
+            $"requestedSessionId={requestedSession.Id} " +
+            $"owningSessionId={owningSession.Id} " +
+            $"listViewFound={listView is not null} " +
+            $"paneHash={primaryPane?.GetHashCode() ?? 0} " +
+            $"itemsCount={listView?.Items.Count ?? -1} " +
+            $"actualWidth={FormatDouble(listView?.ActualWidth)} " +
+            $"actualHeight={FormatDouble(listView?.ActualHeight)} " +
+            $"visibility={listView?.Visibility.ToString() ?? "null"} " +
+            $"isVisible={listView?.IsVisible.ToString() ?? "null"} " +
+            $"hasCollapsedAncestor={collapsedAncestor} " +
+            $"rect={FormatRect(rect)}");
+    }
+
+    private WorkspaceHitTestDiagnostics WriteWorkspaceHitTestDiagnostics(
+        string eventName,
+        int switchId,
+        WorkspaceSession requestedSession)
+    {
+        try
+        {
+            var center = new Point(WorkspaceSessionsHost.ActualWidth / 2, WorkspaceSessionsHost.ActualHeight / 2);
+            var inputHit = WorkspaceSessionsHost.InputHitTest(center) as DependencyObject;
+            var visualHit = VisualTreeHelper.HitTest(WorkspaceSessionsHost, center)?.VisualHit;
+            var hitSource = visualHit ?? inputHit;
+            var owner = ResolveWorkspaceVisualOwner(hitSource);
+            var activeTrueSessionIds = string.Join(
+                "|",
+                _workspaceSessions.Where(session => session.IsActiveSession).Select(session => session.Id));
+            var visibleHosts = string.Join(
+                "|",
+                _workspaceSessions
+                    .Select(session => (session, host: GetWorkspaceSessionHostElement(session)))
+                    .Select(item => (item.session, item.host, rect: item.host is null ? Rect.Empty : GetRectRelativeToWorkspaceSessionsHost(item.host)))
+                    .Where(item => HasDisplayRect(item.host, item.rect))
+                    .Select(item => item.session.Id));
+
+            WriteDiagLog(
+                $"event={eventName} " +
+                $"switchId={switchId} " +
+                $"requestedSessionId={requestedSession.Id} " +
+                $"selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
+                $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+                $"activeTrueSessionIds=[{activeTrueSessionIds}] " +
+                $"visibleHosts=[{visibleHosts}] " +
+                $"hostCenter={FormatPoint(center)} " +
+                $"inputHitType={inputHit?.GetType().Name ?? "null"} " +
+                $"visualHitType={visualHit?.GetType().Name ?? "null"} " +
+                $"hitSessionId={owner.Session?.Id ?? "unresolved"} " +
+                $"hitPaneId={owner.Pane?.Id ?? "null"} " +
+                $"hitPaneHash={owner.Pane?.GetHashCode() ?? 0}");
+
+            return new WorkspaceHitTestDiagnostics(owner.Session?.Id, owner.Pane?.Id);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                WriteDiagLog($"event=workspace-hit-test-error switchId={switchId} requestedSessionId={requestedSession.Id} message=\"{EscapeDiagValue(ex.Message)}\"");
+            }
+            catch { }
+
+            return new WorkspaceHitTestDiagnostics(null, null);
+        }
+    }
+
+    private FrameworkElement? GetWorkspaceSessionHostElement(WorkspaceSession session)
+    {
+        if (WorkspaceSessionsHost.ItemContainerGenerator.ContainerFromItem(session) is not DependencyObject container)
+        {
+            return null;
+        }
+
+        return FindVisualChildren<Grid>(container)
+            .FirstOrDefault(grid => ReferenceEquals(grid.DataContext, session));
+    }
+
+    private WorkspaceVisualOwner ResolveWorkspaceVisualOwner(DependencyObject? source)
+    {
+        var current = source;
+        FolderPane? pane = null;
+        WorkspaceSession? sessionHost = null;
+        FrameworkElement? sessionHostElement = null;
+
+        while (current is not null)
+        {
+            if (current is FrameworkElement { DataContext: FolderPane currentPane })
+            {
+                pane ??= currentPane;
+            }
+
+            if (current is FrameworkElement { DataContext: WorkspaceSession session })
+            {
+                sessionHost = session;
+                sessionHostElement = current as FrameworkElement;
+                break;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        if (sessionHost is null
+            || sessionHostElement is null
+            || !HasDisplayRect(sessionHostElement, GetRectRelativeToWorkspaceSessionsHost(sessionHostElement)))
+        {
+            return new WorkspaceVisualOwner(null, null);
+        }
+
+        if (pane is null)
+        {
+            return new WorkspaceVisualOwner(sessionHost, null);
+        }
+
+        return sessionHost.PaneGroups.Any(candidate => ReferenceEquals(candidate, pane))
+            ? new WorkspaceVisualOwner(sessionHost, pane)
+            : new WorkspaceVisualOwner(null, null);
+    }
+
+    private Rect GetRectRelativeToWorkspaceSessionsHost(FrameworkElement element)
+    {
+        if (element.ActualWidth <= 0 || element.ActualHeight <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        try
+        {
+            return element
+                .TransformToAncestor(WorkspaceSessionsHost)
+                .TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        }
+        catch
+        {
+            return Rect.Empty;
+        }
+    }
+
+    private static bool HasDisplayRect(FrameworkElement? element, Rect rect)
+    {
+        return element is not null
+            && element.Visibility == Visibility.Visible
+            && element.IsVisible
+            && element.Opacity > 0
+            && PresentationSource.FromVisual(element) is not null
+            && rect.Width > 0
+            && rect.Height > 0;
+    }
+
+    private static bool HasCollapsedAncestor(DependencyObject source)
+    {
+        var current = source;
+        while (current is not null)
+        {
+            if (current is UIElement { Visibility: Visibility.Collapsed })
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private static string FormatRect(Rect rect)
+    {
+        return rect.IsEmpty
+            ? "empty"
+            : $"{FormatDouble(rect.X)},{FormatDouble(rect.Y)},{FormatDouble(rect.Width)},{FormatDouble(rect.Height)}";
+    }
+
+    private static string FormatPoint(Point point)
+    {
+        return $"{FormatDouble(point.X)},{FormatDouble(point.Y)}";
+    }
+
+    private static string FormatDouble(double? value)
+    {
+        return value is null ? "null" : value.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatZIndex(FrameworkElement? element)
+    {
+        return element is null ? "null" : Panel.GetZIndex(element).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatPresentationSourceNull(FrameworkElement? element)
+    {
+        return element is null ? "null" : (PresentationSource.FromVisual(element) is null).ToString();
+    }
+
+    private static string EscapeDiagValue(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    private sealed record WorkspaceHostDiagnostics(string SessionId, bool HasDisplayRect);
+
+    private sealed record WorkspaceHitTestDiagnostics(string? SessionId, string? PaneId)
+    {
+        public bool IsResolved => !string.IsNullOrWhiteSpace(SessionId);
+    }
+
+    private sealed record WorkspaceVisualOwner(WorkspaceSession? Session, FolderPane? Pane);
+
+    private void ApplyWorkspaceSessionSelection(WorkspaceSession workspaceSession, int switchId = 0)
+    {
+        WriteWorkspaceLayoutSyncDiagnostics("ApplyWorkspaceSessionSelection:before", switchId, workspaceSession);
         _activeWorkspaceSession = workspaceSession;
         UpdateActiveWorkspaceSessionUi(workspaceSession);
         ApplyWorkspaceSessionToFolderTabs();
@@ -6284,21 +6884,47 @@ public partial class MainWindow : Window
 
         _workspacePaneUiController.ShowWorkspace(workspaceSession.ActivePaneGroup);
         UpdatePathDisplay(workspaceSession.RootPath);
-        RefreshWorkspaceDisplayPanes();
+        WriteWorkspaceLayoutSyncDiagnostics("ApplyWorkspaceSessionSelection:before-refresh", switchId, workspaceSession);
+        RefreshWorkspaceDisplayPanes("ApplyWorkspaceSessionSelection", switchId, workspaceSession);
+        WriteWorkspaceLayoutSyncDiagnostics("ApplyWorkspaceSessionSelection:after", switchId, workspaceSession);
     }
 
-    private void ApplyWorkspacePostLoadState(WorkspaceSession workspaceSession)
+    private void ApplyWorkspacePostLoadState(WorkspaceSession workspaceSession, int switchId)
     {
+        if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
+            return;
+        }
+
         if (workspaceSession.IsWorkspace)
         {
-            foreach (var pane in _workspaceDisplayPanes)
+            foreach (var pane in workspaceSession.PaneGroups.ToList())
             {
+                if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+                {
+                    WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
+                    return;
+                }
+
                 ApplyColumnSettingsToWorkspacePane(pane);
             }
         }
         else
         {
+            if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
+                return;
+            }
+
             ApplyColumnSettings();
+        }
+
+        if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
+            return;
         }
 
         UpdateWindowTitle();
@@ -6306,12 +6932,20 @@ public partial class MainWindow : Window
         var activePane = GetActiveFolderPane();
         if (activePane is not null)
         {
-            RestoreActiveWorkspacePaneFocus(activePane);
+            RestoreActiveWorkspacePaneFocus(activePane, switchId, workspaceSession);
         }
     }
 
-    private void RestoreActiveWorkspacePaneFocus(FolderPane activePane)
+    private void RestoreActiveWorkspacePaneFocus(FolderPane activePane, int switchId = 0, WorkspaceSession? requestedSession = null)
     {
+        if (switchId > 0
+            && requestedSession is not null
+            && !CanApplyWorkspaceSwitch(switchId, requestedSession))
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSession.Id, "stale-switch");
+            return;
+        }
+
         var listView = GetFolderPaneListView(activePane);
         if (listView is null || !listView.IsVisible || !listView.IsEnabled)
         {
@@ -6320,6 +6954,14 @@ public partial class MainWindow : Window
 
         Dispatcher.BeginInvoke(new Action(() =>
         {
+            if (switchId > 0
+                && requestedSession is not null
+                && !CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSession.Id, "stale-switch");
+                return;
+            }
+
             if (!IsActive)
             {
                 return;
@@ -7212,36 +7854,46 @@ public partial class MainWindow : Window
 
     private void SaveWorkspacePanesViewState()
     {
+        SaveWorkspacePanesViewState(_activeWorkspaceSession);
+    }
+
+    private void SaveWorkspacePanesViewState(WorkspaceSession? targetSession)
+    {
         if (WorkspaceSplitGrid.Visibility != Visibility.Visible)
         {
             return;
         }
 
+        if (targetSession is null)
+        {
+            return;
+        }
+
+        var targetPanes = targetSession.PaneGroups.ToList();
+
         if (_performanceLogger.IsEnabled)
         {
-            var activeSession = GetSelectedWorkspaceSession();
-            var layoutDump = activeSession != null ? DebugDumpLayout(activeSession.LayoutRoot) : "null";
-            var displayLayoutDump = activeSession != null ? DebugDumpLayout(activeSession.DisplayLayoutRoot) : "null";
             var displayPaneIds = string.Join(",", _workspaceDisplayPanes.Select(p => p.Id));
-            var paneGroupIds = string.Join(",", _workspacePaneGroups.Select(p => p.Id));
+            var targetPaneIds = string.Join(",", targetPanes.Select(p => p.Id));
             var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
+            var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
 
             _performanceLogger.Write($"workspace-save-viewstate-debug " +
+                $"targetSessionId={targetSession.Id} " +
                 $"activeSessionId={activeSessionId} " +
-                $"displayPanes=[{displayPaneIds}] " +
-                $"paneGroups=[{paneGroupIds}] " +
-                $"layoutRoot=\"{layoutDump}\" " +
-                $"displayLayoutRoot=\"{displayLayoutDump}\"");
+                $"selectedSessionId={selectedSessionId} " +
+                $"displayPaneIds=[{displayPaneIds}] " +
+                $"targetPanes=[{targetPaneIds}]");
 
-            if (activeSession != null && activeSession.LayoutRoot is null)
+            if (targetSession.LayoutRoot is null)
             {
-                _performanceLogger.Write($"workspace-save-viewstate-layoutroot-null " +
-                    $"sessionId={activeSession.Id} " +
-                    $"sessionName=\"{activeSession.Name}\" " +
+                PerfLog.WriteVerbose($"workspace-save-viewstate-layoutroot-null " +
+                    $"sessionId={targetSession.Id} " +
+                    $"sessionName=\"{targetSession.Name}\" " +
                     $"_activeWorkspaceSessionId={activeSessionId}");
             }
 
-            foreach (var pane in _workspaceDisplayPanes)
+            foreach (var pane in targetPanes)
             {
                 var listView = GetFolderPaneListView(pane);
                 var scrollViewer = listView != null ? FindVisualChild<ScrollViewer>(listView) : null;
@@ -7264,7 +7916,7 @@ public partial class MainWindow : Window
                 var paneSession = _workspaceSessions.FirstOrDefault(s => s.PaneGroups.Any(pg => ReferenceEquals(pg, pane)));
                 var paneSessionId = paneSession?.Id ?? "null";
 
-                _performanceLogger.Write($"workspace-pane-save-debug paneId={pane.Id} " +
+                PerfLog.WriteVerbose($"workspace-pane-save-debug paneId={pane.Id} " +
                     $"paneSessionId={paneSessionId} " +
                     $"activeSessionId={activeSessionId} " +
                     $"listViewExists={listView != null} " +
@@ -7277,7 +7929,7 @@ public partial class MainWindow : Window
             }
         }
 
-        foreach (var pane in _workspaceDisplayPanes)
+        foreach (var pane in targetPanes)
         {
             if (pane.ActiveTab is { } tab)
             {

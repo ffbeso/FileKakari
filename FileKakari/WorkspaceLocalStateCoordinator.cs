@@ -124,7 +124,7 @@ sealed class WorkspaceLocalStateCoordinator
         _isDirty = true;
         _saveTimer.Stop();
         _saveTimer.Start();
-        _performanceLogger.Write($"workspace-local-dirty reason={reason} root=\"{session.RootPath}\"");
+        PerfLog.WriteVerbose($"workspace-local-dirty reason={reason}");
     }
 
     private void SaveTimer_Tick(object? sender, EventArgs e)

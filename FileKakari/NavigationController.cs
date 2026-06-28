@@ -367,7 +367,7 @@ public partial class MainWindow
             }
 
             _owner._performanceLogger.Write($"folder-pane-navigation paneId={pane.Id} stateId={targetTab.State.Id} path=\"{normalizedPath}\" kind={navigationKind}");
-            await _owner.LoadFolderPaneItemsAsync(pane, policy);
+            await _owner.LoadFolderPaneItemsAsync(pane, policy, "viewstate-restore");
             _owner.UpdateFolderWatchForWorkspacePanes();
 
             _owner.ApplyColumnWidthsToWorkspacePane(pane);

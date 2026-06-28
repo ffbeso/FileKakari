@@ -68,7 +68,7 @@ sealed class FolderPaneController
         }
 
         await dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
-        _performanceLogger.Write($"folder-pane-display-load-start panes={panes.Count} detail=\"{string.Join("|", panes.Select(pane => $"{pane.Id}:{pane.ActiveTabState?.CurrentPath ?? ""}"))}\"");
+        PerfLog.WriteVerbose($"folder-pane-display-load-start panes={panes.Count} detail=\"{string.Join("|", panes.Select(pane => $"{pane.Id}:{pane.ActiveTabState?.CurrentPath ?? ""}"))}\"");
         await Task.WhenAll(panes.Select(LoadPaneItemsAsync));
         await dispatcher.InvokeAsync(() =>
         {
@@ -77,7 +77,7 @@ sealed class FolderPaneController
                 pane.RefreshDisplay();
             }
         }, DispatcherPriority.ContextIdle);
-        _performanceLogger.Write($"folder-pane-display-load-complete panes={panes.Count} detail=\"{string.Join("|", panes.Select(pane => $"{pane.Id}:{pane.FileList.Items.Count}"))}\"");
+        PerfLog.WriteVerbose($"folder-pane-display-load-complete panes={panes.Count} detail=\"{string.Join("|", panes.Select(pane => $"{pane.Id}:{pane.FileList.Items.Count}"))}\"");
     }
 
     internal Task LoadPaneItemsAsync(FolderPane pane)
@@ -119,7 +119,7 @@ sealed class FolderPaneController
                 cancellationToken.ThrowIfCancellationRequested();
                 UpdateStatus(pane);
                 pane.RefreshDisplay();
-                _performanceLogger.Write(
+                PerfLog.WriteVerbose(
                     $"folder-pane-display-reuse paneId={pane.Id} stateId={targetState.Id} " +
                     $"path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count}");
                 return;
@@ -128,7 +128,7 @@ sealed class FolderPaneController
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, cachedSortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
-            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
+            MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
@@ -196,7 +196,7 @@ sealed class FolderPaneController
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
-            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
+            MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
@@ -334,7 +334,7 @@ sealed class FolderPaneController
                 cancellationToken.ThrowIfCancellationRequested();
                 UpdateStatus(pane);
                 pane.RefreshDisplay();
-                _performanceLogger.Write(
+                PerfLog.WriteVerbose(
                     $"folder-pane-display-reuse paneId={pane.Id} stateId={targetState.Id} " +
                     $"path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} special=true");
                 return;
@@ -343,7 +343,7 @@ sealed class FolderPaneController
             cancellationToken.ThrowIfCancellationRequested();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
-            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
+            MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
@@ -376,7 +376,7 @@ sealed class FolderPaneController
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _sortFoldersFirst(), null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
-            MainWindow.WriteDiagLog($"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} paneHash={pane.GetHashCode()}");
+            MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
@@ -428,5 +428,21 @@ sealed class FolderPaneController
     private static string FormatTimestamp(DateTimeOffset? timestamp)
     {
         return timestamp?.ToString("O") ?? "";
+    }
+
+    private static string BuildReplaceCompleteLog(FolderPane pane, WorkspaceTabState targetState)
+    {
+        return $"event=folder-pane-replace-complete paneId={pane.Id} stateId={targetState.Id} " +
+            $"path=\"{targetState.CurrentPath}\" count={pane.FileList.Items.Count} " +
+            $"firstItem=\"{FormatEntryPath(pane.FileList.Items.FirstOrDefault())}\" " +
+            $"lastItem=\"{FormatEntryPath(pane.FileList.Items.LastOrDefault())}\" " +
+            $"loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" " +
+            $"paneCurrentPath=\"{pane.CurrentPath}\" activeTabPath=\"{pane.ActiveTabState?.CurrentPath ?? ""}\" " +
+            $"paneHash={pane.GetHashCode()}";
+    }
+
+    private static string FormatEntryPath(FileEntry? entry)
+    {
+        return entry?.FullPath?.Replace("\"", "\\\"", StringComparison.Ordinal) ?? "";
     }
 }

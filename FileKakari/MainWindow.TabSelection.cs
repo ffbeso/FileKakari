@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows.Controls;
 
 namespace FileKakari;
@@ -8,19 +9,47 @@ public partial class MainWindow
     {
         UpdateCrashContextSnapshot("tab-selection-changed");
         ClearWorkspacePaneRangeSelection();
+        var selectedSessionAtEvent = GetSelectedWorkspaceSession();
+        var shouldProcessDuringPaneSwitch = _isSwitchingWorkspacePane
+            && selectedSessionAtEvent is not null
+            && !IsSameWorkspaceSession(selectedSessionAtEvent, _activeWorkspaceSession);
+
         if (!ReferenceEquals(e.Source, TabsControl)
             || _isSwitchingTabs
-            || _isSwitchingWorkspacePane)
+            || (_isSwitchingWorkspacePane && !shouldProcessDuringPaneSwitch))
         {
+            var reason = !ReferenceEquals(e.Source, TabsControl)
+                ? "ignored-source"
+                : _isSwitchingTabs
+                    ? "ignored-switching-tabs"
+                    : "ignored-switching-workspace-pane";
+            WriteMainTabSelectionChangedLog(e, reason);
+            if (string.Equals(reason, "ignored-switching-workspace-pane", StringComparison.Ordinal)
+                && !IsSameWorkspaceSession(selectedSessionAtEvent, _activeWorkspaceSession))
+            {
+                _performanceLogger.Write(
+                    $"main-tab-selection-error reason=ignored-switching-workspace-pane-selected-active-mismatch " +
+                    $"selectedSessionId={selectedSessionAtEvent?.Id ?? "null"} " +
+                    $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+                    $"selectedIndex={TabsControl.SelectedIndex}");
+            }
             return;
         }
 
-        SaveWorkspacePanesViewState();
+        WriteMainTabSelectionChangedLog(
+            e,
+            shouldProcessDuringPaneSwitch
+                ? "selection-changed-during-pane-switch"
+                : "selection-changed");
+        var oldSession = _activeWorkspaceSession;
+        SaveWorkspacePanesViewState(oldSession);
 
         var selectedMainTab = TabsControl.SelectedItem as MainTabItem;
+        var selectedSession = selectedSessionAtEvent;
         UpdateMainTabContent(selectedMainTab);
-        if (selectedMainTab?.WorkspaceSession is not { } selectedSession)
+        if (selectedSession is null)
         {
+            WriteMainTabSelectionChangedLog(e, "no-workspace-session");
             if (e.RemovedItems
                 .Cast<object>()
                 .Select(GetWorkspaceSession)
@@ -45,13 +74,16 @@ public partial class MainWindow
             return;
         }
 
+        var wasSynchronized = IsWorkspaceSessionSelectionSynchronized(selectedSession);
         var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, selectedSession);
         if (!result.Success)
         {
+            WriteMainTabSelectionChangedLog(e, "selection-rejected");
             _performanceLogger.Write($"tab-selection-skip selectedIndex={TabsControl.SelectedIndex} tabCount={_workspaceSessions.Count}");
             return;
         }
 
+        WriteMainTabSelectionChangedLog(e, result.ActiveSessionChanged ? "selected-session-changed" : "selected-session-same");
         _activeWorkspaceSession = selectedSession;
         UpdateActiveWorkspaceSessionUi(selectedSession);
 
@@ -59,7 +91,7 @@ public partial class MainWindow
             .OfType<MainTabItem>()
             .Any(tab => tab.IsInternalPage);
 
-        if (!result.ActiveSessionChanged)
+        if (!result.ActiveSessionChanged && wasSynchronized)
         {
             if (wasInternalPage)
             {
@@ -138,10 +170,29 @@ public partial class MainWindow
             : _mainTabs.FirstOrDefault(tab => ReferenceEquals(tab.WorkspaceSession, session));
     }
 
-    private void SelectWorkspaceSession(WorkspaceSession? session)
+    private bool IsWorkspaceSessionSelectionSynchronized(WorkspaceSession targetSession)
+    {
+        return IsSameWorkspaceSession(GetSelectedWorkspaceSession(), targetSession)
+            && IsSameWorkspaceSession(_activeWorkspaceSession, targetSession)
+            && targetSession.IsActiveSession;
+    }
+
+    private void SelectWorkspaceSession(WorkspaceSession? session, [CallerMemberName] string? caller = null)
     {
         var tab = GetMainTabItem(session);
+        _performanceLogger.Write($"main-tab-select-request caller={caller ?? "unknown"} targetSessionId={session?.Id ?? "null"} currentSelectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedIndex={TabsControl.SelectedIndex}");
         TabsControl.SelectedItem = tab;
         UpdateMainTabContent(tab);
+    }
+
+    private void WriteMainTabSelectionChangedLog(SelectionChangedEventArgs e, string reason)
+    {
+        _performanceLogger.Write(
+            $"main-tab-selection-changed reason={reason} " +
+            $"selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
+            $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+            $"selectedIndex={TabsControl.SelectedIndex} " +
+            $"isSwitchingTabs={_isSwitchingTabs} isSwitchingWorkspacePane={_isSwitchingWorkspacePane} " +
+            $"switchGeneration={_workspaceSwitchGeneration}");
     }
 }

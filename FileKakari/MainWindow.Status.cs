@@ -65,6 +65,12 @@ public partial class MainWindow
             return;
         }
 
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        {
+            PerfLog.WriteVerbose($"workspace-selection-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            return;
+        }
+
         SyncPaneSelectionFromListView(pane, listView);
         if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
         {

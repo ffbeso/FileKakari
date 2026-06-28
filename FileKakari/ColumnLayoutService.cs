@@ -93,7 +93,7 @@ internal sealed class ColumnLayoutService
         if (SpecialLocationService.IsSpecialUri(path))
         {
             var resolvedSpecial = path.TrimEnd('/', '\\');
-            PerfLog.Write($"column-layout-resolve path=\"{path}\" resolved=\"{resolvedSpecial}\"");
+            PerfLog.WriteVerbose($"column-layout-resolve path=\"{path}\" resolved=\"{resolvedSpecial}\"");
             return resolvedSpecial;
         }
 
@@ -125,13 +125,13 @@ internal sealed class ColumnLayoutService
                 resolved = fullPath.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
             }
 
-            PerfLog.Write($"column-layout-resolve path=\"{path}\" resolved=\"{resolved}\"");
+            PerfLog.WriteVerbose($"column-layout-resolve path=\"{path}\" resolved=\"{resolved}\"");
             return resolved;
         }
         catch
         {
             var fallback = path.TrimEnd('/', '\\');
-            PerfLog.Write($"column-layout-resolve path=\"{path}\" resolved=\"{fallback}\" (fallback)");
+            PerfLog.WriteVerbose($"column-layout-resolve path=\"{path}\" resolved=\"{fallback}\" (fallback)");
             return fallback;
         }
     }
@@ -193,7 +193,7 @@ internal sealed class ColumnLayoutService
                 lookupKey = resolvedPath;
             }
 
-            PerfLog.Write($"column-layout-save path=\"{lookupKey}\" widths={string.Join(",", normalizedWidths.Select(kv => $"{kv.Key}:{kv.Value:N0}"))}");
+            PerfLog.WriteVerbose($"column-layout-save path=\"{lookupKey}\" widths={string.Join(",", normalizedWidths.Select(kv => $"{kv.Key}:{kv.Value:N0}"))}");
             _sessionFolderColumnWidths[lookupKey] = new FolderColumnWidthsState
             {
                 LastAccessUtc = System.DateTime.UtcNow,
@@ -247,7 +247,7 @@ internal sealed class ColumnLayoutService
                     state.LastAccessUtc = System.DateTime.UtcNow;
                     if (state.Widths.TryGetValue(columnId, out var w))
                     {
-                        PerfLog.Write($"column-load path=\"{compositeKey}\" column=\"{columnId}\" width={w:N0}");
+                        PerfLog.WriteVerbose($"column-load path=\"{compositeKey}\" column=\"{columnId}\" width={w:N0}");
                         return w;
                     }
                 }
@@ -262,7 +262,7 @@ internal sealed class ColumnLayoutService
                 state.LastAccessUtc = System.DateTime.UtcNow;
                 if (state.Widths.TryGetValue(columnId, out var w))
                 {
-                    PerfLog.Write($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={w:N0} (path-fallback)");
+                    PerfLog.WriteVerbose($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={w:N0} (path-fallback)");
                     return w;
                 }
             }
@@ -271,7 +271,7 @@ internal sealed class ColumnLayoutService
         // Priority 3: global ColumnWidths
         if (_sessionColumnWidths.TryGetValue(columnId, out var globalWidth))
         {
-            PerfLog.Write($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={globalWidth:N0} (global)");
+            PerfLog.WriteVerbose($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={globalWidth:N0} (global)");
             return globalWidth;
         }
 

@@ -80,7 +80,7 @@ public partial class MainWindow
         {
             var path = tab?.Navigation.CurrentPath;
             var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-            PerfLog.Write($"column-apply path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
+            PerfLog.WriteVerbose($"column-apply path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
 
             var stopwatch = Stopwatch.StartNew();
             _columnLayout.Apply(path, _activeWorkspaceSession, OnWorkspaceColumnWidthsDirty);
@@ -88,7 +88,15 @@ public partial class MainWindow
             var displayMode = tab is not null
                 ? tab.State.ViewMode
                 : _settingsService.Settings.DisplayMode;
-            _performanceLogger.Write($"columns-apply visible={DetailsGridView.Columns.Count} elapsedMs={stopwatch.ElapsedMilliseconds} isLoading={_isLoading} items={_items.Count} display={displayMode}");
+            var activeWorkspacePane = _activeWorkspaceSession?.IsWorkspace == true
+                ? _activeWorkspaceSession.ActivePaneGroup
+                : null;
+            _performanceLogger.Write(
+                $"columns-apply visible={DetailsGridView.Columns.Count} elapsedMs={stopwatch.ElapsedMilliseconds} " +
+                $"isLoading={_isLoading} items={_items.Count} listViewItems={ItemsList.Items.Count} " +
+                $"activeWorkspacePaneId={activeWorkspacePane?.Id ?? "null"} " +
+                $"activeWorkspacePaneItems={activeWorkspacePane?.FileList.Items.Count.ToString() ?? "null"} " +
+                $"display={displayMode}");
         }
         finally
         {
@@ -110,7 +118,7 @@ public partial class MainWindow
     {
         var path = ActiveTab?.Navigation.CurrentPath;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-        PerfLog.Write($"column-save path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
+        PerfLog.WriteVerbose($"column-save path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
         _columnLayout.SaveColumnWidths(path, _activeWorkspaceSession, OnWorkspaceColumnWidthsDirty);
     }
 
@@ -121,10 +129,16 @@ public partial class MainWindow
 
     private void ApplyColumnWidthsToWorkspacePane(FolderPane pane)
     {
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        {
+            PerfLog.WriteVerbose($"column-apply-skip paneId=\"{pane.Id}\" reason=\"inactive-session-pane\"");
+            return;
+        }
+
         var listView = FindListViewForPane(pane);
         if (listView is null)
         {
-            PerfLog.Write($"column-apply-skip paneId=\"{pane.Id}\" reason=\"listview-not-found\"");
+            PerfLog.WriteVerbose($"column-apply-skip paneId=\"{pane.Id}\" reason=\"listview-not-found\"");
             return;
         }
         ApplyColumnWidthsToWorkspacePane(listView, pane);
@@ -140,7 +154,7 @@ public partial class MainWindow
                 var tab = pane.ActiveTab;
                 var path = tab?.Navigation.CurrentPath;
                 var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-                PerfLog.Write($"column-apply path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
+                PerfLog.WriteVerbose($"column-apply path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
 
                 foreach (var column in gridView.Columns)
                 {
@@ -253,7 +267,7 @@ public partial class MainWindow
 
         var path = tab.Navigation.CurrentPath;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-        PerfLog.Write($"column-save path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
+        PerfLog.WriteVerbose($"column-save path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
         _columnLayout.SaveColumnWidthsForPath(path, _activeWorkspaceSession, pane.Id, widths, OnWorkspaceColumnWidthsDirty);
     }
 
@@ -438,6 +452,12 @@ public partial class MainWindow
 
     private void ApplyColumnSettingsToWorkspacePane(FolderPane pane)
     {
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        {
+            PerfLog.WriteVerbose($"column-apply-workspace-skip paneId=\"{pane.Id}\" reason=\"inactive-session-pane\"");
+            return;
+        }
+
         var listView = FindListViewForPane(pane);
         if (listView is not null)
         {
@@ -447,6 +467,13 @@ public partial class MainWindow
 
     private void ApplyColumnSettingsToWorkspacePane(ListView listView, FolderPane pane)
     {
+        if (!IsPaneOwnedByActiveWorkspaceSession(pane)
+            || !ReferenceEquals(listView.DataContext, pane))
+        {
+            PerfLog.WriteVerbose($"column-apply-workspace-skip paneId=\"{pane.Id}\" reason=\"inactive-session-pane-or-listview-mismatch\"");
+            return;
+        }
+
         if (listView.View is GridView gridView)
         {
             ApplyColumnSettingsToWorkspacePane(gridView, pane);
@@ -461,7 +488,7 @@ public partial class MainWindow
             var tab = pane.ActiveTab;
             var path = tab?.Navigation.CurrentPath;
             var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-            PerfLog.Write($"column-apply-workspace path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
+            PerfLog.WriteVerbose($"column-apply-workspace path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
 
             var visibleColumns = _columnLayout.GetVisibleColumnIds();
             gridView.Columns.Clear();
@@ -488,6 +515,10 @@ public partial class MainWindow
             }
 
             UpdateWorkspacePaneColumnHeaders(gridView, pane);
+            PerfLog.WriteVerbose(
+                $"columns-apply-workspace paneId={pane.Id} path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()} " +
+                $"visible={gridView.Columns.Count} listViewItems={FindListViewForPane(pane)?.Items.Count.ToString() ?? "null"} " +
+                $"folderPaneItems={pane.FileList.Items.Count} itemsViewCount={pane.FileList.ItemsView.Cast<object>().Count()}");
         }
         finally
         {

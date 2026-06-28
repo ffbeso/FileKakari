@@ -34,12 +34,12 @@ internal sealed class FolderWatchTabTracker
         var after = _folderWatchService.CurrentPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var path in after.Except(before, StringComparer.OrdinalIgnoreCase))
         {
-            _performanceLogger.Write($"folder-watch-start path=\"{path}\" refs={CountTabsForWatchPath(path)}");
+            PerfLog.WriteVerbose($"folder-watch-start path=\"{path}\" refs={CountTabsForWatchPath(path)}");
         }
 
         foreach (var path in before.Except(after, StringComparer.OrdinalIgnoreCase))
         {
-            _performanceLogger.Write($"folder-watch-stop path=\"{path}\"");
+            PerfLog.WriteVerbose($"folder-watch-stop path=\"{path}\"");
             clearPendingRefresh(path);
         }
     }

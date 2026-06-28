@@ -47,4 +47,18 @@ public static class PerfLog
             File.AppendAllText(LogPath, line + Environment.NewLine);
         }
     }
+
+    public static void WriteVerbose(string message)
+    {
+        if (!IsVerboseEnabled)
+        {
+            return;
+        }
+
+        Write(message);
+    }
+
+    public static bool IsVerboseEnabled =>
+        Environment.GetEnvironmentVariable("FILEKAKARI_WORKSPACE_VERBOSE_LOG") == "1"
+        || Environment.GetEnvironmentVariable("FILEKAKARI_DIAG_LOG") == "1";
 }

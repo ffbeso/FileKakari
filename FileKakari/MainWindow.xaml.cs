@@ -352,8 +352,8 @@ public partial class MainWindow : Window
         _userCommandService.Load();
 
         var loadedSession = _sessionStateService.Load();
-        _sessionFolderColumnWidths = loadedSession.FolderColumnWidths ?? new(StringComparer.OrdinalIgnoreCase);
-        _sessionColumnWidths = loadedSession.ColumnWidths ?? new(StringComparer.OrdinalIgnoreCase);
+        _sessionFolderColumnWidths = ColumnLayoutService.NormalizeFolderColumnWidths(loadedSession.FolderColumnWidths) ?? new(System.StringComparer.OrdinalIgnoreCase);
+        _sessionColumnWidths = ColumnLayoutService.NormalizeColumnWidths(loadedSession.ColumnWidths) ?? new(System.StringComparer.OrdinalIgnoreCase);
 
         if (loadedSession.WindowWidth.HasValue && loadedSession.WindowHeight.HasValue)
         {

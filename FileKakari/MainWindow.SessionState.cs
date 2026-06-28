@@ -26,6 +26,7 @@ public partial class MainWindow
                     if (_workspaceService.LoadFromSessionTabState(tabState) is { } workspace)
                     {
                         var restoredSession = _workspaceSessionFactory.Create(workspace);
+                        restoredSession.ColumnWidths = ColumnLayoutService.NormalizeColumnWidths(tabState.LocalState?.ColumnWidths);
                         ApplyRestoredWorkspaceName(restoredSession, tabState);
                         return restoredSession;
                     }
@@ -53,6 +54,7 @@ public partial class MainWindow
                         }
 
                         var restoredSession = _workspaceSessionFactory.Create(workspace);
+                        restoredSession.ColumnWidths = ColumnLayoutService.NormalizeColumnWidths(tabState.LocalState?.ColumnWidths);
                         ApplyRestoredWorkspaceName(restoredSession, tabState);
                         return restoredSession;
                     }
@@ -76,6 +78,7 @@ public partial class MainWindow
                     {
                         _performanceLogger.Write($"session-restore-workspace-fallback path=\"{tabState.RootPath}\" reason=file-missing-reconstructed-as-unsaved");
                         var restoredSession = _workspaceSessionFactory.Create(fallbackWorkspace);
+                        restoredSession.ColumnWidths = ColumnLayoutService.NormalizeColumnWidths(tabState.LocalState?.ColumnWidths);
                         ApplyRestoredWorkspaceName(restoredSession, tabState);
                         return restoredSession;
                     }

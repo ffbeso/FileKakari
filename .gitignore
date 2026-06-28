@@ -2,6 +2,7 @@
 obj/
 FileKakari/bin/
 FileKakari/obj/
+AGENTS.md
 .vs/
 *.user
 *.suo

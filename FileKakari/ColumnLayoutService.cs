@@ -35,7 +35,7 @@ internal sealed class ColumnLayoutService
         _settings = settings;
     }
 
-    public void Apply(string? currentPath, WorkspaceSession? activeSession, System.Action? onWorkspaceDirty = null)
+    public void Apply(string? currentPath, WorkspaceSession? activeSession, double parentWidth, System.Action? onWorkspaceDirty = null)
     {
         SaveColumnWidths(_lastPath, _lastSession, onWorkspaceDirty);
 
@@ -43,6 +43,20 @@ internal sealed class ColumnLayoutService
         _lastSession = activeSession;
 
         var visibleColumns = GetVisibleColumnIds().ToHashSet(StringComparer.Ordinal);
+
+        // Calculate other columns width
+        double otherColumnsWidth = 0;
+        foreach (var colId in visibleColumns)
+        {
+            if (colId == "Name") continue;
+            var w = GetColumnWidth(colId, currentPath, activeSession, null);
+            if (w <= 0)
+            {
+                w = _settings.ColumnWidths.TryGetValue(colId, out var dw) ? dw : 100;
+            }
+            otherColumnsWidth += w;
+        }
+
         _gridView.Columns.Clear();
         foreach (var columnId in ColumnOrder)
         {
@@ -52,7 +66,26 @@ internal sealed class ColumnLayoutService
             }
 
             var width = GetColumnWidth(columnId, currentPath, activeSession, null);
-            if (width > 0)
+            if (width <= 0)
+            {
+                if (columnId == "Name")
+                {
+                    if (parentWidth > 150)
+                    {
+                        width = System.Math.Max(360, parentWidth - otherColumnsWidth - 25);
+                    }
+                    else
+                    {
+                        width = _settings.ColumnWidths.TryGetValue(columnId, out var dw) ? dw : 400;
+                    }
+                }
+                else
+                {
+                    width = _settings.ColumnWidths.TryGetValue(columnId, out var dw) ? dw : 100;
+                }
+            }
+
+            if (width > 0 && (double.IsNaN(column.Width) || System.Math.Abs(column.Width - width) > 0.1))
             {
                 column.Width = width;
             }
@@ -288,6 +321,32 @@ internal sealed class ColumnLayoutService
             "Created" => "CreatedAt",
             _ => columnId
         };
+    }
+
+    public static System.Collections.Generic.Dictionary<string, double>? NormalizeColumnWidths(System.Collections.Generic.Dictionary<string, double>? widths)
+    {
+        if (widths == null) return null;
+        var normalized = new System.Collections.Generic.Dictionary<string, double>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, v) in widths)
+        {
+            normalized[NormalizeColumnId(k)] = v;
+        }
+        return normalized;
+    }
+
+    public static System.Collections.Generic.Dictionary<string, FolderColumnWidthsState>? NormalizeFolderColumnWidths(System.Collections.Generic.Dictionary<string, FolderColumnWidthsState>? folderColumnWidths)
+    {
+        if (folderColumnWidths == null) return null;
+        var normalized = new System.Collections.Generic.Dictionary<string, FolderColumnWidthsState>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var (k, state) in folderColumnWidths)
+        {
+            if (state.Widths != null)
+            {
+                state.Widths = NormalizeColumnWidths(state.Widths)!;
+            }
+            normalized[k] = state;
+        }
+        return normalized;
     }
 
     public static string NormalizeSortColumn(string? columnId)

@@ -1,4 +1,4 @@
-﻿namespace FileKakari;
+namespace FileKakari;
 
 public sealed class AppSettings
 {
@@ -12,17 +12,17 @@ public sealed class AppSettings
     public const double MaxRowHeight = 64;
     private static readonly Dictionary<string, double> DefaultColumnWidths = new()
     {
-        ["Name"] = 430,
-        ["Kind"] = 130,
-        ["Size"] = 90,
-        ["ModifiedAt"] = 140,
-        ["CreatedAt"] = 140,
-        ["AccessedAt"] = 140,
-        ["Extension"] = 80,
-        ["Attributes"] = 80,
-        ["FullPath"] = 300,
-        ["ParentPath"] = 220,
-        ["BaseName"] = 180
+        ["Name"] = 400,
+        ["Kind"] = 100,
+        ["Size"] = 75,
+        ["ModifiedAt"] = 130,
+        ["CreatedAt"] = 130,
+        ["AccessedAt"] = 130,
+        ["Extension"] = 60,
+        ["Attributes"] = 70,
+        ["FullPath"] = 240,
+        ["ParentPath"] = 200,
+        ["BaseName"] = 150
     };
 
     public AppThemeMode Theme { get; set; } = AppThemeMode.System;

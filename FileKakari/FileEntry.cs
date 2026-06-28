@@ -274,9 +274,46 @@ public sealed class FileEntry : INotifyPropertyChanged
         }
 
         var extension = Path.GetExtension(name);
-        return string.IsNullOrWhiteSpace(extension)
-            ? AppStrings.Get("TypeFile")
-            : extension.TrimStart('.').ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return AppStrings.Get("TypeFile");
+        }
+
+        var extUpper = extension.TrimStart('.').ToUpperInvariant();
+        var isJa = AppStrings.EffectiveCulture.Name.StartsWith("ja", StringComparison.OrdinalIgnoreCase);
+
+        return extUpper switch
+        {
+            "TXT" => isJa ? "テキスト ファイル" : "Text Document",
+            "PNG" => isJa ? "PNG ファイル" : "PNG File",
+            "JPG" or "JPEG" => isJa ? "JPEG ファイル" : "JPEG File",
+            "GIF" => isJa ? "GIF ファイル" : "GIF File",
+            "BMP" => isJa ? "BMP ファイル" : "BMP File",
+            "EXE" => isJa ? "アプリケーション" : "Application",
+            "DLL" => isJa ? "アプリケーション拡張" : "Application Extension",
+            "ZIP" => isJa ? "ZIP アーカイブ" : "ZIP Archive",
+            "RAR" => isJa ? "RAR アーカイブ" : "RAR Archive",
+            "7Z" => isJa ? "7Z アーカイブ" : "7Z Archive",
+            "JSON" => isJa ? "JSON ファイル" : "JSON File",
+            "XML" => isJa ? "XML ドキュメント" : "XML Document",
+            "HTML" or "HTM" => isJa ? "HTML ドキュメント" : "HTML Document",
+            "CSS" => isJa ? "CSS スタイルシート" : "CSS Stylesheet",
+            "JS" => isJa ? "JavaScript ソース ファイル" : "JavaScript Source File",
+            "TS" => isJa ? "TypeScript ソース ファイル" : "TypeScript Source File",
+            "CS" => isJa ? "C# ソース ファイル" : "C# Source File",
+            "PY" => isJa ? "Python スクリプト" : "Python Script",
+            "SH" or "BASH" => isJa ? "シェル スクリプト" : "Shell Script",
+            "BAT" or "CMD" => isJa ? "Windows バッチ ファイル" : "Windows Batch File",
+            "PDF" => isJa ? "PDF ドキュメント" : "PDF Document",
+            "MP3" => isJa ? "MP3 オーディオ" : "MP3 Audio",
+            "WAV" => isJa ? "WAV オーディオ" : "WAV Audio",
+            "MP4" => isJa ? "MP4 ビデオ" : "MP4 Video",
+            "MKV" => isJa ? "MKV ビデオ" : "MKV Video",
+            "AVI" => isJa ? "AVI ビデオ" : "AVI Video",
+            "MD" => isJa ? "Markdown ドキュメント" : "Markdown Document",
+            "INI" or "CONF" => isJa ? "構成設定" : "Configuration Settings",
+            _ => isJa ? $"{extUpper} ファイル" : $"{extUpper} File"
+        };
     }
 
     internal static string GetAttributesText(FileAttributes attributes)

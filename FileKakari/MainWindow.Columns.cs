@@ -36,6 +36,18 @@ public partial class MainWindow
             DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
                 .AddValueChanged(column, (s, e) => OnMainColumnWidthChanged());
         }
+
+        ItemsList.SizeChanged += (s, e) => {
+            if (!_isApplyingColumnWidths && NameColumn != null)
+            {
+                var path = ActiveTab?.Navigation.CurrentPath;
+                var savedWidth = _columnLayout.GetColumnWidth("Name", path, _activeWorkspaceSession, null);
+                if (savedWidth <= 0)
+                {
+                    ApplyColumnSettings();
+                }
+            }
+        };
     }
 
     private void OnMainColumnWidthChanged()
@@ -83,7 +95,7 @@ public partial class MainWindow
             PerfLog.WriteVerbose($"column-apply path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
 
             var stopwatch = Stopwatch.StartNew();
-            _columnLayout.Apply(path, _activeWorkspaceSession, OnWorkspaceColumnWidthsDirty);
+            _columnLayout.Apply(path, _activeWorkspaceSession, ItemsList.ActualWidth, OnWorkspaceColumnWidthsDirty);
             stopwatch.Stop();
             var displayMode = tab is not null
                 ? tab.State.ViewMode
@@ -200,6 +212,18 @@ public partial class MainWindow
                 DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
                     .AddValueChanged(column, handler);
             }
+
+            listView.SizeChanged += (s, e) => {
+                if (!_isApplyingColumnWidths)
+                {
+                    var path = pane.ActiveTab?.Navigation.CurrentPath;
+                    var savedWidth = _columnLayout.GetColumnWidth("Name", path, _activeWorkspaceSession, pane.Id);
+                    if (savedWidth <= 0)
+                    {
+                        ApplyColumnSettingsToWorkspacePane(listView, pane);
+                    }
+                }
+            };
         }
     }
 
@@ -491,6 +515,22 @@ public partial class MainWindow
             PerfLog.WriteVerbose($"column-apply-workspace path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
 
             var visibleColumns = _columnLayout.GetVisibleColumnIds();
+            var listView = FindListViewForPane(pane);
+            double parentWidth = listView?.ActualWidth ?? 0;
+
+            // Calculate other columns width
+            double otherColumnsWidth = 0;
+            foreach (var colId in visibleColumns)
+            {
+                if (colId == "Name") continue;
+                var w = _columnLayout.GetColumnWidth(colId, path, _activeWorkspaceSession, pane.Id);
+                if (w <= 0)
+                {
+                    w = _settingsService.Settings.ColumnWidths.TryGetValue(colId, out var dw) ? dw : 100;
+                }
+                otherColumnsWidth += w;
+            }
+
             gridView.Columns.Clear();
 
             foreach (var columnId in ColumnLayoutService.ColumnOrder)
@@ -502,15 +542,26 @@ public partial class MainWindow
 
                 var column = CreateWorkspacePaneColumn(columnId);
                 var width = _columnLayout.GetColumnWidth(columnId, path, _activeWorkspaceSession, pane.Id);
-                if (width > 0)
+                if (width <= 0)
                 {
-                    column.Width = width;
-                }
-                else
-                {
-                    column.Width = _settingsService.Settings.ColumnWidths.TryGetValue(columnId, out var dw) ? dw : 100;
+                    if (columnId == "Name")
+                    {
+                        if (parentWidth > 150)
+                        {
+                            width = System.Math.Max(360, parentWidth - otherColumnsWidth - 25);
+                        }
+                        else
+                        {
+                            width = _settingsService.Settings.ColumnWidths.TryGetValue(columnId, out var dw) ? dw : 400;
+                        }
+                    }
+                    else
+                    {
+                        width = _settingsService.Settings.ColumnWidths.TryGetValue(columnId, out var dw) ? dw : 100;
+                    }
                 }
 
+                column.Width = width;
                 gridView.Columns.Add(column);
             }
 

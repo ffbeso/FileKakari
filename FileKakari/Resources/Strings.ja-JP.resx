@@ -35,7 +35,7 @@
   <data name="ColumnDriveType" xml:space="preserve"><value>種類</value></data>
   <data name="ColumnTotalSize" xml:space="preserve"><value>総容量</value></data>
   <data name="ColumnFreeAndUsage" xml:space="preserve"><value>空き容量 / 使用率</value></data>
-  <data name="TypeFolder" xml:space="preserve"><value>フォルダ</value></data>
+  <data name="TypeFolder" xml:space="preserve"><value>フォルダー</value></data>
   <data name="TypeFile" xml:space="preserve"><value>ファイル</value></data>
   <data name="DriveTypeFixed" xml:space="preserve"><value>ローカル ドライブ</value></data>
   <data name="DriveTypeRemovable" xml:space="preserve"><value>リムーバブル ドライブ</value></data>

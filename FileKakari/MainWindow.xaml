@@ -1,4 +1,4 @@
-﻿<Window x:Class="FileKakari.MainWindow"
+<Window x:Class="FileKakari.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -704,7 +704,7 @@
                 </ListView.Resources>
                 <ListView.View>
                     <GridView x:Name="DetailsGridView">
-                    <GridViewColumn x:Name="NameColumn" Header="Name" Width="430">
+                    <GridViewColumn x:Name="NameColumn" Header="Name" Width="400">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <Grid Background="Transparent">
@@ -821,7 +821,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="KindColumn" Header="Type" Width="140">
+                    <GridViewColumn x:Name="KindColumn" Header="Type" Width="100">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Kind}"
@@ -829,7 +829,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="SizeColumn" Header="Size" Width="120">
+                    <GridViewColumn x:Name="SizeColumn" Header="Size" Width="75">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding SizeText}"
@@ -837,7 +837,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="ModifiedAtColumn" Header="Modified" Width="180">
+                    <GridViewColumn x:Name="ModifiedAtColumn" Header="Modified" Width="130">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding ModifiedAtText}"
@@ -845,7 +845,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="CreatedAtColumn" Header="Created" Width="180">
+                    <GridViewColumn x:Name="CreatedAtColumn" Header="Created" Width="130">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding CreatedAtText}"
@@ -853,7 +853,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="AccessedAtColumn" Header="Accessed" Width="140">
+                    <GridViewColumn x:Name="AccessedAtColumn" Header="Accessed" Width="130">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding AccessedAtText}"
@@ -861,7 +861,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="ExtensionColumn" Header="Extension" Width="120">
+                    <GridViewColumn x:Name="ExtensionColumn" Header="Extension" Width="60">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding Extension}"
@@ -869,7 +869,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="AttributesColumn" Header="Attributes" Width="160">
+                    <GridViewColumn x:Name="AttributesColumn" Header="Attributes" Width="70">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding AttributesText}"
@@ -877,7 +877,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="FullPathColumn" Header="Full Path" Width="360">
+                    <GridViewColumn x:Name="FullPathColumn" Header="Full Path" Width="240">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding FullPath}"
@@ -885,7 +885,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="ParentPathColumn" Header="Parent Path" Width="220">
+                    <GridViewColumn x:Name="ParentPathColumn" Header="Parent Path" Width="200">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding ParentPath}"
@@ -893,7 +893,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn x:Name="BaseNameColumn" Header="Base Name" Width="180">
+                    <GridViewColumn x:Name="BaseNameColumn" Header="Base Name" Width="150">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding BaseName}"

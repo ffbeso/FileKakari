@@ -51,7 +51,7 @@ public partial class LogViewerView : UserControl
 
         try
         {
-            Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(directory));
         }
         catch (Exception ex)
         {

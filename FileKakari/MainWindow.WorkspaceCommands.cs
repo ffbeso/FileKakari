@@ -529,11 +529,7 @@ public partial class MainWindow
         {
             if (File.Exists(ws.SharedPath))
             {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = ws.SharedPath,
-                    UseShellExecute = true
-                });
+                Process.Start(ExternalProcessStartInfo.CreateShellExecute(ws.SharedPath));
             }
             else
             {
@@ -719,10 +715,12 @@ public partial class MainWindow
             return;
         }
 
-        Process.Start(new ProcessStartInfo("explorer.exe", tab.Navigation.CurrentPath)
+        var startInfo = new ProcessStartInfo("explorer.exe", tab.Navigation.CurrentPath)
         {
             UseShellExecute = true
-        });
+        };
+        ExternalProcessStartInfo.ApplyWorkingDirectory(startInfo, tab.Navigation.CurrentPath);
+        Process.Start(startInfo);
     }
 
     private TabItem? GetTabItem(WorkspaceSession session)

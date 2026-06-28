@@ -442,7 +442,7 @@ public partial class MainWindow
     {
         try
         {
-            Process.Start(new ProcessStartInfo(AppPaths.CommandsPath) { UseShellExecute = true });
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(AppPaths.CommandsPath));
         }
         catch
         {
@@ -453,6 +453,7 @@ public partial class MainWindow
                     UseShellExecute = true
                 };
                 startInfo.ArgumentList.Add(AppPaths.CommandsPath);
+                ExternalProcessStartInfo.ApplyWorkingDirectory(startInfo, Path.GetDirectoryName(AppPaths.CommandsPath));
                 Process.Start(startInfo);
             }
             catch (Exception ex)
@@ -472,6 +473,7 @@ public partial class MainWindow
                 UseShellExecute = true
             };
             startInfo.ArgumentList.Add(path);
+            ExternalProcessStartInfo.ApplyWorkingDirectory(startInfo, path);
             Process.Start(startInfo);
         }
         catch (Exception ex)

@@ -36,7 +36,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo(e.Path) { UseShellExecute = true });
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(e.Path));
         }
         catch (Exception ex)
         {

@@ -72,6 +72,6 @@ public sealed class FileOperationService
 
     public void OpenWithDefaultApp(string path)
     {
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        Process.Start(ExternalProcessStartInfo.CreateShellExecute(path));
     }
 }

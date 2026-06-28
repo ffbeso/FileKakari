@@ -1899,7 +1899,7 @@ public partial class MainWindow : Window
 
         try
         {
-            Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(entry.FullPath, entry.ParentPath));
         }
         catch (Exception ex)
         {
@@ -1926,6 +1926,9 @@ public partial class MainWindow : Window
                 Arguments = arguments,
                 UseShellExecute = true
             };
+            ExternalProcessStartInfo.ApplyWorkingDirectory(
+                startInfo,
+                ExternalProcessStartInfo.ResolveWorkingDirectoryForEntry(executableEntry));
 
             await Task.Run(() => Process.Start(startInfo));
             StatusText.Text = _text.Format("ToolLaunchStarted", executableEntry.Name, dragItems.Count);
@@ -5052,7 +5055,7 @@ public partial class MainWindow : Window
 
         try
         {
-            Process.Start(new ProcessStartInfo(entry.FullPath) { UseShellExecute = true });
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(entry.FullPath, entry.ParentPath));
         }
         catch (Exception ex)
         {

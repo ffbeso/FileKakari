@@ -25,13 +25,7 @@ internal sealed class UserCommandExecutionService
     {
         var resolvedExecutable = ExpandPlaceholders(command.Executable ?? "", context);
         var resolvedArguments = ExpandPlaceholders(command.Arguments ?? "", context);
-        var resolvedWorkingDirectory = ExpandPlaceholders(command.WorkingDirectory ?? "", context);
-
-        if (string.IsNullOrWhiteSpace(resolvedWorkingDirectory)
-            && !SpecialLocationService.IsSpecialUri(context.CurrentDirectory))
-        {
-            resolvedWorkingDirectory = context.CurrentDirectory;
-        }
+        var resolvedWorkingDirectory = ResolveWorkingDirectory(command, context);
 
         var startInfo = new ProcessStartInfo
         {
@@ -40,10 +34,7 @@ internal sealed class UserCommandExecutionService
             UseShellExecute = command.UseShellExecute
         };
 
-        if (!string.IsNullOrWhiteSpace(resolvedWorkingDirectory) && Directory.Exists(resolvedWorkingDirectory))
-        {
-            startInfo.WorkingDirectory = resolvedWorkingDirectory;
-        }
+        ExternalProcessStartInfo.ApplyWorkingDirectory(startInfo, resolvedWorkingDirectory);
 
         return startInfo;
     }
@@ -191,5 +182,23 @@ internal sealed class UserCommandExecutionService
         result = result.Replace("{dir}", firstDir, StringComparison.OrdinalIgnoreCase);
 
         return result;
+    }
+
+    private static string ResolveWorkingDirectory(UserCommand command, UserCommandExecutionContext context)
+    {
+        var explicitWorkingDirectory = ExpandPlaceholders(command.WorkingDirectory ?? "", context);
+        var resolvedExplicitWorkingDirectory = ExternalProcessStartInfo.ResolveExistingDirectory(explicitWorkingDirectory);
+        if (!string.IsNullOrWhiteSpace(resolvedExplicitWorkingDirectory))
+        {
+            return resolvedExplicitWorkingDirectory;
+        }
+
+        var selectedWorkingDirectory = ExternalProcessStartInfo.ResolveWorkingDirectoryForEntry(context.SelectedEntries.FirstOrDefault());
+        if (!string.IsNullOrWhiteSpace(selectedWorkingDirectory))
+        {
+            return selectedWorkingDirectory;
+        }
+
+        return ExternalProcessStartInfo.ResolveExistingDirectory(context.CurrentDirectory);
     }
 }

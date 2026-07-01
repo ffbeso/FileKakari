@@ -202,7 +202,8 @@ internal sealed class ColumnLayoutService
         WorkspaceSession? activeSession,
         string? paneId,
         System.Collections.Generic.Dictionary<string, double> widths,
-        System.Action? onWorkspaceDirty = null)
+        System.Action? onWorkspaceDirty = null,
+        string? tabStateId = null)
     {
         var resolvedPath = GetAbsoluteFolderPath(currentPath, activeSession);
 
@@ -217,16 +218,16 @@ internal sealed class ColumnLayoutService
 
         if (normalizedWidths.Count == 0)
         {
-            PerfLog.WriteVerbose($"column-layout-save-skip reason=\"no-valid-width\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\"");
+            PerfLog.WriteVerbose($"column-layout-save-skip reason=\"no-valid-width\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" tabStateId=\"{tabStateId ?? "null"}\" path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\"");
             return;
         }
 
         if (!string.IsNullOrWhiteSpace(resolvedPath) && !SpecialLocationService.IsSpecialUri(resolvedPath))
         {
-            var lookupKey = BuildColumnWidthLookupKey(activeSession, paneId, resolvedPath);
+            var lookupKey = BuildColumnWidthLookupKey(activeSession, paneId, tabStateId, resolvedPath);
 
             PerfLog.WriteVerbose(
-                $"column-layout-save sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                $"column-layout-save source=\"tab-state\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                 $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{lookupKey}\" " +
                 $"widths={string.Join(",", normalizedWidths.Select(kv => $"{kv.Key}:{kv.Value:N0}"))}");
             _sessionFolderColumnWidths[lookupKey] = new FolderColumnWidthsState
@@ -262,34 +263,48 @@ internal sealed class ColumnLayoutService
         onWorkspaceDirty?.Invoke();
     }
 
-    internal double GetColumnWidth(string columnId, string? currentPath, WorkspaceSession? activeSession, string? paneId)
+    internal double GetColumnWidth(string columnId, string? currentPath, WorkspaceSession? activeSession, string? paneId, string? tabStateId = null)
     {
         columnId = NormalizeColumnId(columnId);
         var resolvedPath = GetAbsoluteFolderPath(currentPath, activeSession);
 
-        // Priority 1: workspaceId|paneId|absolutePath
+        // Priority 1: workspaceId|paneId|tabStateId|absolutePath
         if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
         {
-            var compositeKey = BuildColumnWidthLookupKey(activeSession, paneId, resolvedPath);
-
             if (!string.IsNullOrWhiteSpace(resolvedPath) && !SpecialLocationService.IsSpecialUri(resolvedPath))
             {
-                if (_sessionFolderColumnWidths.TryGetValue(compositeKey, out var state))
+                var tabKey = BuildColumnWidthLookupKey(activeSession, paneId, tabStateId, resolvedPath);
+                if (!string.IsNullOrWhiteSpace(tabStateId)
+                    && _sessionFolderColumnWidths.TryGetValue(tabKey, out var state))
                 {
                     state.LastAccessUtc = System.DateTime.UtcNow;
                     if (state.Widths.TryGetValue(columnId, out var w))
                     {
                         PerfLog.WriteVerbose(
-                            $"column-load hit=true source=\"workspace-pane\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" " +
-                            $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{compositeKey}\" " +
+                            $"column-load hit=true source=\"tab-state\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" tabStateId=\"{tabStateId}\" " +
+                            $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{tabKey}\" " +
                             $"column=\"{columnId}\" width={w:N0}");
                         return w;
                     }
                 }
 
                 PerfLog.WriteVerbose(
-                    $"column-load hit=false source=\"workspace-pane\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" " +
-                    $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{compositeKey}\" column=\"{columnId}\"");
+                    $"column-load hit=false source=\"tab-state\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" tabStateId=\"{tabStateId ?? "null"}\" " +
+                    $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{tabKey}\" column=\"{columnId}\"");
+
+                var paneKey = BuildLegacyPaneColumnWidthLookupKey(activeSession, paneId, resolvedPath);
+                if (_sessionFolderColumnWidths.TryGetValue(paneKey, out state))
+                {
+                    state.LastAccessUtc = System.DateTime.UtcNow;
+                    if (state.Widths.TryGetValue(columnId, out var w))
+                    {
+                        PerfLog.WriteVerbose(
+                            $"column-load hit=true source=\"legacy-pane\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" tabStateId=\"{tabStateId ?? "null"}\" " +
+                            $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{paneKey}\" " +
+                            $"column=\"{columnId}\" width={w:N0}");
+                        return w;
+                    }
+                }
             }
         }
 
@@ -302,7 +317,7 @@ internal sealed class ColumnLayoutService
                 if (state.Widths.TryGetValue(columnId, out var w))
                 {
                     PerfLog.WriteVerbose(
-                        $"column-load hit=true source=\"path\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                        $"column-load hit=true source=\"path\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                         $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{resolvedPath}\" " +
                         $"column=\"{columnId}\" width={w:N0}");
                     return w;
@@ -314,7 +329,7 @@ internal sealed class ColumnLayoutService
         if (_sessionColumnWidths.TryGetValue(columnId, out var globalWidth))
         {
             PerfLog.WriteVerbose(
-                $"column-load hit=true source=\"global\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                $"column-load hit=true source=\"global\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                 $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"global\" " +
                 $"column=\"{columnId}\" width={globalWidth:N0}");
             return globalWidth;
@@ -324,7 +339,25 @@ internal sealed class ColumnLayoutService
         return -1;
     }
 
-    internal static string BuildColumnWidthLookupKey(WorkspaceSession? activeSession, string? paneId, string? resolvedPath)
+    internal static string BuildColumnWidthLookupKey(WorkspaceSession? activeSession, string? paneId, string? tabStateId, string? resolvedPath)
+    {
+        if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
+        {
+            var workspaceId = !string.IsNullOrWhiteSpace(activeSession.Workspace?.WorkspaceId)
+                ? activeSession.Workspace.WorkspaceId
+                : activeSession.Id;
+            if (!string.IsNullOrWhiteSpace(tabStateId))
+            {
+                return $"{workspaceId}|{paneId}|{tabStateId}|{resolvedPath}";
+            }
+
+            return $"{workspaceId}|{paneId}|{resolvedPath}";
+        }
+
+        return resolvedPath ?? "";
+    }
+
+    internal static string BuildLegacyPaneColumnWidthLookupKey(WorkspaceSession? activeSession, string? paneId, string? resolvedPath)
     {
         if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
         {

@@ -148,7 +148,7 @@ public partial class MainWindow
 
         var path = ActiveTab?.Navigation.CurrentPath;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(_activeWorkspaceSession, null, resolvedPath);
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(_activeWorkspaceSession, null, null, resolvedPath);
         PerfLog.WriteVerbose(
             $"column-save target=\"normal\" sessionId=\"{_activeWorkspaceSession?.Id ?? "null"}\" paneId=\"null\" " +
             $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={DetailsGridView.GetHashCode()}");
@@ -187,19 +187,20 @@ public partial class MainWindow
             if (listView.View is GridView gridView)
             {
                 var tab = pane.ActiveTab;
-                var path = tab?.Navigation.CurrentPath;
+                var tabStateId = tab?.State.Id;
+                var path = GetColumnLayoutPath(tab);
                 var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
                 var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-                var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+                var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, tabStateId, resolvedPath);
                 PerfLog.WriteVerbose(
-                    $"column-apply target=\"workspace-pane\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+                    $"column-apply target=\"workspace-pane\" source=\"tab-state\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                     $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
 
                 foreach (var column in gridView.Columns)
                 {
                     if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
                     {
-                        var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id);
+                        var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id, tabStateId);
                         if (width > 0)
                         {
                             column.Width = width;
@@ -259,8 +260,9 @@ public partial class MainWindow
                     }
 
                     var targetSession = FindSessionContainingPane(currentPane) ?? _activeWorkspaceSession;
-                    var path = currentPane.ActiveTab?.Navigation.CurrentPath;
-                    var savedWidth = _columnLayout.GetColumnWidth("Name", path, targetSession, currentPane.Id);
+                    var tab = currentPane.ActiveTab;
+                    var path = GetColumnLayoutPath(tab);
+                    var savedWidth = _columnLayout.GetColumnWidth("Name", path, targetSession, currentPane.Id, tab?.State.Id);
                     if (savedWidth <= 0)
                     {
                         ApplyColumnSettingsToWorkspacePane(currentListView, currentPane);
@@ -343,14 +345,15 @@ public partial class MainWindow
             return;
         }
 
-        var path = tab.Navigation.CurrentPath;
+        var tabStateId = tab.State.Id;
+        var path = GetColumnLayoutPath(tab);
         var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, tabStateId, resolvedPath);
         PerfLog.WriteVerbose(
-            $"column-save target=\"workspace-pane\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+            $"column-save target=\"workspace-pane\" source=\"tab-state\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" tabStateId=\"{tabStateId}\" " +
             $"path=\"{path}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
-        _columnLayout.SaveColumnWidthsForPath(path, targetSession, pane.Id, widths, OnWorkspaceColumnWidthsDirty);
+        _columnLayout.SaveColumnWidthsForPath(path, targetSession, pane.Id, widths, OnWorkspaceColumnWidthsDirty, tabStateId);
     }
 
     private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
@@ -569,12 +572,13 @@ public partial class MainWindow
         try
         {
             var tab = pane.ActiveTab;
-            var path = tab?.Navigation.CurrentPath;
+            var tabStateId = tab?.State.Id;
+            var path = GetColumnLayoutPath(tab);
             var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
             var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-            var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+            var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, tabStateId, resolvedPath);
             PerfLog.WriteVerbose(
-                $"column-apply-workspace sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+                $"column-apply-workspace source=\"tab-state\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                 $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
 
             var visibleColumns = _columnLayout.GetVisibleColumnIds();
@@ -586,7 +590,7 @@ public partial class MainWindow
             foreach (var colId in visibleColumns)
             {
                 if (colId == "Name") continue;
-                var w = _columnLayout.GetColumnWidth(colId, path, targetSession, pane.Id);
+                var w = _columnLayout.GetColumnWidth(colId, path, targetSession, pane.Id, tabStateId);
                 if (w <= 0)
                 {
                     w = _settingsService.Settings.ColumnWidths.TryGetValue(colId, out var dw) ? dw : 100;
@@ -604,7 +608,7 @@ public partial class MainWindow
                 }
 
                 var column = CreateWorkspacePaneColumn(columnId);
-                var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id);
+                var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id, tabStateId);
                 if (width <= 0)
                 {
                     if (columnId == "Name")
@@ -721,15 +725,19 @@ public partial class MainWindow
         var session = pane is not null
             ? FindSessionContainingPane(pane) ?? _activeWorkspaceSession
             : _activeWorkspaceSession;
-        var path = pane?.ActiveTab?.Navigation.CurrentPath ?? ActiveTab?.Navigation.CurrentPath;
+        var tab = pane?.ActiveTab;
+        var tabStateId = tab?.State.Id;
+        var path = pane is not null
+            ? GetColumnLayoutPath(tab)
+            : ActiveTab?.Navigation.CurrentPath;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, session);
-        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(session, pane?.Id, resolvedPath);
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(session, pane?.Id, tabStateId, resolvedPath);
 
         PerfLog.WriteVerbose(
             $"column-width-changed target=\"{target}\" column=\"{columnId}\" oldWidth={FormatColumnWidth(oldWidth)} " +
             $"newWidth={FormatColumnWidth(newWidth)} isNaN={double.IsNaN(newWidth)} actualWidth={FormatColumnWidth(actualWidth)} " +
-            $"sessionId=\"{session?.Id ?? "null"}\" paneId=\"{pane?.Id ?? "null"}\" path=\"{path ?? ""}\" " +
-            $"resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\"");
+            $"sessionId=\"{session?.Id ?? "null"}\" paneId=\"{pane?.Id ?? "null"}\" tabStateId=\"{tabStateId ?? "null"}\" " +
+            $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" source=\"tab-state\"");
     }
 
     private static string GetColumnId(GridViewColumn column)
@@ -737,6 +745,18 @@ public partial class MainWindow
         return column.Header is TextBlock textBlock && textBlock.Tag is string columnId
             ? ColumnLayoutService.NormalizeColumnId(columnId)
             : "unknown";
+    }
+
+    private static string? GetColumnLayoutPath(FolderTab? tab)
+    {
+        if (tab is null)
+        {
+            return null;
+        }
+
+        return !string.IsNullOrWhiteSpace(tab.State.CurrentPath)
+            ? tab.State.CurrentPath
+            : tab.Navigation.CurrentPath;
     }
 
     private static double GetObservedColumnWidth(GridViewColumn column)

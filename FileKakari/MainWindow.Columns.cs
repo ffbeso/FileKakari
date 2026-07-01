@@ -13,6 +13,7 @@ public partial class MainWindow
     private bool _isApplyingColumnWidths;
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<GridViewColumn, EventHandler> _hookedColumns = new();
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<ListView, SizeChangedEventHandler> _hookedWorkspaceListViewSizes = new();
+    private readonly Dictionary<GridViewColumn, double> _lastObservedColumnWidths = [];
 
     private void InitializeColumns()
     {
@@ -34,8 +35,9 @@ public partial class MainWindow
         foreach (var (columnId, column) in _columnsById)
         {
             column.Header = CreateColumnHeader(columnId, column.Header?.ToString() ?? columnId);
+            _lastObservedColumnWidths[column] = GetObservedColumnWidth(column);
             DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
-                .AddValueChanged(column, (s, e) => OnMainColumnWidthChanged());
+                .AddValueChanged(column, (s, e) => OnMainColumnWidthChanged(columnId, column));
         }
 
         ItemsList.SizeChanged += (s, e) => {
@@ -51,13 +53,14 @@ public partial class MainWindow
         };
     }
 
-    private void OnMainColumnWidthChanged()
+    private void OnMainColumnWidthChanged(string columnId, GridViewColumn column)
     {
         if (_isLoading || !IsLoaded || _isApplyingColumnWidths)
         {
             return;
         }
 
+        LogColumnWidthChanged("normal", columnId, column, null);
         SaveColumnWidths();
     }
 
@@ -88,6 +91,13 @@ public partial class MainWindow
 
     private void ApplyColumnSettings(FolderTab? tab)
     {
+        if (_activeWorkspaceSession?.IsWorkspace == true
+            && WorkspaceSplitGrid.Visibility == Visibility.Visible)
+        {
+            PerfLog.WriteVerbose($"column-apply-skip target=\"normal\" reason=\"workspace-visible\" sessionId=\"{_activeWorkspaceSession.Id}\"");
+            return;
+        }
+
         _isApplyingColumnWidths = true;
         try
         {
@@ -129,15 +139,27 @@ public partial class MainWindow
 
     private void SaveColumnWidths()
     {
+        if (_activeWorkspaceSession?.IsWorkspace == true
+            && WorkspaceSplitGrid.Visibility == Visibility.Visible)
+        {
+            PerfLog.WriteVerbose($"column-save-skip target=\"normal\" reason=\"workspace-visible\" sessionId=\"{_activeWorkspaceSession.Id}\"");
+            return;
+        }
+
         var path = ActiveTab?.Navigation.CurrentPath;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, _activeWorkspaceSession);
-        PerfLog.WriteVerbose($"column-save path=\"{resolvedPath}\" gridHash={DetailsGridView.GetHashCode()}");
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(_activeWorkspaceSession, null, resolvedPath);
+        PerfLog.WriteVerbose(
+            $"column-save target=\"normal\" sessionId=\"{_activeWorkspaceSession?.Id ?? "null"}\" paneId=\"null\" " +
+            $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={DetailsGridView.GetHashCode()}");
         _columnLayout.SaveColumnWidths(path, _activeWorkspaceSession, OnWorkspaceColumnWidthsDirty);
     }
 
     private void OnWorkspaceColumnWidthsDirty()
     {
         _workspaceLocalState.MarkDirty("column-widths");
+        PerfLog.WriteVerbose($"column-widths-persist target=\"session\" path=\"{_sessionStateService.SessionPath}\"");
+        SaveSessionState();
     }
 
     private void ApplyColumnWidthsToWorkspacePane(FolderPane pane)
@@ -168,7 +190,10 @@ public partial class MainWindow
                 var path = tab?.Navigation.CurrentPath;
                 var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
                 var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-                PerfLog.WriteVerbose($"column-apply path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
+                var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+                PerfLog.WriteVerbose(
+                    $"column-apply target=\"workspace-pane\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+                    $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
 
                 foreach (var column in gridView.Columns)
                 {
@@ -212,9 +237,12 @@ public partial class MainWindow
                 EventHandler handler = (s, e) =>
                 {
                     var currentPane = listView.DataContext as FolderPane ?? pane;
+                    var columnId = GetColumnId(column);
+                    LogColumnWidthChanged("workspace-pane", columnId, column, currentPane);
                     OnWorkspacePaneColumnWidthChanged(currentPane);
                 };
                 _hookedColumns.Add(column, handler);
+                _lastObservedColumnWidths[column] = GetObservedColumnWidth(column);
                 DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
                     .AddValueChanged(column, handler);
             }
@@ -256,6 +284,7 @@ public partial class MainWindow
                     DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
                         .RemoveValueChanged(column, handler);
                     _hookedColumns.Remove(column);
+                    _lastObservedColumnWidths.Remove(column);
                 }
             }
         }
@@ -300,9 +329,10 @@ public partial class MainWindow
         {
             if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
             {
-                if (!double.IsNaN(column.Width) && column.Width > 0)
+                var width = GetPersistableColumnWidth(column);
+                if (width > 0)
                 {
-                    widths[columnId] = column.Width;
+                    widths[columnId] = width;
                     hasValidWidth = true;
                 }
             }
@@ -316,7 +346,10 @@ public partial class MainWindow
         var path = tab.Navigation.CurrentPath;
         var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
         var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-        PerfLog.WriteVerbose($"column-save path=\"{resolvedPath}\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" gridHash={gridView.GetHashCode()}");
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+        PerfLog.WriteVerbose(
+            $"column-save target=\"workspace-pane\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+            $"path=\"{path}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
         _columnLayout.SaveColumnWidthsForPath(path, targetSession, pane.Id, widths, OnWorkspaceColumnWidthsDirty);
     }
 
@@ -539,7 +572,10 @@ public partial class MainWindow
             var path = tab?.Navigation.CurrentPath;
             var targetSession = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
             var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, targetSession);
-            PerfLog.WriteVerbose($"column-apply-workspace path=\"{resolvedPath}\" gridHash={gridView.GetHashCode()}");
+            var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(targetSession, pane.Id, resolvedPath);
+            PerfLog.WriteVerbose(
+                $"column-apply-workspace sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" " +
+                $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
 
             var visibleColumns = _columnLayout.GetVisibleColumnIds();
             var listView = FindListViewForPane(pane);
@@ -590,6 +626,7 @@ public partial class MainWindow
 
                 column.Width = width;
                 gridView.Columns.Add(column);
+                _lastObservedColumnWidths[column] = GetObservedColumnWidth(column);
             }
 
             UpdateWorkspacePaneColumnHeaders(gridView, pane);
@@ -669,5 +706,60 @@ public partial class MainWindow
         }
 
         return column;
+    }
+
+    private void LogColumnWidthChanged(string target, string columnId, GridViewColumn column, FolderPane? pane)
+    {
+        var oldWidth = _lastObservedColumnWidths.TryGetValue(column, out var previous)
+            ? previous
+            : double.NaN;
+        var newWidth = column.Width;
+        var actualWidth = column.ActualWidth;
+        var observedWidth = GetObservedColumnWidth(column);
+        _lastObservedColumnWidths[column] = observedWidth;
+
+        var session = pane is not null
+            ? FindSessionContainingPane(pane) ?? _activeWorkspaceSession
+            : _activeWorkspaceSession;
+        var path = pane?.ActiveTab?.Navigation.CurrentPath ?? ActiveTab?.Navigation.CurrentPath;
+        var resolvedPath = _columnLayout.GetAbsoluteFolderPath(path, session);
+        var generatedKey = ColumnLayoutService.BuildColumnWidthLookupKey(session, pane?.Id, resolvedPath);
+
+        PerfLog.WriteVerbose(
+            $"column-width-changed target=\"{target}\" column=\"{columnId}\" oldWidth={FormatColumnWidth(oldWidth)} " +
+            $"newWidth={FormatColumnWidth(newWidth)} isNaN={double.IsNaN(newWidth)} actualWidth={FormatColumnWidth(actualWidth)} " +
+            $"sessionId=\"{session?.Id ?? "null"}\" paneId=\"{pane?.Id ?? "null"}\" path=\"{path ?? ""}\" " +
+            $"resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\"");
+    }
+
+    private static string GetColumnId(GridViewColumn column)
+    {
+        return column.Header is TextBlock textBlock && textBlock.Tag is string columnId
+            ? ColumnLayoutService.NormalizeColumnId(columnId)
+            : "unknown";
+    }
+
+    private static double GetObservedColumnWidth(GridViewColumn column)
+    {
+        return GetPersistableColumnWidth(column);
+    }
+
+    private static double GetPersistableColumnWidth(GridViewColumn column)
+    {
+        if (!double.IsNaN(column.Width) && !double.IsInfinity(column.Width) && column.Width > 0)
+        {
+            return column.Width;
+        }
+
+        return !double.IsNaN(column.ActualWidth) && !double.IsInfinity(column.ActualWidth) && column.ActualWidth > 0
+            ? column.ActualWidth
+            : -1;
+    }
+
+    private static string FormatColumnWidth(double width)
+    {
+        return double.IsNaN(width)
+            ? "NaN"
+            : width.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

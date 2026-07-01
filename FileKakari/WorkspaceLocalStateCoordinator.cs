@@ -109,6 +109,7 @@ sealed class WorkspaceLocalStateCoordinator
 
         Capture();
         _saveSessionState?.Invoke();
+        PerfLog.WriteVerbose($"workspace-local-save-complete sessionId=\"{session.Id}\" reason=\"dirty-flush\"");
         _isDirty = false;
     }
 

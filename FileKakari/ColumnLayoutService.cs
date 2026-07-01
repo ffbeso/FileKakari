@@ -181,9 +181,10 @@ internal sealed class ColumnLayoutService
 
         foreach (var (columnId, column) in _columnsById)
         {
-            if (!double.IsNaN(column.Width) && column.Width > 0)
+            var width = GetPersistableWidth(column);
+            if (width > 0)
             {
-                widths[NormalizeColumnId(columnId)] = column.Width;
+                widths[NormalizeColumnId(columnId)] = width;
                 hasValidWidth = true;
             }
         }
@@ -208,25 +209,26 @@ internal sealed class ColumnLayoutService
         var normalizedWidths = new System.Collections.Generic.Dictionary<string, double>();
         foreach (var (k, v) in widths)
         {
-            normalizedWidths[NormalizeColumnId(k)] = v;
+            if (!double.IsNaN(v) && !double.IsInfinity(v) && v > 0)
+            {
+                normalizedWidths[NormalizeColumnId(k)] = v;
+            }
+        }
+
+        if (normalizedWidths.Count == 0)
+        {
+            PerfLog.WriteVerbose($"column-layout-save-skip reason=\"no-valid-width\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\"");
+            return;
         }
 
         if (!string.IsNullOrWhiteSpace(resolvedPath) && !SpecialLocationService.IsSpecialUri(resolvedPath))
         {
-            string lookupKey;
-            if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
-            {
-                var workspaceId = !string.IsNullOrWhiteSpace(activeSession.Workspace?.WorkspaceId)
-                    ? activeSession.Workspace.WorkspaceId
-                    : activeSession.Id;
-                lookupKey = $"{workspaceId}|{paneId}|{resolvedPath}";
-            }
-            else
-            {
-                lookupKey = resolvedPath;
-            }
+            var lookupKey = BuildColumnWidthLookupKey(activeSession, paneId, resolvedPath);
 
-            PerfLog.WriteVerbose($"column-layout-save path=\"{lookupKey}\" widths={string.Join(",", normalizedWidths.Select(kv => $"{kv.Key}:{kv.Value:N0}"))}");
+            PerfLog.WriteVerbose(
+                $"column-layout-save sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{lookupKey}\" " +
+                $"widths={string.Join(",", normalizedWidths.Select(kv => $"{kv.Key}:{kv.Value:N0}"))}");
             _sessionFolderColumnWidths[lookupKey] = new FolderColumnWidthsState
             {
                 LastAccessUtc = System.DateTime.UtcNow,
@@ -268,22 +270,26 @@ internal sealed class ColumnLayoutService
         // Priority 1: workspaceId|paneId|absolutePath
         if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
         {
-            var workspaceId = !string.IsNullOrWhiteSpace(activeSession.Workspace?.WorkspaceId)
-                ? activeSession.Workspace.WorkspaceId
-                : activeSession.Id;
-            var compositeKey = $"{workspaceId}|{paneId}|{resolvedPath}";
+            var compositeKey = BuildColumnWidthLookupKey(activeSession, paneId, resolvedPath);
 
-            if (!string.IsNullOrWhiteSpace(compositeKey) && !SpecialLocationService.IsSpecialUri(compositeKey))
+            if (!string.IsNullOrWhiteSpace(resolvedPath) && !SpecialLocationService.IsSpecialUri(resolvedPath))
             {
                 if (_sessionFolderColumnWidths.TryGetValue(compositeKey, out var state))
                 {
                     state.LastAccessUtc = System.DateTime.UtcNow;
                     if (state.Widths.TryGetValue(columnId, out var w))
                     {
-                        PerfLog.WriteVerbose($"column-load path=\"{compositeKey}\" column=\"{columnId}\" width={w:N0}");
+                        PerfLog.WriteVerbose(
+                            $"column-load hit=true source=\"workspace-pane\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" " +
+                            $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{compositeKey}\" " +
+                            $"column=\"{columnId}\" width={w:N0}");
                         return w;
                     }
                 }
+
+                PerfLog.WriteVerbose(
+                    $"column-load hit=false source=\"workspace-pane\" sessionId=\"{activeSession.Id}\" paneId=\"{paneId}\" " +
+                    $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{compositeKey}\" column=\"{columnId}\"");
             }
         }
 
@@ -295,7 +301,10 @@ internal sealed class ColumnLayoutService
                 state.LastAccessUtc = System.DateTime.UtcNow;
                 if (state.Widths.TryGetValue(columnId, out var w))
                 {
-                    PerfLog.WriteVerbose($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={w:N0} (path-fallback)");
+                    PerfLog.WriteVerbose(
+                        $"column-load hit=true source=\"path\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                        $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath}\" generatedKey=\"{resolvedPath}\" " +
+                        $"column=\"{columnId}\" width={w:N0}");
                     return w;
                 }
             }
@@ -304,12 +313,40 @@ internal sealed class ColumnLayoutService
         // Priority 3: global ColumnWidths
         if (_sessionColumnWidths.TryGetValue(columnId, out var globalWidth))
         {
-            PerfLog.WriteVerbose($"column-load path=\"{resolvedPath}\" column=\"{columnId}\" width={globalWidth:N0} (global)");
+            PerfLog.WriteVerbose(
+                $"column-load hit=true source=\"global\" sessionId=\"{activeSession?.Id ?? "null"}\" paneId=\"{paneId ?? "null"}\" " +
+                $"path=\"{currentPath ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"global\" " +
+                $"column=\"{columnId}\" width={globalWidth:N0}");
             return globalWidth;
         }
 
         // Priority 4: default
         return -1;
+    }
+
+    internal static string BuildColumnWidthLookupKey(WorkspaceSession? activeSession, string? paneId, string? resolvedPath)
+    {
+        if (activeSession?.IsWorkspace == true && !string.IsNullOrWhiteSpace(paneId))
+        {
+            var workspaceId = !string.IsNullOrWhiteSpace(activeSession.Workspace?.WorkspaceId)
+                ? activeSession.Workspace.WorkspaceId
+                : activeSession.Id;
+            return $"{workspaceId}|{paneId}|{resolvedPath}";
+        }
+
+        return resolvedPath ?? "";
+    }
+
+    private static double GetPersistableWidth(GridViewColumn column)
+    {
+        if (!double.IsNaN(column.Width) && !double.IsInfinity(column.Width) && column.Width > 0)
+        {
+            return column.Width;
+        }
+
+        return !double.IsNaN(column.ActualWidth) && !double.IsInfinity(column.ActualWidth) && column.ActualWidth > 0
+            ? column.ActualWidth
+            : -1;
     }
 
     public static string NormalizeColumnId(string columnId)

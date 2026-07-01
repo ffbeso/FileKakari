@@ -46,9 +46,13 @@ public sealed class SessionStateService
 
             var json = JsonSerializer.Serialize(state, JsonOptions);
             File.WriteAllText(SessionPath, json);
+            PerfLog.WriteVerbose(
+                $"json-save-complete target=\"session\" path=\"{SessionPath}\" " +
+                $"tabs={state.Tabs.Count} folderColumnWidthKeys={state.FolderColumnWidths.Count} columnWidths={state.ColumnWidths.Count}");
         }
-        catch
+        catch (Exception ex)
         {
+            PerfLog.WriteVerbose($"json-save-failed target=\"session\" path=\"{SessionPath}\" error=\"{ex.Message}\"");
             // Session state is a convenience feature; failure to save must not block app exit.
         }
     }

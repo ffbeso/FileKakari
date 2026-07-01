@@ -51,6 +51,7 @@ public sealed class SettingsService
 
         var json = JsonSerializer.Serialize(clone, JsonOptions);
         await File.WriteAllTextAsync(SettingsPath, json);
+        PerfLog.WriteVerbose($"json-save-complete target=\"settings\" path=\"{SettingsPath}\"");
         Settings = settings.Clone();
     }
 
@@ -64,5 +65,6 @@ public sealed class SettingsService
 
         var json = JsonSerializer.Serialize(clone, JsonOptions);
         File.WriteAllText(SettingsPath, json);
+        PerfLog.WriteVerbose($"json-save-complete target=\"settings\" path=\"{SettingsPath}\"");
     }
 }

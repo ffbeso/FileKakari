@@ -19,6 +19,11 @@ internal sealed class TabContextMenuController
     private readonly Action<WorkspaceSession> _renameWorkspace;
     private readonly Action<WorkspaceSession> _toggleWorkspaceLock;
     private readonly Action<FolderTab> _openTabInExplorer;
+    private readonly Action<WorkspaceSession> _saveWorkspace;
+    private readonly Action<WorkspaceSession> _saveWorkspaceAs;
+    private readonly Action<WorkspaceSession> _openWorkspaceJson;
+    private readonly Action<WorkspaceSession> _openWorkspaceFolder;
+    private readonly Func<WorkspaceSession, bool> _isWorkspaceTab;
     private readonly Func<bool> _hasClosedTab;
 
     public TabContextMenuController(
@@ -34,6 +39,11 @@ internal sealed class TabContextMenuController
         Action<WorkspaceSession> renameWorkspace,
         Action<WorkspaceSession> toggleWorkspaceLock,
         Action<FolderTab> openTabInExplorer,
+        Action<WorkspaceSession> saveWorkspace,
+        Action<WorkspaceSession> saveWorkspaceAs,
+        Action<WorkspaceSession> openWorkspaceJson,
+        Action<WorkspaceSession> openWorkspaceFolder,
+        Func<WorkspaceSession, bool> isWorkspaceTab,
         Func<bool> hasClosedTab)
     {
         _text = text;
@@ -48,6 +58,11 @@ internal sealed class TabContextMenuController
         _renameWorkspace = renameWorkspace;
         _toggleWorkspaceLock = toggleWorkspaceLock;
         _openTabInExplorer = openTabInExplorer;
+        _saveWorkspace = saveWorkspace;
+        _saveWorkspaceAs = saveWorkspaceAs;
+        _openWorkspaceJson = openWorkspaceJson;
+        _openWorkspaceFolder = openWorkspaceFolder;
+        _isWorkspaceTab = isWorkspaceTab;
         _hasClosedTab = hasClosedTab;
     }
 
@@ -132,8 +147,52 @@ internal sealed class TabContextMenuController
         menu.Items.Add(newTabItem);
         menu.Items.Add(renameItem);
         menu.Items.Add(lockTabItem);
+        AddWorkspaceItems(menu, session);
         menu.PlacementTarget = placementTarget;
         menu.IsOpen = true;
+    }
+
+    private void AddWorkspaceItems(ContextMenu menu, WorkspaceSession session)
+    {
+        if (!_isWorkspaceTab(session))
+        {
+            return;
+        }
+
+        menu.Items.Add(new Separator());
+
+        var saveItem = new MenuItem
+        {
+            Header = _text.Get("WorkspaceSaveButtonSave"),
+            IsEnabled = true
+        };
+        saveItem.Click += (_, _) => _saveWorkspace(session);
+        menu.Items.Add(saveItem);
+
+        var saveAsItem = new MenuItem
+        {
+            Header = _text.Get("WorkspaceSaveButtonSaveAs"),
+            IsEnabled = true
+        };
+        saveAsItem.Click += (_, _) => _saveWorkspaceAs(session);
+        menu.Items.Add(saveAsItem);
+
+        var hasWorkspaceFile = !string.IsNullOrWhiteSpace(session.WorkspaceFilePath);
+        var openJsonItem = new MenuItem
+        {
+            Header = _text.Get("WorkspaceSaveButtonOpenJson"),
+            IsEnabled = hasWorkspaceFile
+        };
+        openJsonItem.Click += (_, _) => _openWorkspaceJson(session);
+        menu.Items.Add(openJsonItem);
+
+        var openFolderItem = new MenuItem
+        {
+            Header = _text.Get("WorkspaceSaveButtonOpenFolder"),
+            IsEnabled = hasWorkspaceFile
+        };
+        openFolderItem.Click += (_, _) => _openWorkspaceFolder(session);
+        menu.Items.Add(openFolderItem);
     }
 
     private MenuItem CreateRestoreClosedTabMenuItem()

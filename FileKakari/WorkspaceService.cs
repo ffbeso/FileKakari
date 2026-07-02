@@ -13,45 +13,8 @@ public sealed class WorkspaceService
         Converters = { new JsonStringEnumConverter() }
     };
 
-    private static readonly string[] CandidateNames =
-    [
-        ".workspace.json",
-        ".kakari-workspace.json"
-    ];
-
     public WorkspaceDefinition? LoadForDirectory(string directoryPath, WorkspaceLocalStateDocument? sessionLocalState = null, SessionLayoutNodeState? sessionLayout = null)
     {
-        if (string.IsNullOrWhiteSpace(directoryPath)
-            || SpecialLocationService.IsSpecialUri(directoryPath)
-            || !Directory.Exists(directoryPath))
-        {
-            return null;
-        }
-
-        foreach (var name in CandidateNames)
-        {
-            var sharedPath = Path.Combine(directoryPath, name);
-            if (!File.Exists(sharedPath))
-            {
-                continue;
-            }
-
-            try
-            {
-                var definitionJson = File.ReadAllText(sharedPath);
-                var document = JsonSerializer.Deserialize<WorkspaceDocument>(definitionJson, JsonOptions);
-                if (document != null)
-                {
-                    SelfHealDocument(document, directoryPath, out var _, out var _);
-                }
-                return BuildDefinition(document, sessionLocalState, directoryPath, directoryPath, sharedPath, null, sessionLayout);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         return null;
     }
 
@@ -74,11 +37,8 @@ public sealed class WorkspaceService
             }
 
             var document = JsonSerializer.Deserialize<WorkspaceDocument>(File.ReadAllText(sharedPath), JsonOptions);
-            var defaultRootPath = IsAutoWorkspaceFileName(sharedPath)
-                ? sourceDirectory
-                : null;
             var rootPath = WorkspacePathService.ResolveOptionalWorkspaceRootPath(document?.RootPath, sourceDirectory)
-                ?? defaultRootPath;
+                ?? sourceDirectory;
 
             if (document != null)
             {
@@ -109,11 +69,7 @@ public sealed class WorkspaceService
         string? workspaceRoot = null;
         if (session.Workspace != null)
         {
-            if (IsAutoWorkspaceFileName(session.Workspace.SharedPath ?? ""))
-            {
-                workspaceRoot = session.RootPath;
-            }
-            else if (session.Workspace.HasRootPath)
+            if (session.Workspace.HasRootPath)
             {
                 workspaceRoot = session.Workspace.RootPath;
             }
@@ -137,21 +93,6 @@ public sealed class WorkspaceService
 
     public string? FindWorkspaceFile(string directoryPath)
     {
-        if (string.IsNullOrWhiteSpace(directoryPath)
-            || SpecialLocationService.IsSpecialUri(directoryPath)
-            || !Directory.Exists(directoryPath))
-        {
-            return null;
-        }
-
-        foreach (var name in CandidateNames)
-        {
-            var sharedPath = Path.Combine(directoryPath, name);
-            if (File.Exists(sharedPath))
-            {
-                return sharedPath;
-            }
-        }
         return null;
     }
 
@@ -163,7 +104,12 @@ public sealed class WorkspaceService
             return false;
         }
 
-        var filePath = targetFilePath ?? Path.Combine(rootDir, ".workspace.json");
+        if (string.IsNullOrWhiteSpace(targetFilePath))
+        {
+            return false;
+        }
+
+        var filePath = targetFilePath;
         try
         {
             var workspaceId = session.Workspace?.WorkspaceId;
@@ -178,23 +124,15 @@ public sealed class WorkspaceService
             string? savedRootPath = null;
             string? workspaceRootForRelativization = null;
 
-            if (IsAutoWorkspaceFileName(filePath))
+            if (session.Workspace != null && session.Workspace.HasRootPath)
             {
-                savedRootPath = null;
-                workspaceRootForRelativization = Path.GetDirectoryName(filePath);
+                savedRootPath = session.Workspace.RootPath;
+                workspaceRootForRelativization = session.Workspace.RootPath;
             }
             else
             {
-                if (session.Workspace != null && session.Workspace.HasRootPath)
-                {
-                    savedRootPath = session.Workspace.RootPath;
-                    workspaceRootForRelativization = session.Workspace.RootPath;
-                }
-                else
-                {
-                    savedRootPath = null;
-                    workspaceRootForRelativization = null;
-                }
+                savedRootPath = session.RootPath;
+                workspaceRootForRelativization = session.RootPath;
             }
 
             WorkspaceLayoutDocument layoutDoc;
@@ -859,13 +797,6 @@ public sealed class WorkspaceService
             }
         }
         return null;
-    }
-
-    private static bool IsAutoWorkspaceFileName(string path)
-    {
-        var fileName = Path.GetFileName(path) ?? "";
-        return fileName.Equals(".workspace.json", StringComparison.OrdinalIgnoreCase)
-            || fileName.Equals(".kakari-workspace.json", StringComparison.OrdinalIgnoreCase);
     }
 
 

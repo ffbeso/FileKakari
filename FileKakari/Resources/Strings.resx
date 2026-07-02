@@ -228,9 +228,11 @@ Items: {1:N0}</value></data>
   <data name="WorkspaceActiveTooltip" xml:space="preserve"><value>ワークスペース設定</value></data>
   <data name="WorkspaceNormalTooltip" xml:space="preserve"><value>ワークスペース</value></data>
   <data name="WorkspaceSaveButtonHeader" xml:space="preserve"><value>Workspace File (.workspace.json)</value></data>
+  <data name="WorkspaceSaveButtonSave" xml:space="preserve"><value>Save Workspace</value></data>
   <data name="WorkspaceSaveButtonOverwrite" xml:space="preserve"><value>Overwrite Workspace</value></data>
   <data name="WorkspaceSaveButtonSaveAs" xml:space="preserve"><value>Save Workspace As...</value></data>
   <data name="WorkspaceSaveButtonOpenJson" xml:space="preserve"><value>Open .workspace.json</value></data>
+  <data name="WorkspaceSaveButtonOpenFolder" xml:space="preserve"><value>Open Workspace File Folder</value></data>
   <data name="SettingsThemeFileNotFound" xml:space="preserve"><value>Theme file '{0}' not found in Themes folder.</value></data>
   <data name="SettingsThemeLoadFailed" xml:space="preserve"><value>Failed to load theme file '{0}':
 {1}</value></data>

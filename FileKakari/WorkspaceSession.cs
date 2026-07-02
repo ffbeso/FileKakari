@@ -52,6 +52,8 @@ public sealed class WorkspaceSession : INotifyPropertyChanged
 
     public WorkspaceDefinition? Workspace { get; private set; }
 
+    public string WorkspaceFilePath => Workspace?.SharedPath ?? "";
+
     public ObservableCollection<FolderTab> Tabs { get; }
 
     public ObservableCollection<WorkspacePaneGroup> PaneGroups { get; } = [];
@@ -126,7 +128,7 @@ public sealed class WorkspaceSession : INotifyPropertyChanged
         }
     }
 
-    public bool IsSaved => IsWorkspace && !string.IsNullOrWhiteSpace(Workspace?.SharedPath);
+    public bool IsSaved => IsWorkspace && !string.IsNullOrWhiteSpace(WorkspaceFilePath);
 
     public Dictionary<string, double>? ColumnWidths { get; set; }
 
@@ -142,6 +144,7 @@ public sealed class WorkspaceSession : INotifyPropertyChanged
 
         OnPropertyChanged(nameof(IsWorkspace));
         OnPropertyChanged(nameof(IsSaved));
+        OnPropertyChanged(nameof(WorkspaceFilePath));
         OnPropertyChanged(nameof(Header));
     }
 

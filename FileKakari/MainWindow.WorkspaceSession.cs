@@ -25,79 +25,6 @@ public partial class MainWindow
         private set => SetValue(WorkspaceDisplayLayoutRootProperty, value);
     }
 
-    private async Task<bool> ApplyWorkspaceForFolderAsync(string folderPath)
-    {
-        var workspace = _workspaceService.LoadForDirectory(folderPath);
-        if (workspace is null)
-        {
-            return false;
-        }
-
-        if (_activeWorkspaceSession?.Workspace is { } currentWorkspace
-            && string.Equals(currentWorkspace.SourceDirectory, workspace.SourceDirectory, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        _workspaceLocalState.SaveActiveLocalState();
-        SaveActiveTabViewState();
-        _loadCancellation?.Cancel();
-        ClearLastClosedStates();
-        _primaryPaneGroup.SetWorkspace(workspace);
-        _workspacePaneGroups.Clear();
-        var workspaceSession = _workspaceSessionFactory.Create(workspace);
-        foreach (var paneGroup in workspaceSession.PaneGroups)
-        {
-            _workspacePaneGroups.Add(paneGroup);
-        }
-
-        var activePaneGroup = workspaceSession.ActivePaneGroup ?? _workspacePaneGroups[0];
-        var replaceIndex = Math.Clamp(TabsControl.SelectedIndex, 0, Math.Max(0, _workspaceSessions.Count - 1));
-
-        _isSwitchingTabs = true;
-        try
-        {
-            if (_activeWorkspaceSession?.IsLocked == true)
-            {
-                _workspaceSessions.Add(workspaceSession);
-            }
-            else if (_workspaceSessions.Count == 0)
-            {
-                _workspaceSessions.Add(workspaceSession);
-            }
-            else
-            {
-                _workspaceSessions[replaceIndex] = workspaceSession;
-            }
-
-            _activeWorkspaceSession = workspaceSession;
-            UpdateActiveWorkspaceSessionUi(workspaceSession);
-            SelectWorkspaceSession(workspaceSession);
-            ApplyWorkspaceSessionToFolderTabs();
-        }
-        finally
-        {
-            _isSwitchingTabs = false;
-        }
-
-        _isSwitchingWorkspacePane = true;
-        try
-        {
-            _workspacePaneUiController.ShowWorkspace(activePaneGroup);
-        }
-        finally
-        {
-            _isSwitchingWorkspacePane = false;
-        }
-
-        UpdatePathDisplay(workspace.SourceDirectory);
-        RefreshWorkspaceDisplayPanes();
-        _performanceLogger.Write($"workspace-applied root=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup.Id}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup.Tabs.Count} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
-        await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
-        UpdateWorkspaceButtonState();
-        return true;
-    }
-
     private async Task<bool> OpenWorkspaceFileAsync(string workspaceFilePath, bool forceReplaceCurrentSession = false)
     {
         var workspace = _workspaceService.LoadFromFile(workspaceFilePath);
@@ -191,41 +118,7 @@ public partial class MainWindow
 
     private bool ShouldReplaceCurrentNormalSessionWithWorkspace(WorkspaceDefinition workspace)
     {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session is null || session.IsWorkspace || session.IsLocked)
-        {
-            return false;
-        }
-
-        var sharedPath = workspace.SharedPath;
-        if (string.IsNullOrWhiteSpace(sharedPath)
-            || string.IsNullOrWhiteSpace(session.RootPath)
-            || SpecialLocationService.IsSpecialUri(session.RootPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            var workspaceDirectory = Path.GetDirectoryName(Path.GetFullPath(sharedPath));
-            if (string.IsNullOrWhiteSpace(workspaceDirectory)
-                || !string.Equals(
-                    WorkspacePathService.NormalizePathKey(workspaceDirectory),
-                    WorkspacePathService.NormalizePathKey(Path.GetFullPath(session.RootPath)),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return string.Equals(
-                Path.GetFileName(sharedPath),
-                ".workspace.json",
-                StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            return false;
-        }
+        return false;
     }
 
     private async Task ReplaceCurrentSessionWithWorkspaceAsync(WorkspaceDefinition workspace, string logReason)

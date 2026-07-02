@@ -482,6 +482,11 @@ public partial class MainWindow : Window
             BeginWorkspaceRename,
             ToggleWorkspaceLock,
             OpenTabInExplorer,
+            SaveWorkspaceMenuItem_Click,
+            SaveWorkspaceAsMenuItem_Click,
+            OpenWorkspaceJsonMenuItem_Click,
+            OpenWorkspaceFolderMenuItem_Click,
+            session => GetMainTabItem(session)?.IsWorkspace == true,
             () => _lastClosedKind != LastClosedKind.None);
         _folderWatchTabTracker = new FolderWatchTabTracker(
             EnumerateAllFolderTabs,

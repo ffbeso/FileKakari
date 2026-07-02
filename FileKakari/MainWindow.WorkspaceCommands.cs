@@ -13,19 +13,14 @@ public partial class MainWindow
 {
     private void WorkspaceButton_Click(object sender, RoutedEventArgs e)
     {
-        if (WorkspaceButton.ContextMenu is not null)
-        {
-            WorkspaceButton.ContextMenu.PlacementTarget = WorkspaceButton;
-            WorkspaceButton.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
-            WorkspaceButton.ContextMenu.IsOpen = true;
-        }
+        // Workspace save/open commands live on W tab context menus. The toolbar button no
+        // longer promotes normal folders based on root .workspace.json files.
     }
 
     private enum WorkspaceButtonState
     {
-        Normal,    // 通常フォルダ (定義ファイル無し)
-        Available, // 通常フォルダ (定義ファイル有り)
-        Active     // Workspaceセッション表示中
+        Normal,
+        Active
     }
 
     private WorkspaceButtonState GetWorkspaceButtonState()
@@ -38,150 +33,12 @@ public partial class MainWindow
             return WorkspaceButtonState.Active;
         }
 
-        var workspacePath = FindOpenableWorkspaceFileForNormalSession(session);
-        return workspacePath is not null ? WorkspaceButtonState.Available : WorkspaceButtonState.Normal;
+        return WorkspaceButtonState.Normal;
     }
 
     private WorkspaceSession? GetSelectedWorkspaceButtonSession()
     {
         return GetSelectedWorkspaceSession() ?? _activeWorkspaceSession;
-    }
-
-    private static FolderTab? GetSelectedNormalWorkspaceTab(WorkspaceSession? session)
-    {
-        if (session is null || session.IsWorkspace)
-        {
-            return null;
-        }
-
-        return GetSessionActiveTab(session);
-    }
-
-    private static string? GetSelectedNormalWorkspacePath(WorkspaceSession? session)
-    {
-        var path = GetSelectedNormalWorkspaceTab(session)?.Navigation.CurrentPath;
-        return string.IsNullOrWhiteSpace(path) ? null : path;
-    }
-
-    private string? FindOpenableWorkspaceFileForNormalSession(WorkspaceSession? session)
-    {
-        if (GetSelectedNormalWorkspacePath(session) is not { } currentPath)
-        {
-            return null;
-        }
-
-        var workspacePath = _workspaceService.FindWorkspaceFile(currentPath);
-        return workspacePath is not null && WorkspaceService.IsWorkspaceFile(workspacePath)
-            ? workspacePath
-            : null;
-    }
-
-    private WorkspaceSession? CreateWorkspaceSaveSessionFromSelectedNormalTab(WorkspaceSession session)
-    {
-        if (session is null) return null;
-
-        var clonedPaneGroups = new System.Collections.Generic.List<WorkspacePaneGroup>();
-        var totalValidTabs = 0;
-
-        foreach (var srcPane in session.PaneGroups)
-        {
-            var clonedTabs = new System.Collections.ObjectModel.ObservableCollection<FolderTab>();
-            var activeIndex = -1;
-
-            for (int i = 0; i < srcPane.Tabs.Count; i++)
-            {
-                var sourceTab = srcPane.Tabs[i];
-                var sourcePath = sourceTab.Navigation.CurrentPath;
-                if (string.IsNullOrWhiteSpace(sourcePath)
-                    || SpecialLocationService.IsSpecialUri(sourcePath)
-                    || !Directory.Exists(sourcePath))
-                {
-                    continue;
-                }
-
-                var state = new WorkspaceTabState(
-                    sourcePath,
-                    sourceTab.State.Id,
-                    AppSettings.NormalizeDisplayMode(sourceTab.State.ViewMode))
-                {
-                    SortColumn = NormalizeSortColumn(sourceTab.State.SortColumn),
-                    SortAscending = sourceTab.State.SortAscending,
-                    FilterText = sourceTab.State.FilterText,
-                    SelectedPaths = sourceTab.State.SelectedPaths,
-                    VerticalOffset = sourceTab.State.VerticalOffset
-                };
-                var saveTab = new FolderTab(
-                    sourcePath,
-                    viewMode: AppSettings.NormalizeDisplayMode(sourceTab.State.ViewMode),
-                    state: state);
-                saveTab.SetFolderLocked(sourceTab.IsFolderLocked);
-                clonedTabs.Add(saveTab);
-
-                if (ReferenceEquals(sourceTab, srcPane.ActiveTab))
-                {
-                    activeIndex = clonedTabs.Count - 1;
-                }
-            }
-
-            if (clonedTabs.Count > 0)
-            {
-                if (activeIndex < 0)
-                {
-                    activeIndex = 0;
-                }
-
-                var paneRootPath = clonedTabs[activeIndex].Navigation.CurrentPath;
-                var clonedPane = new WorkspacePaneGroup(srcPane.Id, clonedTabs, paneRootPath)
-                {
-                    SelectedTabIndex = activeIndex,
-                    SelectedTabId = clonedTabs[activeIndex].Id
-                };
-                clonedPaneGroups.Add(clonedPane);
-                totalValidTabs += clonedTabs.Count;
-            }
-        }
-
-        if (clonedPaneGroups.Count == 0)
-        {
-            return null;
-        }
-
-        var firstTab = clonedPaneGroups[0].Tabs[clonedPaneGroups[0].SelectedTabIndex];
-        var flatClonedTabs = new System.Collections.ObjectModel.ObservableCollection<FolderTab>();
-        foreach (var gp in clonedPaneGroups)
-        {
-            foreach (var t in gp.Tabs)
-            {
-                flatClonedTabs.Add(t);
-            }
-        }
-
-        var saveSession = new WorkspaceSession(
-            firstTab.Navigation.CurrentPath,
-            flatClonedTabs,
-            workspace: null,
-            firstTab.State.ViewMode)
-        {
-            SelectedTabIndex = 0,
-            PaneSplitOrientation = session.PaneSplitOrientation
-        };
-        saveSession.Name = session.Name;
-
-        foreach (var gp in clonedPaneGroups)
-        {
-            saveSession.PaneGroups.Add(gp);
-        }
-
-        var activeGroup = clonedPaneGroups.Find(g => string.Equals(g.Id, session.ActivePaneGroup?.Id, StringComparison.OrdinalIgnoreCase))
-            ?? clonedPaneGroups[0];
-        saveSession.ActivePaneGroup = activeGroup;
-        var clonedPaneIds = clonedPaneGroups
-            .Select(group => group.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        saveSession.LayoutRoot = PruneLayoutToPaneIds(session.LayoutRoot, clonedPaneIds)
-            ?? BuildLayoutRootFromPaneGroups(clonedPaneGroups, session.PaneSplitOrientation);
-
-        return saveSession;
     }
 
     private void UpdateWorkspaceButtonState()
@@ -194,13 +51,9 @@ public partial class MainWindow
                 WorkspaceButton.Opacity = 1.0;
                 WorkspaceButton.ToolTip = _text.Get("WorkspaceActiveTooltip");
                 break;
-            case WorkspaceButtonState.Available:
-                WorkspaceButton.Opacity = 1.0;
-                WorkspaceButton.ToolTip = _text.Get("WorkspaceAvailableTooltip");
-                break;
             case WorkspaceButtonState.Normal:
             default:
-                WorkspaceButton.Opacity = 0.6; // 通常フォルダ（定義無し）は少し薄くする
+                WorkspaceButton.Opacity = 0.6;
                 WorkspaceButton.ToolTip = _text.Get("WorkspaceNormalTooltip");
                 break;
         }
@@ -210,147 +63,47 @@ public partial class MainWindow
     {
         var state = GetWorkspaceButtonState();
 
-        if (state == WorkspaceButtonState.Active)
-        {
-            var session = GetSelectedWorkspaceButtonSession();
-            var hasShared = !string.IsNullOrWhiteSpace(session?.Workspace?.SharedPath);
-
-            WorkspaceButtonHeader.Header = _text.Get("WorkspaceSaveButtonHeader");
-            WorkspaceButtonHeader.Visibility = Visibility.Visible;
-            WorkspaceButtonSeparator.Visibility = Visibility.Visible;
-
-            OpenWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-            SaveNewWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-
-            OverwriteWorkspaceMenuItem.Header = _text.Get("WorkspaceSaveButtonOverwrite");
-            OverwriteWorkspaceMenuItem.Visibility = Visibility.Visible;
-            OverwriteWorkspaceMenuItem.IsEnabled = hasShared;
-
-            SaveWorkspaceAsMenuItem.Header = _text.Get("WorkspaceSaveButtonSaveAs");
-            SaveWorkspaceAsMenuItem.Visibility = Visibility.Visible;
-
-            OpenWorkspaceJsonMenuItem.Header = _text.Get("WorkspaceSaveButtonOpenJson");
-            OpenWorkspaceJsonMenuItem.Visibility = Visibility.Visible;
-        }
-        else if (state == WorkspaceButtonState.Available)
-        {
-            WorkspaceButtonHeader.Visibility = Visibility.Collapsed;
-            WorkspaceButtonSeparator.Visibility = Visibility.Collapsed;
-
-            OpenWorkspaceMenuItem.Header = _text.Get("WorkspaceMenuOpenLocal");
-            OpenWorkspaceMenuItem.Visibility = Visibility.Visible;
-
-            SaveNewWorkspaceMenuItem.Header = _text.Get("WorkspaceMenuSaveNew");
-            SaveNewWorkspaceMenuItem.Visibility = Visibility.Visible;
-
-            OverwriteWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-            SaveWorkspaceAsMenuItem.Visibility = Visibility.Collapsed;
-            OpenWorkspaceJsonMenuItem.Visibility = Visibility.Collapsed;
-        }
-        else // WorkspaceButtonState.Normal
-        {
-            WorkspaceButtonHeader.Visibility = Visibility.Collapsed;
-            WorkspaceButtonSeparator.Visibility = Visibility.Collapsed;
-
-            OpenWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-
-            SaveNewWorkspaceMenuItem.Header = _text.Get("WorkspaceMenuSaveNew");
-            SaveNewWorkspaceMenuItem.Visibility = Visibility.Visible;
-
-            OverwriteWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-            SaveWorkspaceAsMenuItem.Visibility = Visibility.Collapsed;
-            OpenWorkspaceJsonMenuItem.Visibility = Visibility.Collapsed;
-        }
-    }
-
-    private async Task<bool> SaveNewWorkspaceExplicitAsync(WorkspaceSession selectedSession)
-    {
-        if (selectedSession is null || selectedSession.IsWorkspace) return false;
-
-        var saveSession = CreateWorkspaceSaveSessionFromSelectedNormalTab(selectedSession);
-        if (saveSession is null)
-        {
-            var noValidTabsMsg = _text.Format("WorkspaceSaveFailed", "No valid folder tabs available (virtual locations like 'This PC' cannot be saved).");
-            MessageBox.Show(this, noValidTabsMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
-        }
-
-        var defaultName = saveSession.Name;
-        var dlg = new WorkspaceSaveDialog(defaultName)
-        {
-            Owner = this
-        };
-
-        if (dlg.ShowDialog() == true)
-        {
-            var success = _workspaceService.SaveWorkspace(saveSession, dlg.WorkspaceName);
-            if (success)
-            {
-                var rootPath = saveSession.RootPath;
-                var workspaceFilePath = Path.Combine(rootPath, ".workspace.json");
-
-                var loadSuccess = await OpenWorkspaceFileExplicitAsync(workspaceFilePath);
-                if (loadSuccess)
-                {
-                    SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
-                    return true;
-                }
-                else
-                {
-                    SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
-                    MessageBox.Show(
-                        _text.Get("WorkspaceSaveSuccess") + "\n(Workspace activation failed, remaining in normal mode)",
-                        _text.Get("WorkspaceSaveTitle"),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                    return true;
-                }
-            }
-            else
-            {
-                var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error or invalid path.");
-                MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
-            }
-        }
-        return false;
+        WorkspaceButtonHeader.Visibility = Visibility.Collapsed;
+        WorkspaceButtonSeparator.Visibility = Visibility.Collapsed;
+        OpenWorkspaceMenuItem.Visibility = Visibility.Collapsed;
+        SaveNewWorkspaceMenuItem.Visibility = Visibility.Collapsed;
+        OverwriteWorkspaceMenuItem.Visibility = Visibility.Collapsed;
+        SaveWorkspaceAsMenuItem.Visibility = Visibility.Collapsed;
+        OpenWorkspaceJsonMenuItem.Visibility = Visibility.Collapsed;
     }
 
     private async void OpenWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session is null || session.IsWorkspace) return;
-
-        var targetPath = FindOpenableWorkspaceFileForNormalSession(session);
-        if (targetPath is not null)
-        {
-            await OpenWorkspaceFileExplicitAsync(targetPath);
-        }
+        await Task.CompletedTask;
     }
 
     private async void SaveNewWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var selectedSession = GetSelectedWorkspaceButtonSession();
-        if (selectedSession is null) return;
-        await SaveNewWorkspaceExplicitAsync(selectedSession);
+        await Task.CompletedTask;
     }
 
     private void OverwriteWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session?.Workspace is not { } ws || string.IsNullOrWhiteSpace(ws.SharedPath)) return;
+        SaveWorkspaceMenuItem_Click(GetSelectedWorkspaceButtonSession());
+    }
 
-        if (!File.Exists(ws.SharedPath))
+    private void SaveWorkspaceMenuItem_Click(WorkspaceSession? session)
+    {
+        if (session is null || !session.IsWorkspace)
         {
-            var errorMsg = "Workspace file does not exist. Please use 'Save As' to choose a location.";
-            MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
-            SaveWorkspaceAsMenuItem_Click(sender, e);
             return;
         }
 
-        var success = _workspaceService.SaveWorkspace(session, session.Name, ws.SharedPath);
+        if (string.IsNullOrWhiteSpace(session.WorkspaceFilePath))
+        {
+            SaveWorkspaceAsMenuItem_Click(session);
+            return;
+        }
+
+        var success = _workspaceService.SaveWorkspace(session, session.Name, session.WorkspaceFilePath);
         if (success)
         {
+            SaveSessionState();
             SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
         }
         else
@@ -362,8 +115,12 @@ public partial class MainWindow
 
     private void SaveWorkspaceAsMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session?.Workspace is not { } ws) return;
+        SaveWorkspaceAsMenuItem_Click(GetSelectedWorkspaceButtonSession());
+    }
+
+    private void SaveWorkspaceAsMenuItem_Click(WorkspaceSession? session)
+    {
+        if (session is null || !session.IsWorkspace) return;
 
         var sfd = new Microsoft.Win32.SaveFileDialog
         {
@@ -377,9 +134,11 @@ public partial class MainWindow
         if (sfd.ShowDialog(this) == true)
         {
             var requestedSavePath = sfd.FileName;
+            var oldWorkspaceFilePath = session.WorkspaceFilePath;
+            var expectedWorkspaceId = session.Workspace?.WorkspaceId;
             _performanceLogger.Write(
                 $"workspace-save-as-start sessionId=\"{session.Id}\" " +
-                $"workspaceId=\"{ws.WorkspaceId}\" oldWorkspaceFilePath=\"{ws.SharedPath ?? ""}\" " +
+                $"workspaceId=\"{expectedWorkspaceId ?? ""}\" oldWorkspaceFilePath=\"{oldWorkspaceFilePath}\" " +
                 $"requestedSavePath=\"{requestedSavePath}\" rootPath=\"{session.RootPath}\" " +
                 $"isDirty={_workspaceLocalState.IsDirty}");
 
@@ -400,7 +159,8 @@ public partial class MainWindow
                 {
                     var savedWorkspace = _workspaceService.LoadFromFile(requestedSavePath);
                     var jsonSaveComplete = savedWorkspace is not null
-                        && string.Equals(savedWorkspace.WorkspaceId, ws.WorkspaceId, StringComparison.Ordinal);
+                        && (string.IsNullOrWhiteSpace(expectedWorkspaceId)
+                            || string.Equals(savedWorkspace.WorkspaceId, expectedWorkspaceId, StringComparison.Ordinal));
                     var fileExists = File.Exists(requestedSavePath);
                     if (jsonSaveComplete && savedWorkspace is not null)
                     {
@@ -418,7 +178,7 @@ public partial class MainWindow
                         _performanceLogger.Write(
                             $"workspace-save-as-complete sessionId=\"{session.Id}\" " +
                             $"workspaceId=\"{session.Workspace?.WorkspaceId ?? ""}\" " +
-                            $"newWorkspaceFilePath=\"{session.Workspace?.SharedPath ?? ""}\" " +
+                            $"newWorkspaceFilePath=\"{session.WorkspaceFilePath}\" " +
                             $"fileExists={fileExists} jsonSaveComplete={jsonSaveComplete} " +
                             $"isDirty={_workspaceLocalState.IsDirty}");
                         SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
@@ -428,7 +188,7 @@ public partial class MainWindow
                         _performanceLogger.Write(
                             $"workspace-save-as-failed reason=\"saved-json-load-or-workspace-id-mismatch\" " +
                             $"exception=\"\" fileExists={fileExists} jsonSaveComplete={jsonSaveComplete} " +
-                            $"requestedSavePath=\"{requestedSavePath}\" expectedWorkspaceId=\"{ws.WorkspaceId}\" " +
+                            $"requestedSavePath=\"{requestedSavePath}\" expectedWorkspaceId=\"{expectedWorkspaceId ?? ""}\" " +
                             $"actualWorkspaceId=\"{savedWorkspace?.WorkspaceId ?? ""}\"");
                         var errorMsg = _text.Format("WorkspaceSaveFailed", "Saved file could not be reloaded or workspaceId changed.");
                         MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
@@ -484,9 +244,9 @@ public partial class MainWindow
             }
         }
 
-        if (TryNormalizeSaveDialogDirectory(GetSelectedNormalWorkspacePath(GetSelectedWorkspaceButtonSession())) is { } normalDirectory)
+        if (TryNormalizeSaveDialogDirectory(session.RootPath) is { } rootDirectory)
         {
-            return normalDirectory;
+            return rootDirectory;
         }
 
         if (TryNormalizeSaveDialogDirectory(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)) is { } documentsDirectory)
@@ -564,14 +324,18 @@ public partial class MainWindow
 
     private void OpenWorkspaceJsonMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session?.Workspace is not { } ws || string.IsNullOrWhiteSpace(ws.SharedPath)) return;
+        OpenWorkspaceJsonMenuItem_Click(GetSelectedWorkspaceButtonSession());
+    }
+
+    private void OpenWorkspaceJsonMenuItem_Click(WorkspaceSession? session)
+    {
+        if (session is null || string.IsNullOrWhiteSpace(session.WorkspaceFilePath)) return;
 
         try
         {
-            if (File.Exists(ws.SharedPath))
+            if (File.Exists(session.WorkspaceFilePath))
             {
-                Process.Start(ExternalProcessStartInfo.CreateShellExecute(ws.SharedPath));
+                Process.Start(ExternalProcessStartInfo.CreateShellExecute(session.WorkspaceFilePath));
             }
             else
             {
@@ -582,6 +346,22 @@ public partial class MainWindow
         {
             MessageBox.Show($"Failed to open JSON file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void OpenWorkspaceFolderMenuItem_Click(WorkspaceSession? session)
+    {
+        if (session is null || string.IsNullOrWhiteSpace(session.WorkspaceFilePath))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(session.WorkspaceFilePath);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return;
+        }
+
+        Process.Start(ExternalProcessStartInfo.CreateShellExecute(directory));
     }
 
     private async Task<bool> OpenWorkspaceFileExplicitAsync(string workspaceFilePath, bool forceReplaceCurrentSession = false)

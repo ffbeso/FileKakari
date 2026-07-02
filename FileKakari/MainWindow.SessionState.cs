@@ -175,7 +175,7 @@ public partial class MainWindow
     private SessionTabState? BuildSessionTabState(WorkspaceSession session)
     {
         var isSavedWorkspace = session.IsWorkspace &&
-            (!string.IsNullOrWhiteSpace(session.Workspace?.SharedPath) ||
+            (!string.IsNullOrWhiteSpace(session.WorkspaceFilePath) ||
              !string.IsNullOrWhiteSpace(session.Workspace?.LocalPath));
 
         var isUnsavedWorkspacePromotion = !isSavedWorkspace && session.IsWorkspace;
@@ -184,7 +184,7 @@ public partial class MainWindow
 
         if (isWorkspace)
         {
-            var workspacePath = session.Workspace?.SharedPath ?? "";
+            var workspacePath = session.WorkspaceFilePath;
             var representativeTab = GetSessionRepresentativeTab(session);
 
             var targetLayoutTree = session.LayoutRoot ?? session.DisplayLayoutRoot;

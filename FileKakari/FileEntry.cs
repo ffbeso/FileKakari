@@ -9,6 +9,10 @@ public sealed class FileEntry : INotifyPropertyChanged
     private string _name = "";
     private string _fullPath = "";
     private string _kind = "";
+    private bool _isDirectory;
+    private string _extension = "";
+    private string _parentPath = "";
+    private string _baseName = "";
     private DateTime _modifiedAt;
     private DateTime _createdAt;
     private DateTime _accessedAt;
@@ -29,6 +33,8 @@ public sealed class FileEntry : INotifyPropertyChanged
         {
             if (SetField(ref _name, value))
             {
+                RefreshNameDisplayCache();
+                OnPropertyChanged(nameof(Extension));
                 OnPropertyChanged(nameof(BaseName));
             }
         }
@@ -41,6 +47,7 @@ public sealed class FileEntry : INotifyPropertyChanged
         {
             if (SetField(ref _fullPath, value))
             {
+                _parentPath = GetParentPath(value);
                 OnPropertyChanged(nameof(ParentPath));
             }
         }
@@ -100,7 +107,15 @@ public sealed class FileEntry : INotifyPropertyChanged
         }
     }
 
-    public required bool IsDirectory { get; init; }
+    public required bool IsDirectory
+    {
+        get => _isDirectory;
+        init
+        {
+            _isDirectory = value;
+            RefreshNameDisplayCache();
+        }
+    }
 
     public long? FreeSpace
     {
@@ -128,51 +143,76 @@ public sealed class FileEntry : INotifyPropertyChanged
 
     public string AccessedAtText => AccessedAt == DateTime.MinValue ? "" : AccessedAt.ToString("g");
 
-    public string Extension => IsDirectory ? "" : Path.GetExtension(Name).TrimStart('.');
+    public string Extension => _extension;
 
-    public string ParentPath
+    public string ParentPath => _parentPath;
+
+    public string BaseName => _baseName;
+
+    private void RefreshNameDisplayCache()
     {
-        get
+        _extension = GetExtension(Name, IsDirectory);
+        _baseName = GetBaseName(Name, IsDirectory);
+    }
+
+    private static string GetExtension(string name, bool isDirectory)
+    {
+        if (isDirectory)
         {
-            if (string.IsNullOrEmpty(FullPath))
-            {
-                return "";
-            }
-            try
-            {
-                return Path.GetDirectoryName(FullPath) ?? "";
-            }
-            catch
-            {
-                return "";
-            }
+            return "";
+        }
+
+        try
+        {
+            return Path.GetExtension(name).TrimStart('.');
+        }
+        catch
+        {
+            return "";
         }
     }
 
-    public string BaseName
+    private static string GetParentPath(string fullPath)
     {
-        get
+        if (string.IsNullOrEmpty(fullPath))
         {
-            if (IsDirectory)
-            {
-                return Name;
-            }
-            if (string.IsNullOrEmpty(Name))
-            {
-                return "";
-            }
-            if (Name.StartsWith('.') && Name.IndexOf('.', 1) < 0)
-            {
-                return Name;
-            }
-            try
-            {
-                return Path.GetFileNameWithoutExtension(Name);
-            }
-            catch
-            {
-                return Name;
-            }
+            return "";
+        }
+
+        try
+        {
+            return Path.GetDirectoryName(fullPath) ?? "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string GetBaseName(string name, bool isDirectory)
+    {
+        if (isDirectory)
+        {
+            return name;
+        }
+
+        if (string.IsNullOrEmpty(name))
+        {
+            return "";
+        }
+
+        if (name.StartsWith('.') && name.IndexOf('.', 1) < 0)
+        {
+            return name;
+        }
+
+        try
+        {
+            return Path.GetFileNameWithoutExtension(name);
+        }
+        catch
+        {
+            return name;
         }
     }
 

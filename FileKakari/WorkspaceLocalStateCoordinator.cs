@@ -33,6 +33,8 @@ sealed class WorkspaceLocalStateCoordinator
         _saveTimer.Tick += SaveTimer_Tick;
     }
 
+    internal bool IsDirty => _isDirty;
+
     internal void Stop()
     {
         _saveTimer.Stop();

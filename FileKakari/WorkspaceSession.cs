@@ -50,7 +50,7 @@ public sealed class WorkspaceSession : INotifyPropertyChanged
 
     public string RootPath { get; }
 
-    public WorkspaceDefinition? Workspace { get; }
+    public WorkspaceDefinition? Workspace { get; private set; }
 
     public ObservableCollection<FolderTab> Tabs { get; }
 
@@ -129,6 +129,21 @@ public sealed class WorkspaceSession : INotifyPropertyChanged
     public bool IsSaved => IsWorkspace && !string.IsNullOrWhiteSpace(Workspace?.SharedPath);
 
     public Dictionary<string, double>? ColumnWidths { get; set; }
+
+    public void ApplySavedWorkspace(WorkspaceDefinition workspace)
+    {
+        Workspace = workspace;
+        Name = workspace.Name;
+
+        foreach (var paneGroup in PaneGroups)
+        {
+            paneGroup.SetWorkspace(workspace);
+        }
+
+        OnPropertyChanged(nameof(IsWorkspace));
+        OnPropertyChanged(nameof(IsSaved));
+        OnPropertyChanged(nameof(Header));
+    }
 
     public string Name
     {

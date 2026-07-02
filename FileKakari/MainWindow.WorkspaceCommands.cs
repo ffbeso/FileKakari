@@ -360,7 +360,7 @@ public partial class MainWindow
         }
     }
 
-    private async void SaveWorkspaceAsMenuItem_Click(object sender, RoutedEventArgs e)
+    private void SaveWorkspaceAsMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var session = GetSelectedWorkspaceButtonSession();
         if (session?.Workspace is not { } ws) return;
@@ -376,6 +376,13 @@ public partial class MainWindow
 
         if (sfd.ShowDialog(this) == true)
         {
+            var requestedSavePath = sfd.FileName;
+            _performanceLogger.Write(
+                $"workspace-save-as-start sessionId=\"{session.Id}\" " +
+                $"workspaceId=\"{ws.WorkspaceId}\" oldWorkspaceFilePath=\"{ws.SharedPath ?? ""}\" " +
+                $"requestedSavePath=\"{requestedSavePath}\" rootPath=\"{session.RootPath}\" " +
+                $"isDirty={_workspaceLocalState.IsDirty}");
+
             var chosenName = Path.GetFileNameWithoutExtension(sfd.FileName);
             if (chosenName.EndsWith(".workspace", StringComparison.OrdinalIgnoreCase))
             {
@@ -386,27 +393,62 @@ public partial class MainWindow
                 chosenName = session.Name;
             }
 
-            var success = _workspaceService.SaveWorkspace(session, chosenName, sfd.FileName);
-            if (success)
+            try
             {
-                var loadSuccess = await OpenWorkspaceFileExplicitAsync(sfd.FileName, forceReplaceCurrentSession: true);
-                if (loadSuccess)
+                var success = _workspaceService.SaveWorkspace(session, chosenName, requestedSavePath);
+                if (success)
                 {
-                    SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
+                    var savedWorkspace = _workspaceService.LoadFromFile(requestedSavePath);
+                    var jsonSaveComplete = savedWorkspace is not null
+                        && string.Equals(savedWorkspace.WorkspaceId, ws.WorkspaceId, StringComparison.Ordinal);
+                    var fileExists = File.Exists(requestedSavePath);
+                    if (jsonSaveComplete && savedWorkspace is not null)
+                    {
+                        session.ApplySavedWorkspace(savedWorkspace);
+                        if (ReferenceEquals(session, _activeWorkspaceSession))
+                        {
+                            UpdateActiveWorkspaceSessionUi(session);
+                            RefreshWorkspaceDisplayPanes();
+                        }
+
+                        SelectWorkspaceSession(session);
+                        UpdateWindowTitle();
+                        UpdateWorkspaceButtonState();
+                        SaveSessionState();
+                        _performanceLogger.Write(
+                            $"workspace-save-as-complete sessionId=\"{session.Id}\" " +
+                            $"workspaceId=\"{session.Workspace?.WorkspaceId ?? ""}\" " +
+                            $"newWorkspaceFilePath=\"{session.Workspace?.SharedPath ?? ""}\" " +
+                            $"fileExists={fileExists} jsonSaveComplete={jsonSaveComplete} " +
+                            $"isDirty={_workspaceLocalState.IsDirty}");
+                        SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
+                    }
+                    else
+                    {
+                        _performanceLogger.Write(
+                            $"workspace-save-as-failed reason=\"saved-json-load-or-workspace-id-mismatch\" " +
+                            $"exception=\"\" fileExists={fileExists} jsonSaveComplete={jsonSaveComplete} " +
+                            $"requestedSavePath=\"{requestedSavePath}\" expectedWorkspaceId=\"{ws.WorkspaceId}\" " +
+                            $"actualWorkspaceId=\"{savedWorkspace?.WorkspaceId ?? ""}\"");
+                        var errorMsg = _text.Format("WorkspaceSaveFailed", "Saved file could not be reloaded or workspaceId changed.");
+                        MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
                 }
                 else
                 {
-                    SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
-                    MessageBox.Show(
-                        _text.Get("WorkspaceSaveSuccess") + "\n(Failed to switch to the new Workspace session)",
-                        _text.Get("WorkspaceSaveTitle"),
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    _performanceLogger.Write(
+                        $"workspace-save-as-failed reason=\"workspace-service-save-failed\" exception=\"\" " +
+                        $"requestedSavePath=\"{requestedSavePath}\"");
+                    var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error.");
+                    MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error.");
+                _performanceLogger.Write(
+                    $"workspace-save-as-failed reason=\"exception\" exception=\"{ex.GetType().FullName}: {ex.Message}\" " +
+                    $"requestedSavePath=\"{requestedSavePath}\"");
+                var errorMsg = _text.Format("WorkspaceSaveFailed", ex.Message);
                 MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

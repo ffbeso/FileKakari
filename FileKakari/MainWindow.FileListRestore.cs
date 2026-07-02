@@ -479,7 +479,7 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} reason=targetState-null trigger={trigger} workspaceSwitchId={workspaceSwitchId}");
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} reason=targetState-null trigger={trigger} workspaceSwitchId={workspaceSwitchId} {GetWorkspaceRestoreFilterLog(pane, null)}");
             }
             return;
         }
@@ -499,7 +499,7 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=switch-restore-reentry trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=switch-restore-reentry trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
             return;
         }
@@ -510,7 +510,7 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                _performanceLogger.Write($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=active-selected-session-mismatch trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                _performanceLogger.Write($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=active-selected-session-mismatch trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
             return;
         }
@@ -526,7 +526,7 @@ public partial class MainWindow
             if (_performanceLogger.IsEnabled)
             {
                 PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} reason=guard-mismatch-path trigger={trigger} workspaceSwitchId={workspaceSwitchId} " +
-                    $"pane:\"{pane.FileList.CurrentPath}\" vs state:\"{targetState.CurrentPath}\"");
+                    $"pane:\"{pane.FileList.CurrentPath}\" vs state:\"{targetState.CurrentPath}\" {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
             return;
         }
@@ -551,7 +551,7 @@ public partial class MainWindow
         {
             if (_performanceLogger.IsEnabled)
             {
-                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=duplicate-inflight trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                PerfLog.WriteVerbose($"workspace-restore-skip paneId={pane.Id} stateId={targetState.Id} reason=duplicate-inflight trigger={trigger} workspaceSwitchId={workspaceSwitchId} sessionId={session?.Id ?? "not-found"} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
             return;
         }
@@ -570,7 +570,7 @@ public partial class MainWindow
                     $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
                     $"isActiveSession={session?.IsActiveSession.ToString() ?? "null"} listViewHash={listView?.GetHashCode() ?? 0} paneHash={pane.GetHashCode()} " +
                     $"listViewExists={listView != null} scrollViewerExists={scrollViewer != null} itemsCount={listView?.Items.Count ?? -1} " +
-                    $"offset={targetState.VerticalOffset} selectedCount={targetState.SelectedPaths.Count}");
+                    $"offset={targetState.VerticalOffset} selectedCount={targetState.SelectedPaths.Count} {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
 
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -605,7 +605,7 @@ public partial class MainWindow
             stopwatch.Stop();
             if (_performanceLogger.IsEnabled)
             {
-                PerfLog.WriteVerbose($"workspace-restore-complete restoreId={restoreId} workspaceSwitchId={workspaceSwitchId} paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" policy={policy} trigger={trigger} elapsedMs={stopwatch.ElapsedMilliseconds}");
+                PerfLog.WriteVerbose($"workspace-restore-complete restoreId={restoreId} workspaceSwitchId={workspaceSwitchId} paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" policy={policy} trigger={trigger} elapsedMs={stopwatch.ElapsedMilliseconds} {GetWorkspaceRestoreFilterLog(pane, targetState)}");
             }
         }
         finally
@@ -615,6 +615,21 @@ public partial class MainWindow
                 _activeWorkspaceRestoreKeys.Remove(restoreKey);
             }
         }
+    }
+
+    private static string GetWorkspaceRestoreFilterLog(FolderPane pane, WorkspaceTabState? state)
+    {
+        return $"state.FilterText=\"{EscapeRestoreLogValue(state?.FilterText ?? "")}\" " +
+            $"pane.FilterText=\"{EscapeRestoreLogValue(pane.FileList.DisplayFilterText)}\" " +
+            $"activeTabState.FilterText=\"{EscapeRestoreLogValue(pane.ActiveTabState?.FilterText ?? "")}\"";
+    }
+
+    private static string EscapeRestoreLogValue(string value)
+    {
+        return value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
     }
 
     private static FileListRestorePolicy ResolveWorkspacePaneRestorePolicy(

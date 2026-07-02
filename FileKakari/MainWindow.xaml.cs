@@ -2831,6 +2831,8 @@ public partial class MainWindow : Window
 
     private void PrepareWorkspacePaneFileListLeftMouseDown(ListView listView, FolderPane pane, MouseButtonEventArgs e)
     {
+        LogListViewClick(listView, pane, e, e.OriginalSource as DependencyObject);
+
         var position = e.GetPosition(listView);
         if (IsNearPaneSplitter(position, listView))
         {
@@ -3303,6 +3305,7 @@ public partial class MainWindow : Window
         }
 
         var source = e.OriginalSource as DependencyObject;
+        LogListViewClick(listView, pane, e, source);
         if (e.ChangedButton != MouseButton.Left
             || IsInsideScrollBar(source)
             || FindVisualParent<GridViewColumnHeader>(source) is not null)
@@ -3313,7 +3316,6 @@ public partial class MainWindow : Window
         var entry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
         if (entry is null)
         {
-            ClearFilterIfNeeded();
             e.Handled = true;
             return;
         }

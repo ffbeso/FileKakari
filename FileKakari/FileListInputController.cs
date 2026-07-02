@@ -26,6 +26,7 @@ public partial class MainWindow
         {
             _owner.CancelPendingRenameClick();
             var source = e.OriginalSource as DependencyObject;
+            _owner.LogListViewClick(_owner.ItemsList, _owner.GetNormalFolderPane(), e, source);
             var position = e.GetPosition(_owner.ItemsList);
             if (_owner.GetFileEntryFromDoubleClickHit(source, position) is not { } entry)
             {
@@ -33,7 +34,6 @@ public partial class MainWindow
                     && !_owner.IsInsideScrollBar(source)
                     && FindVisualParent<GridViewColumnHeader>(source) is null)
                 {
-                    _owner.ClearFilterIfNeeded();
                     e.Handled = true;
                 }
 
@@ -54,6 +54,11 @@ public partial class MainWindow
         public async Task HandlePreviewMouseDownAsync(MouseButtonEventArgs e)
         {
             var source = e.OriginalSource as DependencyObject;
+            if (e.ChangedButton is MouseButton.Left or MouseButton.Right or MouseButton.Middle)
+            {
+                _owner.LogListViewClick(_owner.ItemsList, _owner.GetNormalFolderPane(), e, source);
+            }
+
             if (_owner.IsInsideActiveRenameTextBox(source))
             {
                 ClearPendingSelectionInput();
@@ -263,7 +268,6 @@ public partial class MainWindow
                 {
                     if (_owner.GetFileEntryFromDoubleClickHit(source, position) is null)
                     {
-                        _owner.ClearFilterIfNeeded();
                         e.Handled = true;
                     }
 
@@ -283,7 +287,6 @@ public partial class MainWindow
                 && !_owner.IsInsideScrollBar(source)
                 && FindVisualParent<GridViewColumnHeader>(source) is null)
             {
-                _owner.ClearFilterIfNeeded();
                 e.Handled = true;
             }
         }

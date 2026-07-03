@@ -96,7 +96,6 @@ public partial class MainWindow
             if (wasInternalPage)
             {
                 UpdateWindowTitle();
-                UpdateWorkspaceButtonState();
 
                 if (selectedMainTab is not null && !selectedMainTab.IsInternalPage)
                 {
@@ -152,7 +151,6 @@ public partial class MainWindow
         }
         finally
         {
-            UpdateWorkspaceButtonState();
             UpdateWindowTitle();
             LogMemoryMetrics("tab-switch");
         }

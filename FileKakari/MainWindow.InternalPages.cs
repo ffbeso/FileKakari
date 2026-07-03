@@ -125,7 +125,6 @@ public partial class MainWindow
         var isInternalPage = tab?.IsInternalPage == true;
         InternalPageHost.Content = isInternalPage ? tab!.Content : null;
         InternalPageHost.Visibility = isInternalPage ? Visibility.Visible : Visibility.Collapsed;
-        WorkspaceButton.IsEnabled = !isInternalPage;
         NormalPanePreviewButton.IsEnabled = !isInternalPage;
         if (isInternalPage)
         {

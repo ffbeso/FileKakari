@@ -11,82 +11,6 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
-    private void WorkspaceButton_Click(object sender, RoutedEventArgs e)
-    {
-        // Workspace save/open commands live on W tab context menus. The toolbar button no
-        // longer promotes normal folders based on root .workspace.json files.
-    }
-
-    private enum WorkspaceButtonState
-    {
-        Normal,
-        Active
-    }
-
-    private WorkspaceButtonState GetWorkspaceButtonState()
-    {
-        var session = GetSelectedWorkspaceButtonSession();
-        if (session is null) return WorkspaceButtonState.Normal;
-
-        if (session.IsWorkspace)
-        {
-            return WorkspaceButtonState.Active;
-        }
-
-        return WorkspaceButtonState.Normal;
-    }
-
-    private WorkspaceSession? GetSelectedWorkspaceButtonSession()
-    {
-        return GetSelectedWorkspaceSession() ?? _activeWorkspaceSession;
-    }
-
-    private void UpdateWorkspaceButtonState()
-    {
-        var state = GetWorkspaceButtonState();
-
-        switch (state)
-        {
-            case WorkspaceButtonState.Active:
-                WorkspaceButton.Opacity = 1.0;
-                WorkspaceButton.ToolTip = _text.Get("WorkspaceActiveTooltip");
-                break;
-            case WorkspaceButtonState.Normal:
-            default:
-                WorkspaceButton.Opacity = 0.6;
-                WorkspaceButton.ToolTip = _text.Get("WorkspaceNormalTooltip");
-                break;
-        }
-    }
-
-    private void WorkspaceButtonContextMenu_Opened(object sender, RoutedEventArgs e)
-    {
-        var state = GetWorkspaceButtonState();
-
-        WorkspaceButtonHeader.Visibility = Visibility.Collapsed;
-        WorkspaceButtonSeparator.Visibility = Visibility.Collapsed;
-        OpenWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-        SaveNewWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-        OverwriteWorkspaceMenuItem.Visibility = Visibility.Collapsed;
-        SaveWorkspaceAsMenuItem.Visibility = Visibility.Collapsed;
-        OpenWorkspaceJsonMenuItem.Visibility = Visibility.Collapsed;
-    }
-
-    private async void OpenWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        await Task.CompletedTask;
-    }
-
-    private async void SaveNewWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        await Task.CompletedTask;
-    }
-
-    private void OverwriteWorkspaceMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        SaveWorkspaceMenuItem_Click(GetSelectedWorkspaceButtonSession());
-    }
-
     private void SaveWorkspaceMenuItem_Click(WorkspaceSession? session)
     {
         if (session is null || !session.IsWorkspace)
@@ -111,11 +35,6 @@ public partial class MainWindow
             var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error.");
             MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
-    }
-
-    private void SaveWorkspaceAsMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        SaveWorkspaceAsMenuItem_Click(GetSelectedWorkspaceButtonSession());
     }
 
     private void SaveWorkspaceAsMenuItem_Click(WorkspaceSession? session)
@@ -173,7 +92,6 @@ public partial class MainWindow
 
                         SelectWorkspaceSession(session);
                         UpdateWindowTitle();
-                        UpdateWorkspaceButtonState();
                         SaveSessionState();
                         _performanceLogger.Write(
                             $"workspace-save-as-complete sessionId=\"{session.Id}\" " +
@@ -320,11 +238,6 @@ public partial class MainWindow
         {
             return null;
         }
-    }
-
-    private void OpenWorkspaceJsonMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        OpenWorkspaceJsonMenuItem_Click(GetSelectedWorkspaceButtonSession());
     }
 
     private void OpenWorkspaceJsonMenuItem_Click(WorkspaceSession? session)

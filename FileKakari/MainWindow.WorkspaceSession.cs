@@ -112,7 +112,6 @@ public partial class MainWindow
         RefreshWorkspaceDisplayPanes();
         _performanceLogger.Write($"workspace-file-opened root=\"{workspace.RootPath ?? ""}\" source=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup?.Id ?? ""}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup?.Tabs.Count ?? 0} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
         await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
-        UpdateWorkspaceButtonState();
         return true;
     }
 
@@ -130,7 +129,7 @@ public partial class MainWindow
 
         var workspaceSession = _workspaceSessionFactory.Create(workspace);
         var activePaneGroup = workspaceSession.ActivePaneGroup ?? workspaceSession.PaneGroups.FirstOrDefault();
-        var selectedSession = GetSelectedWorkspaceButtonSession();
+        var selectedSession = GetSelectedWorkspaceSession() ?? _activeWorkspaceSession;
         var replaceIndex = selectedSession is not null ? _workspaceSessions.IndexOf(selectedSession) : -1;
         if (replaceIndex < 0)
         {
@@ -179,7 +178,6 @@ public partial class MainWindow
         RefreshWorkspaceDisplayPanes();
         _performanceLogger.Write($"{logReason} root=\"{workspace.RootPath ?? ""}\" source=\"{workspace.SourceDirectory}\" name=\"{workspace.Name}\" layout={workspace.Layout.GetType().Name} pane=\"{activePaneGroup?.Id ?? ""}\" panes={_workspacePaneGroups.Count} tabs={activePaneGroup?.Tabs.Count ?? 0} selected={TabsControl.SelectedIndex} shared=\"{workspace.SharedPath ?? ""}\" local=\"{workspace.LocalPath ?? ""}\"");
         await LoadWorkspaceDisplayPanesAsync("viewstate-restore");
-        UpdateWorkspaceButtonState();
     }
 
     private void CaptureActiveWorkspacePaneGroup()

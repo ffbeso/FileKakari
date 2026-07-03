@@ -269,26 +269,6 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top">
-                    <Button x:Name="WorkspaceButton"
-                            Width="32"
-                            Height="28"
-                            Padding="0"
-                            Margin="4,0,0,0"
-                            ToolTip="ワークスペース"
-                            Content="💼"
-                            Click="WorkspaceButton_Click">
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="WorkspaceButtonContextMenu" Opened="WorkspaceButtonContextMenu_Opened">
-                                <MenuItem x:Name="WorkspaceButtonHeader" IsEnabled="False" Foreground="{DynamicResource SubtleTextBrush}" />
-                                <Separator x:Name="WorkspaceButtonSeparator" />
-                                <MenuItem x:Name="OpenWorkspaceMenuItem" Click="OpenWorkspaceMenuItem_Click" />
-                                <MenuItem x:Name="SaveNewWorkspaceMenuItem" Click="SaveNewWorkspaceMenuItem_Click" />
-                                <MenuItem x:Name="OverwriteWorkspaceMenuItem" Click="OverwriteWorkspaceMenuItem_Click" />
-                                <MenuItem x:Name="SaveWorkspaceAsMenuItem" Click="SaveWorkspaceAsMenuItem_Click" />
-                                <MenuItem x:Name="OpenWorkspaceJsonMenuItem" Click="OpenWorkspaceJsonMenuItem_Click" />
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
                     <Button x:Name="InternalPageMenuButton"
                             Width="32"
                             Height="28"

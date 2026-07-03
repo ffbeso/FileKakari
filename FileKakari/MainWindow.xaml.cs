@@ -927,7 +927,6 @@ public partial class MainWindow : Window
                 _loadingStateId = null;
                 LoadingProgress.Visibility = Visibility.Collapsed;
                 QueuePostLoadCleanup();
-                UpdateWorkspaceButtonState();
             }
         }
     }

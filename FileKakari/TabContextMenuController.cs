@@ -177,7 +177,8 @@ internal sealed class TabContextMenuController
         saveAsItem.Click += (_, _) => _saveWorkspaceAs(session);
         menu.Items.Add(saveAsItem);
 
-        var hasWorkspaceFile = !string.IsNullOrWhiteSpace(session.WorkspaceFilePath);
+        var hasWorkspaceFile = !string.IsNullOrWhiteSpace(session.WorkspaceFilePath)
+            && File.Exists(session.WorkspaceFilePath);
         var openJsonItem = new MenuItem
         {
             Header = _text.Get("WorkspaceSaveButtonOpenJson"),

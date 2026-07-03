@@ -225,11 +225,7 @@
   <data name="WorkspaceMenu" xml:space="preserve"><value>ワークスペース</value></data>
   <data name="WorkspaceMenuOpenLocal" xml:space="preserve"><value>Workspaceとして開く</value></data>
   <data name="WorkspaceAvailableTooltip" xml:space="preserve"><value>このフォルダにはWorkspaceがあります。クリックしてメニューを開きます</value></data>
-  <data name="WorkspaceActiveTooltip" xml:space="preserve"><value>ワークスペース設定</value></data>
-  <data name="WorkspaceNormalTooltip" xml:space="preserve"><value>ワークスペース</value></data>
-  <data name="WorkspaceSaveButtonHeader" xml:space="preserve"><value>Workspaceファイル（.workspace.json）</value></data>
   <data name="WorkspaceSaveButtonSave" xml:space="preserve"><value>ワークスペースを保存</value></data>
-  <data name="WorkspaceSaveButtonOverwrite" xml:space="preserve"><value>ワークスペースを上書き保存</value></data>
   <data name="WorkspaceSaveButtonSaveAs" xml:space="preserve"><value>ワークスペースに名前を付けて保存...</value></data>
   <data name="WorkspaceSaveButtonOpenJson" xml:space="preserve"><value>.workspace.json を開く</value></data>
   <data name="WorkspaceSaveButtonOpenFolder" xml:space="preserve"><value>Workspace保存先フォルダを開く</value></data>

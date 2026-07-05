@@ -70,7 +70,7 @@
   <data name="FilterApplied" xml:space="preserve"><value>Filter applied / {0:N0} items</value></data>
   <data name="FilterPlaceholder" xml:space="preserve"><value>Filter</value></data>
   <data name="StatusFolderSummary" xml:space="preserve"><value>Total {0:N0} items</value></data>
-  <data name="StatusFilterSummary" xml:space="preserve"><value>Filtered {0:N0} / {1:N0} items</value></data>
+  <data name="StatusFilterSummary" xml:space="preserve"><value>{0:N0} / {1:N0} items shown  Filter: {2}</value></data>
   <data name="StatusSelectionSummary" xml:space="preserve"><value>Selected {0:N0} items, {1}</value></data>
   <data name="StatusPcSummary" xml:space="preserve"><value>{0:N0} drives, {1} free / {2} total</value></data>
   <data name="DeletedMultiple" xml:space="preserve"><value>Deleted {0:N0} items.</value></data>

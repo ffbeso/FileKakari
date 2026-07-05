@@ -110,6 +110,7 @@ public partial class MainWindow : Window
     private int _findScrollViewerCount;
 #endif
     private CancellationTokenSource? _filterCancellation;
+    private int _filterApplyGeneration;
     private bool _isAltNavigationModifierDown;
     private bool _isRestoringTabState;
     private bool _isSwitchingTabs;
@@ -1432,6 +1433,13 @@ public partial class MainWindow : Window
                 await SwitchToTabShortcutAsync(tabIndex);
             }
 
+            return;
+        }
+
+        if (e.Key == Key.Enter && IsFocusedFilterTextBox())
+        {
+            e.Handled = true;
+            ApplyActiveFilterImmediately("enter");
             return;
         }
 

@@ -70,7 +70,7 @@
   <data name="FilterApplied" xml:space="preserve"><value>絞り込み中 / {0:N0}件</value></data>
   <data name="FilterPlaceholder" xml:space="preserve"><value>フィルタ</value></data>
   <data name="StatusFolderSummary" xml:space="preserve"><value>総件数 {0:N0} 件</value></data>
-  <data name="StatusFilterSummary" xml:space="preserve"><value>絞り込み {0:N0} / {1:N0} 件</value></data>
+  <data name="StatusFilterSummary" xml:space="preserve"><value>{0:N0} / {1:N0} 件 表示中  フィルター: {2}</value></data>
   <data name="StatusSelectionSummary" xml:space="preserve"><value>選択 {0:N0} 件, {1}</value></data>
   <data name="StatusPcSummary" xml:space="preserve"><value>ドライブ {0:N0} 件, 空き {1} / 総容量 {2}</value></data>
   <data name="DeletedMultiple" xml:space="preserve"><value>{0:N0} 件を削除しました。</value></data>

@@ -48,10 +48,8 @@ internal sealed class StatusSummaryService
         var totalCount = items.Count;
         if (!string.IsNullOrWhiteSpace(filter))
         {
-            var visibleCount = statusAggregationEnabled
-                ? GetVisibleItemCount(itemsView)
-                : totalCount;
-            var filterSummary = _text.Format("StatusFilterSummary", visibleCount, totalCount);
+            var visibleCount = GetVisibleItemCount(itemsView);
+            var filterSummary = _text.Format("StatusFilterSummary", visibleCount, totalCount, filter);
             return isSpecialLocation
                 ? $"{filterSummary}, {BuildThisPcSummary(items)}"
                 : filterSummary;

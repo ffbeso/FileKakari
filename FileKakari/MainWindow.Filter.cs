@@ -13,6 +13,8 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
+    private const int FilterDebounceDelayMs = 300;
+
     private bool FilterEntry(object item)
     {
         _filterPredicateCount++;
@@ -39,7 +41,7 @@ public partial class MainWindow
         return true;
     }
 
-    private async void FilterBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void FilterBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         if (!_isSyncingPaneFilter
             && !string.Equals(NormalPaneFilterBox.Text, FilterBox.Text, StringComparison.Ordinal))
@@ -55,10 +57,6 @@ public partial class MainWindow
             }
         }
 
-        _filterCancellation?.Cancel();
-        _filterCancellation?.Dispose();
-        _filterCancellation = new CancellationTokenSource();
-        var token = _filterCancellation.Token;
         var filter = FilterBox.Text;
         if (ActiveTab is not { } activeTab)
         {
@@ -71,58 +69,12 @@ public partial class MainWindow
 
         if (_isRestoringTabState)
         {
-            UpdateItemsFilter(filter);
+            ApplyNormalFilterNow(filter, "restore");
             _performanceLogger.Write($"filter-restoring-tab-skip-refresh textLength={filter.Length} items={_items.Count}");
             return;
         }
 
-        if (_items.Count >= 1000)
-        {
-            StatusText.Text = string.IsNullOrWhiteSpace(filter)
-                ? _text.Format("ItemsCount", _items.Count)
-                : _text.Format("Filtering", _items.Count);
-        }
-
-        try
-        {
-            await Task.Delay(120, token);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
-        }
-
-        if (token.IsCancellationRequested)
-        {
-            return;
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        var filterChangedView = UpdateItemsFilter(filter);
-        if (filterChangedView)
-        {
-            stopwatch.Stop();
-            if (_items.Count >= 1000)
-            {
-                _performanceLogger.Write($"filter-refresh count={_items.Count} textLength={filter.Length} elapsedMs={stopwatch.ElapsedMilliseconds}");
-            }
-
-            _statusSummaryCoordinator.StatusMessagePrefix = null;
-            RefreshCurrentFolderSummary();
-            UpdateSelectedItemStatus();
-            return;
-        }
-
-        RefreshItemsView("filter-text-changed");
-        stopwatch.Stop();
-        if (_items.Count >= 1000)
-        {
-            _performanceLogger.Write($"filter-refresh count={_items.Count} textLength={filter.Length} elapsedMs={stopwatch.ElapsedMilliseconds}");
-        }
-
-        _statusSummaryCoordinator.StatusMessagePrefix = null;
-        RefreshCurrentFolderSummary();
-        UpdateSelectedItemStatus();
+        ScheduleNormalFilterApply(activeTab.State, filter);
     }
 
     private bool ClearFilterIfNeeded(string reason = "explicit-clear", [CallerMemberName] string? caller = null)
@@ -143,8 +95,10 @@ public partial class MainWindow
             return false;
         }
 
+        CancelPendingFilterApply();
         LogFilterClear(GetNormalFolderPane(), ActiveTabState, FilterBox.Text, caller ?? "unknown", reason);
         FilterBox.Text = "";
+        ApplyNormalFilterNow("", reason);
         return true;
     }
 
@@ -156,12 +110,12 @@ public partial class MainWindow
             return false;
         }
 
+        CancelPendingFilterApply();
         var oldFilter = state.FilterText;
         LogFilterTextChanged(pane, state, oldFilter, "", caller ?? "unknown", reason);
         state.FilterText = "";
-        _folderPaneController.ApplyFilter(pane, "");
-        _folderPaneController.UpdateStatus(pane);
         SyncWorkspacePaneFilterTextBox(pane, "");
+        ApplyWorkspacePaneFilterNow(pane, state, "", reason);
         _workspaceLocalState.MarkDirty("pane-filter");
         return true;
     }
@@ -240,11 +194,171 @@ public partial class MainWindow
         var filterChanged = !string.Equals(oldFilter, textBox.Text, StringComparison.Ordinal);
         state.FilterText = textBox.Text;
         LogFilterTextChanged(pane, state, oldFilter, state.FilterText, nameof(WorkspacePaneFilterBox_TextChanged), "workspace-pane-filter-box");
-        _folderPaneController.ApplyFilter(pane, state.FilterText);
         if (filterChanged)
         {
+            ScheduleWorkspacePaneFilterApply(pane, state, state.FilterText);
             _workspaceLocalState.MarkDirty("pane-filter");
         }
+    }
+
+    private void ScheduleNormalFilterApply(WorkspaceTabState state, string filter)
+    {
+        var generation = BeginFilterApplySchedule(GetNormalFolderPane(), state, filter);
+        var token = _filterCancellation!.Token;
+        _ = ApplyNormalFilterAfterDelayAsync(state.Id, filter, generation, token);
+    }
+
+    private void ScheduleWorkspacePaneFilterApply(FolderPane pane, WorkspaceTabState state, string filter)
+    {
+        var generation = BeginFilterApplySchedule(pane, state, filter);
+        var token = _filterCancellation!.Token;
+        _ = ApplyWorkspacePaneFilterAfterDelayAsync(pane, state.Id, filter, generation, token);
+    }
+
+    private int BeginFilterApplySchedule(FolderPane? pane, WorkspaceTabState state, string filter)
+    {
+        CancelPendingFilterApply();
+        var generation = ++_filterApplyGeneration;
+        _filterCancellation = new CancellationTokenSource();
+        _performanceLogger.Write(
+            $"filter-schedule paneId=\"{pane?.Id ?? "normal"}\" tabStateId=\"{state.Id}\" " +
+            $"filterText=\"{EscapeLogValue(filter)}\" delayMs={FilterDebounceDelayMs}");
+        return generation;
+    }
+
+    private async Task ApplyNormalFilterAfterDelayAsync(
+        string stateId,
+        string filter,
+        int generation,
+        CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(FilterDebounceDelayMs, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested
+            || generation != _filterApplyGeneration
+            || WorkspaceSplitGrid.Visibility == Visibility.Visible
+            || ActiveTabState?.Id != stateId
+            || !string.Equals(FilterBox.Text, filter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        ApplyNormalFilterNow(filter, "debounce");
+    }
+
+    private async Task ApplyWorkspacePaneFilterAfterDelayAsync(
+        FolderPane pane,
+        string stateId,
+        string filter,
+        int generation,
+        CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(FilterDebounceDelayMs, token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested
+            || generation != _filterApplyGeneration
+            || !ReferenceEquals(GetActiveFolderPane(), pane)
+            || pane.ActiveTabState?.Id != stateId
+            || !string.Equals(pane.ActiveTabState.FilterText, filter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        ApplyWorkspacePaneFilterNow(pane, pane.ActiveTabState, filter, "debounce");
+    }
+
+    private void ApplyActiveFilterImmediately(string reason)
+    {
+        CancelPendingFilterApply();
+        var pane = GetActiveFolderPane();
+        if (pane is not null
+            && IsWorkspaceDisplayPane(pane)
+            && pane.ActiveTabState is { } state)
+        {
+            ApplyWorkspacePaneFilterNow(pane, state, state.FilterText, reason);
+            return;
+        }
+
+        ApplyNormalFilterNow(FilterBox.Text, reason);
+    }
+
+    private void ApplyNormalFilterNow(string filter, string reason)
+    {
+        var state = ActiveTabState;
+        var stopwatch = Stopwatch.StartNew();
+        UpdateItemsFilter(filter);
+        RefreshItemsView($"filter-{reason}");
+        stopwatch.Stop();
+        _statusSummaryCoordinator.StatusMessagePrefix = null;
+        RefreshCurrentFolderSummary();
+        UpdateSelectedItemStatus();
+        LogFilterApply(GetNormalFolderPane(), state, filter, _items.Count, CountVisibleItems(ItemsView), stopwatch.ElapsedMilliseconds, reason);
+    }
+
+    private void ApplyWorkspacePaneFilterNow(FolderPane pane, WorkspaceTabState state, string filter, string reason)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        _folderPaneController.ApplyFilter(pane, filter);
+        stopwatch.Stop();
+        _folderPaneController.UpdateStatus(pane);
+        LogFilterApply(pane, state, filter, pane.FileList.Items.Count, CountVisibleItems(pane.FileList.ItemsView), stopwatch.ElapsedMilliseconds, reason);
+    }
+
+    private bool IsFocusedFilterTextBox()
+    {
+        return Keyboard.FocusedElement is DependencyObject focused
+            && (ReferenceEquals(focused, FilterBox)
+                || ReferenceEquals(focused, NormalPaneFilterBox)
+                || FindVisualParent<TextBox>(focused) is { } textBox
+                    && Equals(textBox.Tag, "PaneFilterBox"));
+    }
+
+    private void CancelPendingFilterApply()
+    {
+        _filterCancellation?.Cancel();
+        _filterCancellation?.Dispose();
+        _filterCancellation = null;
+        _filterApplyGeneration++;
+    }
+
+    private void LogFilterApply(
+        FolderPane? pane,
+        WorkspaceTabState? state,
+        string filter,
+        int totalCount,
+        int visibleCount,
+        long elapsedMs,
+        string reason)
+    {
+        _performanceLogger.Write(
+            $"filter-apply paneId=\"{pane?.Id ?? "normal"}\" tabStateId=\"{state?.Id ?? ""}\" " +
+            $"filterText=\"{EscapeLogValue(filter)}\" totalCount={totalCount} visibleCount={visibleCount} " +
+            $"elapsedMs={elapsedMs} reason={reason}");
+    }
+
+    private static int CountVisibleItems(System.ComponentModel.ICollectionView itemsView)
+    {
+        var count = 0;
+        foreach (var _ in itemsView)
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private void FocusPaneFilterBox()

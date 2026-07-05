@@ -108,7 +108,7 @@ public partial class MainWindow
                     normalizedPath,
                     MainWindow.NormalizeSortColumn(activeTab.State.SortColumn),
                     activeTab.State.SortAscending,
-                    activeTab.State.FilterText,
+                    "",
                     out _);
                 policy = hasSavedState ? FileListRestorePolicy.ExactRestore : FileListRestorePolicy.FocusPathFallback;
             }
@@ -127,6 +127,10 @@ public partial class MainWindow
                 ? _owner.CaptureListViewRestoreState(activeTab, normalizedPath)
                 : _owner.CreateNavigationViewRestoreState(activeTab, normalizedPath, navigationKind);
             _owner.SaveNavigationViewState(activeTab);
+            if (navigationKind != NavigationKind.Refresh)
+            {
+                _owner.ClearFilterIfNeeded($"path-changed-{navigationKind}", nameof(NavigateToFolderAsync));
+            }
             navigation.Commit(normalizedPath, navigationKind);
             await _owner.LoadFolderAsync(normalizedPath, restoreState, activeTab, policy);
             UpdateNavigationButtons();
@@ -203,7 +207,6 @@ public partial class MainWindow
 
         public async Task HandleUpButtonClickAsync()
         {
-            _owner.ClearFilterIfNeeded();
             await OpenParentAsync();
         }
 
@@ -353,7 +356,10 @@ public partial class MainWindow
             targetTab.State.CurrentPath = normalizedPath;
             targetTab.RefreshHeader();
             pane.ResolveTabHeaders();
-            targetTab.State.FilterText = "";
+            if (navigationKind != NavigationKind.Refresh)
+            {
+                _owner.ClearWorkspacePaneFilterIfNeeded(pane, $"path-changed-{navigationKind}", nameof(NavigateWorkspacePaneToFolderAsync));
+            }
             targetTab.State.SelectedPaths = restoreViewState.SelectedPaths.ToList();
             targetTab.State.VerticalOffset = restoreViewState.VerticalOffset;
             pane.FileList.SelectedPaths = restoreViewState.SelectedPaths.ToList();

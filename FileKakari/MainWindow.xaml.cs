@@ -1437,10 +1437,9 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape && !isRenameTextBoxFocused)
         {
-            if (!string.IsNullOrEmpty(FilterBox.Text))
+            if (ClearFilterIfNeeded("escape-key"))
             {
                 e.Handled = true;
-                ClearFilterIfNeeded();
             }
             else if (IsPreviewVisible
                 && (focusedTextBox is null || ReferenceEquals(focusedTextBox, PreviewTextBox)))
@@ -1682,7 +1681,6 @@ public partial class MainWindow : Window
                 && !isImeComposing)
             {
                 e.Handled = true;
-                ClearFilterIfNeeded();
                 await OpenParentAsync();
                 return;
             }
@@ -5908,7 +5906,7 @@ public partial class MainWindow : Window
                 path,
                 NormalizeSortColumn(tab.State.SortColumn),
                 tab.State.SortAscending,
-                tab.State.FilterText,
+                "",
                 out var viewState);
 
             if (hasSavedState)
@@ -7849,7 +7847,6 @@ public partial class MainWindow : Window
                     else if (vk == VK_UP)
                     {
                         if (IsDiagLogEnabled) WriteDiagLog($"shortcut=alt-up matched=true (msg=0x{msg.message:X4})");
-                        ClearFilterIfNeeded();
                         _ = OpenParentAsync();
                         handled = true;
                     }

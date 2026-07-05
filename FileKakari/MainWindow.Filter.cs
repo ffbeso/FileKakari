@@ -125,15 +125,64 @@ public partial class MainWindow
         UpdateSelectedItemStatus();
     }
 
-    private void ClearFilterIfNeeded(string reason = "explicit-clear", [CallerMemberName] string? caller = null)
+    private bool ClearFilterIfNeeded(string reason = "explicit-clear", [CallerMemberName] string? caller = null)
+    {
+        var pane = GetActiveFolderPane();
+        if (pane is not null && IsWorkspaceDisplayPane(pane))
+        {
+            return ClearWorkspacePaneFilterIfNeeded(pane, reason, caller);
+        }
+
+        return ClearNormalPaneFilterIfNeeded(reason, caller);
+    }
+
+    private bool ClearNormalPaneFilterIfNeeded(string reason, string? caller)
     {
         if (string.IsNullOrEmpty(FilterBox.Text))
         {
-            return;
+            return false;
         }
 
         LogFilterClear(GetNormalFolderPane(), ActiveTabState, FilterBox.Text, caller ?? "unknown", reason);
         FilterBox.Text = "";
+        return true;
+    }
+
+    private bool ClearWorkspacePaneFilterIfNeeded(FolderPane pane, string reason, string? caller)
+    {
+        if (pane.ActiveTabState is not { } state
+            || string.IsNullOrEmpty(state.FilterText))
+        {
+            return false;
+        }
+
+        var oldFilter = state.FilterText;
+        LogFilterTextChanged(pane, state, oldFilter, "", caller ?? "unknown", reason);
+        state.FilterText = "";
+        _folderPaneController.ApplyFilter(pane, "");
+        _folderPaneController.UpdateStatus(pane);
+        SyncWorkspacePaneFilterTextBox(pane, "");
+        _workspaceLocalState.MarkDirty("pane-filter");
+        return true;
+    }
+
+    private void SyncWorkspacePaneFilterTextBox(FolderPane pane, string filter)
+    {
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        foreach (var textBox in FindVisualChildren<TextBox>(WorkspaceSplitGrid))
+        {
+            if (Equals(textBox.Tag, "PaneFilterBox")
+                && ReferenceEquals(GetWorkspacePaneFromSender(textBox), pane)
+                && !string.Equals(textBox.Text, filter, StringComparison.Ordinal))
+            {
+                textBox.Text = filter;
+                return;
+            }
+        }
     }
 
     private void SaveCurrentFilterToState(WorkspaceTabState targetState, [CallerMemberName] string? caller = null)

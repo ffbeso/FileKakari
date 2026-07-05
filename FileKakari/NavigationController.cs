@@ -219,7 +219,17 @@ public partial class MainWindow
 
             if (_owner.GetActiveFolderPane() is { } pane && _owner.IsWorkspaceDisplayPane(pane))
             {
+                if (_owner.ClearFilterIfNeeded(pane, "navigation-up", nameof(OpenParentAsync)))
+                {
+                    return;
+                }
+
                 await OpenWorkspacePaneParentAsync(pane);
+                return;
+            }
+
+            if (_owner.ClearFilterIfNeeded("navigation-up", nameof(OpenParentAsync)))
+            {
                 return;
             }
 
@@ -248,6 +258,11 @@ public partial class MainWindow
 
         public async Task OpenWorkspacePaneParentAsync(FolderPane pane)
         {
+            if (_owner.ClearFilterIfNeeded(pane, "navigation-up", nameof(OpenWorkspacePaneParentAsync)))
+            {
+                return;
+            }
+
             if (_owner.GetActiveFolderPaneTab(pane) is not { } tab
                 || SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath))
             {

@@ -80,6 +80,11 @@ public partial class MainWindow
     private bool ClearFilterIfNeeded(string reason = "explicit-clear", [CallerMemberName] string? caller = null)
     {
         var pane = GetActiveFolderPane();
+        return ClearFilterIfNeeded(pane, reason, caller);
+    }
+
+    private bool ClearFilterIfNeeded(FolderPane? pane, string reason, string? caller)
+    {
         if (pane is not null && IsWorkspaceDisplayPane(pane))
         {
             return ClearWorkspacePaneFilterIfNeeded(pane, reason, caller);

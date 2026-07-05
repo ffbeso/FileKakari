@@ -69,6 +69,12 @@ public partial class MainWindow
             return;
         }
 
+        if (ClearFilterIfNeeded(pane, $"navigation-{direction}", nameof(NavigateHistoryAsync)))
+        {
+            WriteDiagLog($"navigate-history-filter-clear direction={direction} paneId={pane.Id}");
+            return;
+        }
+
         var canNavigate = direction == NavigationDirection.Back ? tab.Navigation.CanGoBack : tab.Navigation.CanGoForward;
         WriteDiagLog($"navigate-history direction={direction} can-navigate={canNavigate} active-pane-id={pane.Id} active-path={tab.Navigation.CurrentPath}");
 

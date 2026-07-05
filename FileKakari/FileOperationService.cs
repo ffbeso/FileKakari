@@ -55,6 +55,11 @@ public sealed class FileOperationService
         return FileSystemOperations.DeleteAsync(path, isDirectory);
     }
 
+    public Task<(int ErrorCode, bool UserAborted)> DeleteMultipleAsync(IntPtr hwndOwner, IReadOnlyList<string> sourcePaths)
+    {
+        return Task.Run(() => FileSystemOperations.DeleteMultiple(hwndOwner, sourcePaths));
+    }
+
     public Task CreateDirectoryAsync(string path)
     {
         return FileSystemOperations.CreateDirectoryAsync(path);

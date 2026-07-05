@@ -232,22 +232,33 @@ public static class FileSystemOperations
 
     private const uint FO_MOVE = 0x0001;
     private const uint FO_COPY = 0x0002;
+    private const uint FO_DELETE = 0x0003;
+    private const ushort FOF_NOCONFIRMATION = 0x0010;
     private const ushort FOF_ALLOWUNDO = 0x0040;
     private const ushort FOF_NOCONFIRMMKDIR = 0x0200;
     private const ushort FOF_MULTIDESTFILES = 0x0001;
 
-    private static int CallSHFileOperation(IntPtr hwnd, uint wFunc, string pFrom, string pTo, bool multipleDestinations, out bool fAnyOperationsAborted)
+    private static int CallSHFileOperation(IntPtr hwnd, uint wFunc, string pFrom, string? pTo, bool multipleDestinations, out bool fAnyOperationsAborted)
     {
         fAnyOperationsAborted = false;
         var fromPtr = Marshal.StringToHGlobalUni(pFrom);
-        var toPtr = Marshal.StringToHGlobalUni(pTo);
+        var toPtr = pTo is null ? IntPtr.Zero : Marshal.StringToHGlobalUni(pTo);
         try
         {
-            ushort fFlags = FOF_NOCONFIRMMKDIR;
+            ushort fFlags = 0;
             // NOTE: FOF_ALLOWUNDO allows the Windows Shell to record this file operation to the Windows system Undo stack.
             // This is solely managed by Windows Shell (allowing Explorer's Ctrl+Z to undo this operation).
             // This is NOT recorded in FileKakari's custom Undo manager, and FileKakari's Ctrl+Z will not undo this operation.
             fFlags |= FOF_ALLOWUNDO;
+            if (wFunc == FO_DELETE)
+            {
+                fFlags |= FOF_NOCONFIRMATION;
+            }
+            else
+            {
+                fFlags |= FOF_NOCONFIRMMKDIR;
+            }
+
             if (multipleDestinations)
             {
                 fFlags |= FOF_MULTIDESTFILES;
@@ -313,7 +324,10 @@ public static class FileSystemOperations
         finally
         {
             Marshal.FreeHGlobal(fromPtr);
-            Marshal.FreeHGlobal(toPtr);
+            if (toPtr != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(toPtr);
+            }
         }
     }
 
@@ -332,6 +346,14 @@ public static class FileSystemOperations
         var to = targetDirectory + "\0\0";
         bool userAborted;
         int errorCode = CallSHFileOperation(hwndOwner, FO_MOVE, from, to, false, out userAborted);
+        return (errorCode, userAborted);
+    }
+
+    public static (int ErrorCode, bool UserAborted) DeleteMultiple(IntPtr hwndOwner, IReadOnlyList<string> sourcePaths)
+    {
+        var from = string.Join("\0", sourcePaths) + "\0\0";
+        bool userAborted;
+        int errorCode = CallSHFileOperation(hwndOwner, FO_DELETE, from, null, false, out userAborted);
         return (errorCode, userAborted);
     }
 

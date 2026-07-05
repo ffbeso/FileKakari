@@ -3,6 +3,7 @@ using System.Media;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace FileKakari;
@@ -370,8 +371,29 @@ public partial class MainWindow
         {
             var deletedCount = selectedEntries.Count;
             var paneItems = GetPaneItems(context.Pane);
-            foreach (var entry in selectedEntries)
+            if (selectedEntries.Count > 1)
             {
+                var hwnd = new WindowInteropHelper(this).Handle;
+                var sourcePaths = selectedEntries.Select(entry => entry.FullPath).ToList();
+                var (errorCode, userAborted) = await _fileOperationService.DeleteMultipleAsync(hwnd, sourcePaths);
+                if (userAborted)
+                {
+                    return;
+                }
+
+                if (errorCode != 0)
+                {
+                    throw new IOException($"Shell delete failed. Error code: {errorCode}");
+                }
+
+                foreach (var entry in selectedEntries)
+                {
+                    paneItems.Remove(entry);
+                }
+            }
+            else
+            {
+                var entry = selectedEntries[0];
                 await _fileOperationService.DeleteAsync(entry.FullPath, entry.IsDirectory);
                 paneItems.Remove(entry);
             }

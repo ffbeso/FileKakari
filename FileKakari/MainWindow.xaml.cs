@@ -5214,10 +5214,37 @@ public partial class MainWindow : Window
             : ItemsList;
     }
 
-    private static ListView? FindWorkspacePaneListView(DependencyObject root, FolderPane pane)
+    private ListView? FindWorkspacePaneListView(DependencyObject root, FolderPane pane)
     {
-        return FindVisualChildren<ListView>(root)
-            .FirstOrDefault(listView => ReferenceEquals(listView.DataContext, pane));
+        ListView? fallback = null;
+        ListView? visibleOwnerFallback = null;
+        ListView? visibleFallback = null;
+        foreach (var listView in FindVisualChildren<ListView>(root))
+        {
+            if (!ReferenceEquals(listView.DataContext, pane))
+            {
+                continue;
+            }
+
+            fallback ??= listView;
+            if (listView.IsVisible)
+            {
+                visibleFallback ??= listView;
+            }
+
+            var owner = ResolveWorkspaceVisualOwner(listView);
+            if (ReferenceEquals(owner.Pane, pane) && listView.IsVisible)
+            {
+                visibleOwnerFallback ??= listView;
+                if (IsSameWorkspaceSession(owner.Session, _activeWorkspaceSession)
+                    && IsSameWorkspaceSession(owner.Session, GetSelectedWorkspaceSession()))
+                {
+                    return listView;
+                }
+            }
+        }
+
+        return visibleOwnerFallback ?? visibleFallback ?? fallback;
     }
 
     private IReadOnlyList<FileEntry> GetSelectedWorkspacePaneEntries(FolderPane pane)

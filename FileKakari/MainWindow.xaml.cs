@@ -152,11 +152,7 @@ public partial class MainWindow : Window
     private FolderPane? _workspacePendingRangeSelectionPane;
     private FolderPane? _workspaceRangeSelectionPane;
     private FolderPane? _lastInteractedWorkspaceDisplayPane;
-    private ListView? _workspaceRangeSelectionListView;
-    private Point? _workspaceRangeSelectionStartPoint;
-    private bool _workspaceRangeSelectionMoved;
-    private bool _workspaceRangeSelectionAdditive;
-    private readonly HashSet<FileEntry> _workspaceRangeSelectionBase = [];
+    private ListViewRangeSelectionSession? _workspaceRangeSelectionSession;
     private WorkspaceRangeSelectionAdorner? _workspaceRangeSelectionAdorner;
     private AdornerLayer? _workspaceRangeSelectionAdornerLayer;
     private FileEntry? _pendingSingleSelectionClickEntry;
@@ -3163,15 +3159,7 @@ public partial class MainWindow : Window
     {
         ClearFileDragStart();
         _workspaceRangeSelectionPane = pane;
-        _workspaceRangeSelectionListView = listView;
-        _workspaceRangeSelectionStartPoint = startPoint;
-        _workspaceRangeSelectionMoved = false;
-        _workspaceRangeSelectionAdditive = additive;
-        _workspaceRangeSelectionBase.Clear();
-        foreach (var entry in listView.SelectedItems.OfType<FileEntry>())
-        {
-            _workspaceRangeSelectionBase.Add(entry);
-        }
+        _workspaceRangeSelectionSession = new ListViewRangeSelectionSession(listView, startPoint, additive);
 
         listView.Focus();
         EnsureWorkspaceRangeSelectionAdorner(listView);
@@ -3209,8 +3197,8 @@ public partial class MainWindow : Window
             return true;
         }
 
-        if (_workspaceRangeSelectionStartPoint is not { } startPoint
-            || !ReferenceEquals(_workspaceRangeSelectionListView, listView)
+        if (_workspaceRangeSelectionSession is null
+            || !ReferenceEquals(_workspaceRangeSelectionSession.ListView, listView)
             || !ReferenceEquals(listView.DataContext, _workspaceRangeSelectionPane))
         {
             return false;
@@ -3223,17 +3211,14 @@ public partial class MainWindow : Window
         }
 
         var currentPoint = e.GetPosition(listView);
-        if (!_workspaceRangeSelectionMoved
-            && Math.Abs(currentPoint.X - startPoint.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(currentPoint.Y - startPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        if (!_workspaceRangeSelectionSession.CheckMove(currentPoint))
         {
             return true;
         }
 
-        _workspaceRangeSelectionMoved = true;
-        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(startPoint, currentPoint);
+        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(_workspaceRangeSelectionSession.StartPoint, currentPoint);
         DrawWorkspacePaneRangeSelection(listView, selectionRect);
-        ApplyWorkspacePaneRangeSelection(listView, selectionRect);
+        _workspaceRangeSelectionSession.ApplySelection(currentPoint);
         return true;
     }
 
@@ -3246,8 +3231,8 @@ public partial class MainWindow : Window
     {
         if (changedButton != MouseButton.Left
             || sender is not ListView listView
-            || _workspaceRangeSelectionStartPoint is null
-            || !ReferenceEquals(_workspaceRangeSelectionListView, listView)
+            || _workspaceRangeSelectionSession is null
+            || !ReferenceEquals(_workspaceRangeSelectionSession.ListView, listView)
             || _workspaceRangeSelectionPane is not { } pane
             || !ReferenceEquals(listView.DataContext, pane)
             || !IsPaneOwnedByActiveWorkspaceSession(pane))
@@ -3255,7 +3240,7 @@ public partial class MainWindow : Window
             return false;
         }
 
-        if (!_workspaceRangeSelectionMoved && !_workspaceRangeSelectionAdditive)
+        if (!_workspaceRangeSelectionSession.Moved && !_workspaceRangeSelectionSession.Additive)
         {
             ClearSelectionForPane(pane, listView, updateStatus: false);
         }
@@ -3268,15 +3253,6 @@ public partial class MainWindow : Window
         ClearWorkspacePaneRangeSelection();
         SyncPaneSelectionFromListView(pane, listView);
         return true;
-    }
-
-    private void ApplyWorkspacePaneRangeSelection(ListView listView, Rect selectionRect)
-    {
-        FileListRangeSelectionHelper.SelectItemsInRange(
-            listView,
-            selectionRect,
-            _workspaceRangeSelectionAdditive,
-            _workspaceRangeSelectionBase);
     }
 
     private void EnsureWorkspaceRangeSelectionAdorner(ListView listView)
@@ -3319,17 +3295,13 @@ public partial class MainWindow : Window
 
     private void ClearWorkspacePaneRangeSelection()
     {
-        if (_workspaceRangeSelectionListView?.IsMouseCaptured == true)
+        if (_workspaceRangeSelectionSession?.ListView?.IsMouseCaptured == true)
         {
-            _workspaceRangeSelectionListView.ReleaseMouseCapture();
+            _workspaceRangeSelectionSession.ListView.ReleaseMouseCapture();
         }
 
         _workspaceRangeSelectionPane = null;
-        _workspaceRangeSelectionListView = null;
-        _workspaceRangeSelectionStartPoint = null;
-        _workspaceRangeSelectionMoved = false;
-        _workspaceRangeSelectionAdditive = false;
-        _workspaceRangeSelectionBase.Clear();
+        _workspaceRangeSelectionSession = null;
         ClearWorkspaceRangeSelectionAdorner();
     }
 

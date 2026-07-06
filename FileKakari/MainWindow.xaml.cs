@@ -2788,34 +2788,35 @@ public partial class MainWindow : Window
 
     private async void WorkspacePaneButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isSwitchingWorkspacePane
-            || sender is not FrameworkElement element
+        if (sender is not FrameworkElement element
             || element.DataContext is not WorkspacePaneGroup paneGroup)
         {
             return;
         }
 
-        if (!IsPaneOwnedByActiveWorkspaceSession(paneGroup))
+        var wasActive = ReferenceEquals(paneGroup, _activeWorkspaceSession?.ActivePaneGroup);
+        if (!TryRequestActivePane(paneGroup, "click"))
         {
-            PerfLog.WriteVerbose($"workspace-pane-button-skip reason=inactive-session-pane paneId={paneGroup.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             return;
         }
 
-        await SwitchWorkspacePaneGroupAsync(paneGroup);
+        if (!wasActive)
+        {
+            await SwitchWorkspacePaneGroupAsync(paneGroup);
+        }
     }
 
     private void WorkspacePaneFileList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_isSwitchingWorkspacePane
-            || sender is not ListView listView
+        if (sender is not ListView listView
             || listView.DataContext is not FolderPane pane)
         {
             return;
         }
 
-        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        var isAccepted = TryRequestActivePane(pane, "listview", listView);
+        if (!isAccepted)
         {
-            PerfLog.WriteVerbose($"workspace-pane-input-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             return;
         }
 
@@ -2824,8 +2825,36 @@ public partial class MainWindow : Window
             PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e);
         }
 
-        RememberWorkspacePaneInteraction(pane);
         ScheduleWorkspacePaneActivation(pane);
+    }
+
+    private void WorkspacePaneFileList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is ListView listView && listView.DataContext is FolderPane pane)
+        {
+            TryRequestActivePane(pane, "focus", listView);
+        }
+    }
+
+    private void ItemsList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible
+            && GetNormalFolderPane() is { } pane
+            && ActiveSession is { } session)
+        {
+            var oldPaneId = session.ActivePaneId;
+            session.ActivePaneGroup = pane as WorkspacePaneGroup ?? session.ActivePaneGroup;
+            session.ActivePaneId = pane.Id;
+            WriteActivePaneRequestLog(
+                "focus",
+                oldPaneId,
+                pane.Id,
+                session.Id,
+                _activeWorkspaceSession?.Id ?? "null",
+                GetSelectedWorkspaceSession()?.Id ?? "null",
+                accepted: true,
+                "accepted");
+        }
     }
 
     private const double SplitterGuardWidth = 6.0;
@@ -4905,9 +4934,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+        var wasActive = ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup);
+        if (!TryRequestActivePane(pane, "subtab", sender as DependencyObject))
         {
-            PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
             return;
         }
 
@@ -4922,7 +4951,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ReferenceEquals(paneGroup, _activeWorkspaceSession.ActivePaneGroup))
+        if (wasActive)
         {
             UpdateWindowTitle();
             return;
@@ -4939,13 +4968,110 @@ public partial class MainWindow : Window
             {
                 if (scheduledSwitchGeneration != _workspaceSwitchGeneration)
                 {
-                    PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=switch-generation-mismatch scheduledGeneration={scheduledSwitchGeneration} currentGeneration={_workspaceSwitchGeneration} paneId={pane.Id}");
+                    WriteActivePaneRequestLog(
+                        "click",
+                        _activeWorkspaceSession?.ActivePaneId ?? "null",
+                        pane.Id,
+                        ResolveActivePaneOwner(pane).Session?.Id,
+                        _activeWorkspaceSession?.Id ?? "null",
+                        GetSelectedWorkspaceSession()?.Id ?? "null",
+                        accepted: false,
+                        $"switch-generation-mismatch scheduledGeneration={scheduledSwitchGeneration} currentGeneration={_workspaceSwitchGeneration}");
                     return;
                 }
 
                 ActivateWorkspacePaneAfterDeferredInput(pane);
             }),
             DispatcherPriority.Background);
+    }
+
+    private bool TryRequestActivePane(FolderPane pane, string source, DependencyObject? eventSource = null)
+    {
+        var owner = eventSource is null ? ResolveActivePaneOwner(pane) : ResolveWorkspaceVisualOwner(eventSource);
+        var targetSession = owner.Session ?? ResolveActivePaneOwner(pane).Session;
+        var oldPaneId = targetSession?.ActivePaneId ?? _activeWorkspaceSession?.ActivePaneId ?? "null";
+        var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
+        var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
+
+        if (_activeWorkspaceSession is null)
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession?.Id, activeSessionId, selectedSessionId, accepted: false, "no-active-session");
+            return false;
+        }
+
+        if (_isSwitchingWorkspacePane)
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession?.Id, activeSessionId, selectedSessionId, accepted: false, "switching-workspace-pane");
+            return false;
+        }
+
+        if (targetSession is null || owner.Pane is null)
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession?.Id, activeSessionId, selectedSessionId, accepted: false, "unresolved-visible-owner");
+            return false;
+        }
+
+        if (!ReferenceEquals(owner.Pane, pane))
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession.Id, activeSessionId, selectedSessionId, accepted: false, "owner-pane-mismatch");
+            return false;
+        }
+
+        if (!IsSameWorkspaceSession(targetSession, _activeWorkspaceSession)
+            || !IsSameWorkspaceSession(targetSession, GetSelectedWorkspaceSession()))
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession.Id, activeSessionId, selectedSessionId, accepted: false, "inactive-session-pane");
+            return false;
+        }
+
+        if (!targetSession.PaneGroups.Any(candidate => ReferenceEquals(candidate, pane)))
+        {
+            WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession.Id, activeSessionId, selectedSessionId, accepted: false, "pane-not-in-session");
+            return false;
+        }
+
+        _lastInteractedWorkspaceDisplayPane = pane;
+        if (pane is WorkspacePaneGroup paneGroup)
+        {
+            _activeWorkspacePaneGroup = paneGroup;
+            targetSession.ActivePaneGroup = paneGroup;
+            targetSession.ActivePaneId = paneGroup.Id;
+        }
+
+        UpdateWorkspacePaneActiveStates();
+        WriteActivePaneRequestLog(source, oldPaneId, pane.Id, targetSession.Id, activeSessionId, selectedSessionId, accepted: true, "accepted");
+        return true;
+    }
+
+    private WorkspaceVisualOwner ResolveActivePaneOwner(FolderPane pane)
+    {
+        if (_activeWorkspaceSession?.PaneGroups.Any(candidate => ReferenceEquals(candidate, pane)) == true)
+        {
+            return new WorkspaceVisualOwner(_activeWorkspaceSession, pane);
+        }
+
+        var session = _workspaceSessions.FirstOrDefault(candidate =>
+            candidate.PaneGroups.Any(p => ReferenceEquals(p, pane)));
+        return session is null
+            ? new WorkspaceVisualOwner(null, null)
+            : new WorkspaceVisualOwner(session, pane);
+    }
+
+    private void WriteActivePaneRequestLog(
+        string source,
+        string oldPaneId,
+        string newPaneId,
+        string? sessionId,
+        string activeSessionId,
+        string selectedSessionId,
+        bool accepted,
+        string reason)
+    {
+        PerfLog.WriteVerbose(
+            $"active-pane-request source={source} oldPaneId={oldPaneId} newPaneId={newPaneId} " +
+            $"sessionId={sessionId ?? "null"} activeSessionId={activeSessionId} selectedSessionId={selectedSessionId} " +
+            $"isSwitchingWorkspacePane={_isSwitchingWorkspacePane} isSwitchingTabs={_isSwitchingTabs} " +
+            $"restoreDepth={_workspaceSwitchRestoreDepth} accepted={(accepted ? "accepted" : "skipped")} reason={reason}");
     }
 
     private void RememberWorkspacePaneInteraction(FolderPane pane)
@@ -4972,21 +5098,37 @@ public partial class MainWindow : Window
             || !IsWorkspaceDisplayPane(pane)
             || !IsPaneOwnedByActiveWorkspaceSession(pane))
         {
-            return;
-        }
-
-        if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
-        {
+            WriteActivePaneRequestLog(
+                "click",
+                _activeWorkspaceSession?.ActivePaneId ?? "null",
+                pane.Id,
+                ResolveActivePaneOwner(pane).Session?.Id,
+                _activeWorkspaceSession?.Id ?? "null",
+                GetSelectedWorkspaceSession()?.Id ?? "null",
+                accepted: false,
+                "inactive-session-pane");
             return;
         }
 
         if (!IsSameWorkspaceSession(_activeWorkspaceSession, GetSelectedWorkspaceSession()))
         {
-            PerfLog.WriteVerbose($"workspace-pane-activation-skip reason=selected-session-mismatch paneId={pane.Id} activeSessionId={_activeWorkspaceSession.Id} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+            WriteActivePaneRequestLog(
+                "click",
+                _activeWorkspaceSession.ActivePaneId,
+                pane.Id,
+                ResolveActivePaneOwner(pane).Session?.Id,
+                _activeWorkspaceSession.Id,
+                GetSelectedWorkspaceSession()?.Id ?? "null",
+                accepted: false,
+                "selected-session-mismatch");
             return;
         }
 
-        RememberWorkspacePaneInteraction(pane);
+        if (!TryRequestActivePane(pane, "click"))
+        {
+            return;
+        }
+
         if (pane is WorkspacePaneGroup paneGroup)
         {
             EnsureWorkspacePaneHasFallbackTab(paneGroup);

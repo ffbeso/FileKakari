@@ -237,10 +237,20 @@ public partial class MainWindow
 
     private void LoadWorkspacePaneGroup(WorkspacePaneGroup paneGroup)
     {
+        var oldPaneId = _activeWorkspaceSession.ActivePaneId;
         _activeWorkspacePaneGroup = paneGroup;
         _lastInteractedWorkspaceDisplayPane = paneGroup;
         _activeWorkspaceSession.ActivePaneGroup = paneGroup;
         _activeWorkspaceSession.ActivePaneId = paneGroup.Id;
+        WriteActivePaneRequestLog(
+            "workspace-switch",
+            oldPaneId,
+            paneGroup.Id,
+            _activeWorkspaceSession.Id,
+            _activeWorkspaceSession.Id,
+            GetSelectedWorkspaceSession()?.Id ?? "null",
+            accepted: true,
+            "accepted");
         EnsureWorkspacePaneHasFallbackTab(paneGroup);
         _workspacePaneUiController.SetActivePaneGroup(paneGroup);
         _activeWorkspaceSession.SelectedTabIndex = Math.Clamp(paneGroup.SelectedTabIndex, 0, Math.Max(0, paneGroup.Tabs.Count));
@@ -299,9 +309,13 @@ public partial class MainWindow
             return;
         }
 
-        foreach (var paneGroup in _activeWorkspaceSession.PaneGroups)
+        foreach (var session in _workspaceSessions)
         {
-            paneGroup.IsActive = ReferenceEquals(paneGroup, _activeWorkspaceSession.ActivePaneGroup);
+            var isActiveSession = IsSameWorkspaceSession(session, _activeWorkspaceSession);
+            foreach (var paneGroup in session.PaneGroups)
+            {
+                paneGroup.IsActive = isActiveSession && ReferenceEquals(paneGroup, _activeWorkspaceSession.ActivePaneGroup);
+            }
         }
     }
 
@@ -745,8 +759,7 @@ public partial class MainWindow
 
         if (_activeWorkspaceSession?.IsWorkspace != true
             || paneGroup.Workspace is null
-            || !IsPaneOwnedByActiveWorkspaceSession(paneGroup)
-            || ReferenceEquals(paneGroup, _activeWorkspacePaneGroup))
+            || !IsPaneOwnedByActiveWorkspaceSession(paneGroup))
         {
             return;
         }

@@ -533,11 +533,18 @@ public partial class MainWindow
             .Select(entry => entry.FullPath)
             .ToList() ?? [];
 
-        pane.SelectedPaths = currentSelection;
-        if (pane.ActiveTabState is { } state)
+        if (TryGetDisplayedWorkspacePaneTab(pane, out var displayedTab))
         {
-            state.SelectedPaths = currentSelection;
+            if (ReferenceEquals(displayedTab, pane.ActiveTab))
+            {
+                pane.SelectedPaths = currentSelection;
+            }
+
+            displayedTab.State.SelectedPaths = currentSelection;
+            return;
         }
+
+        PerfLog.WriteVerbose($"workspace-selection-sync-after-load-skip reason=displayed-tab-unresolved paneId={pane.Id} loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" activeStateId=\"{pane.ActiveTabState?.Id ?? ""}\"");
     }
 
     private void RestoreWorkspacePaneListViewOpacityIfNeeded(FolderPane pane)

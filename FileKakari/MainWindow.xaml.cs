@@ -5254,6 +5254,27 @@ public partial class MainWindow : Window
 
 
 
+    private bool TryGetDisplayedWorkspacePaneTab(FolderPane pane, out FolderTab tab)
+    {
+        tab = null!;
+        var loadedStateId = pane.FileList.LoadedStateId;
+        if (string.IsNullOrWhiteSpace(loadedStateId))
+        {
+            return false;
+        }
+
+        tab = pane.Tabs.FirstOrDefault(candidate =>
+            string.Equals(candidate.State.Id, loadedStateId, StringComparison.Ordinal))!;
+        return tab is not null;
+    }
+
+    private FolderTab GetDisplayedWorkspacePaneTabOrDefault(FolderPane pane, FolderTab fallbackTab)
+    {
+        return TryGetDisplayedWorkspacePaneTab(pane, out var displayedTab)
+            ? displayedTab
+            : fallbackTab;
+    }
+
     private FolderTab? GetActiveFolderPaneTab(FolderPane pane)
     {
         if (pane.Tabs.Count == 0)
@@ -5304,11 +5325,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        pane.ScrollOffset = e.VerticalOffset;
-        if (pane.ActiveTabState is { } state)
+        if (TryGetDisplayedWorkspacePaneTab(pane, out var displayedTab))
         {
-            state.VerticalOffset = e.VerticalOffset;
+            if (ReferenceEquals(displayedTab, pane.ActiveTab))
+            {
+                pane.ScrollOffset = e.VerticalOffset;
+            }
+
+            displayedTab.State.VerticalOffset = e.VerticalOffset;
+            return;
         }
+
+        PerfLog.WriteVerbose($"workspace-scroll-sync-skip reason=displayed-tab-unresolved paneId={pane.Id} loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" activeStateId=\"{pane.ActiveTabState?.Id ?? ""}\" offset={e.VerticalOffset:N1}");
     }
 
     private void Tabs_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -6168,22 +6196,27 @@ public partial class MainWindow : Window
 
     private void SaveWorkspacePaneNavigationViewState(FolderPane pane, FolderTab tab)
     {
+        var targetTab = GetDisplayedWorkspacePaneTabOrDefault(pane, tab);
         var verticalOffset = GetFolderPaneVerticalOffset(pane);
         var selectedPaths = GetFolderPaneListView(pane)?.SelectedItems
             .OfType<FileEntry>()
             .Select(entry => entry.FullPath)
             .ToList()
             ?? pane.SelectedPaths;
-        pane.ScrollOffset = verticalOffset;
-        tab.State.VerticalOffset = verticalOffset;
-        tab.State.SelectedPaths = selectedPaths;
-        SaveNavigationViewState(tab, tab.Navigation.CurrentPath, tab.State.FilterText, verticalOffset, selectedPaths);
+        if (ReferenceEquals(targetTab, pane.ActiveTab))
+        {
+            pane.ScrollOffset = verticalOffset;
+        }
+
+        targetTab.State.VerticalOffset = verticalOffset;
+        targetTab.State.SelectedPaths = selectedPaths;
+        SaveNavigationViewState(targetTab, targetTab.Navigation.CurrentPath, targetTab.State.FilterText, verticalOffset, selectedPaths);
 
         if (_performanceLogger.IsEnabled)
         {
             var firstPath = selectedPaths.Count > 0 ? selectedPaths[0] : "";
             var lastPath = selectedPaths.Count > 0 ? selectedPaths[^1] : "";
-            PerfLog.WriteVerbose($"workspace-save-state paneId={pane.Id} path=\"{tab.Navigation.CurrentPath}\" offset={verticalOffset} selectedCount={selectedPaths.Count} first=\"{firstPath}\" last=\"{lastPath}\"");
+            PerfLog.WriteVerbose($"workspace-save-state paneId={pane.Id} requestedTabStateId={tab.State.Id} savedTabStateId={targetTab.State.Id} loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" path=\"{targetTab.Navigation.CurrentPath}\" offset={verticalOffset} selectedCount={selectedPaths.Count} first=\"{firstPath}\" last=\"{lastPath}\"");
         }
     }
 

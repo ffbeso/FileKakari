@@ -110,13 +110,19 @@ public partial class MainWindow
             .OfType<FileEntry>()
             .Select(entry => entry.FullPath)
             .ToList();
-        pane.SelectedPaths = selectedPaths;
-        if (pane.ActiveTabState is { } state)
+        if (TryGetDisplayedWorkspacePaneTab(pane, out var displayedTab))
         {
-            state.SelectedPaths = selectedPaths;
+            if (ReferenceEquals(displayedTab, pane.ActiveTab))
+            {
+                pane.SelectedPaths = selectedPaths;
+            }
+
+            displayedTab.State.SelectedPaths = selectedPaths;
+            UpdateWorkspacePaneStatusAsync(pane, listView.SelectedItems.OfType<FileEntry>().ToList());
+            return;
         }
 
-        UpdateWorkspacePaneStatusAsync(pane, listView.SelectedItems.OfType<FileEntry>().ToList());
+        PerfLog.WriteVerbose($"workspace-selection-sync-skip reason=displayed-tab-unresolved paneId={pane.Id} loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" activeStateId=\"{pane.ActiveTabState?.Id ?? ""}\"");
     }
 
     private void UpdateWorkspacePaneStatus(FolderPane pane)

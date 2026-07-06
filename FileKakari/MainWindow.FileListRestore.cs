@@ -269,7 +269,8 @@ public partial class MainWindow
             }
 
             pane.ScrollOffset = offset;
-            if (pane.ActiveTabState is { } state)
+            if (pane.ActiveTabState is { } state
+                && string.Equals(pane.FileList.LoadedStateId, state.Id, StringComparison.Ordinal))
             {
                 state.VerticalOffset = offset;
             }

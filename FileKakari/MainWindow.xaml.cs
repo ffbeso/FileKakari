@@ -5918,47 +5918,7 @@ public partial class MainWindow : Window
     }
 
 
-    private void SaveTabViewState(FolderTab tab)
-    {
-        if (_isLoading || !string.IsNullOrEmpty(_loadingStateId))
-        {
-            _performanceLogger.Write($"tab-cache-save-skip reason=loading stateId={tab.State.Id} activeStateId={_activeStateId ?? ""} loadingStateId={_loadingStateId ?? ""} path=\"{tab.Navigation.CurrentPath}\"");
-            return;
-        }
 
-        if (!string.Equals(_itemsOwnerStateId, tab.State.Id, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        try
-        {
-            var targetState = tab.State;
-            var normalPane = GetNormalFolderPane();
-            if (normalPane is not null)
-            {
-                SyncNormalPaneDisplayStateFromView(normalPane);
-            }
-
-            SaveCurrentFilterToState(targetState);
-            targetState.SortColumn = NormalizeSortColumn(targetState.SortColumn);
-            targetState.VerticalOffset = normalPane?.ScrollOffset ?? GetCurrentVerticalOffset();
-            targetState.SelectedPaths = normalPane?.SelectedPaths.ToList()
-                ?? ItemsList.SelectedItems
-                    .OfType<FileEntry>()
-                    .Select(entry => entry.FullPath)
-                    .ToList();
-            var cacheMemoryBefore = GetProcessWorkingSetBytes();
-            tab.StoreItems(tab.Navigation.CurrentPath, _items.ToList());
-            var cacheMemoryAfter = GetProcessWorkingSetBytes();
-            _performanceLogger.Write($"tab-cache-save stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={targetState.CachedItems?.Count ?? 0} selected={targetState.SelectedPaths.Count} offset={targetState.VerticalOffset:N1} memoryDeltaMb={(cacheMemoryAfter - cacheMemoryBefore) / 1024d / 1024d:N1} memory={GetProcessMemoryStatus()}");
-        }
-        catch (Exception ex)
-        {
-            LogException("tab-cache-save", ex, tab.State);
-            throw;
-        }
-    }
 
     private async Task CloseSessionsToRightAsync(WorkspaceSession session)
     {
@@ -6000,35 +5960,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SaveActiveTabViewState()
-    {
-        if (GetSelectedWorkspaceSession() is not null)
-        {
-            SaveWorkspacePanesViewState(_activeWorkspaceSession);
-            var tab = ActiveTab;
-            if (tab is null || _activeWorkspaceSession is null)
-            {
-                return;
-            }
 
-            SaveTabViewState(tab);
-            if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
-            {
-                var rootOffset = (_activeWorkspaceSession.Workspace is not null && _activeWorkspaceSession.Workspace.HasRootPath) ? 1 : 0;
-                _activeWorkspaceSession.SelectedTabIndex = Math.Clamp(
-                    _activeWorkspacePaneGroup.SelectedTabIndex + rootOffset,
-                    0,
-                    Math.Max(0, _activeWorkspacePaneGroup.Tabs.Count));
-            }
-            else
-            {
-                var primaryPane = _activeWorkspaceSession.PaneGroups.FirstOrDefault(p => string.Equals(p.Id, "primary", StringComparison.OrdinalIgnoreCase)) ?? _activeWorkspaceSession.PaneGroups.FirstOrDefault();
-                _activeWorkspaceSession.SelectedTabIndex = primaryPane is not null ? Math.Clamp(primaryPane.Tabs.IndexOf(tab), 0, Math.Max(0, primaryPane.Tabs.Count - 1)) : 0;
-                _activeWorkspacePaneGroup.SelectedTabIndex = _activeWorkspaceSession.SelectedTabIndex;
-            }
-            _activeWorkspacePaneGroup.RefreshDisplay();
-        }
-    }
 
     private ListViewRestoreState? CreateRestoreStateFromTab(FolderTab tab)
     {
@@ -8037,91 +7969,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SaveWorkspacePanesViewState()
-    {
-        SaveWorkspacePanesViewState(_activeWorkspaceSession);
-    }
 
-    private void SaveWorkspacePanesViewState(WorkspaceSession? targetSession)
-    {
-        if (WorkspaceSplitGrid.Visibility != Visibility.Visible)
-        {
-            return;
-        }
-
-        if (targetSession is null)
-        {
-            return;
-        }
-
-        var targetPanes = targetSession.PaneGroups.ToList();
-
-        if (_performanceLogger.IsEnabled)
-        {
-            var displayPaneIds = string.Join(",", _workspaceDisplayPanes.Select(p => p.Id));
-            var targetPaneIds = string.Join(",", targetPanes.Select(p => p.Id));
-            var activeSessionId = _activeWorkspaceSession?.Id ?? "null";
-            var selectedSessionId = GetSelectedWorkspaceSession()?.Id ?? "null";
-
-            _performanceLogger.Write($"workspace-save-viewstate-debug " +
-                $"targetSessionId={targetSession.Id} " +
-                $"activeSessionId={activeSessionId} " +
-                $"selectedSessionId={selectedSessionId} " +
-                $"displayPaneIds=[{displayPaneIds}] " +
-                $"targetPanes=[{targetPaneIds}]");
-
-            if (targetSession.LayoutRoot is null)
-            {
-                PerfLog.WriteVerbose($"workspace-save-viewstate-layoutroot-null " +
-                    $"sessionId={targetSession.Id} " +
-                    $"sessionName=\"{targetSession.Name}\" " +
-                    $"_activeWorkspaceSessionId={activeSessionId}");
-            }
-
-            foreach (var pane in targetPanes)
-            {
-                var listView = GetFolderPaneListView(pane);
-                var scrollViewer = listView != null ? FindVisualChild<ScrollViewer>(listView) : null;
-                var offset = scrollViewer?.VerticalOffset ?? pane.ScrollOffset;
-                var selectedCount = listView?.SelectedItems.Count ?? 0;
-                var activeTabStateSelectedCount = pane.ActiveTab?.State.SelectedPaths.Count ?? 0;
-
-                var selectedItem = listView?.SelectedItem;
-                var itemType = selectedItem?.GetType().FullName ?? "null";
-                var itemPath = "";
-                if (selectedItem is FileEntry entry)
-                {
-                    itemPath = entry.FullPath;
-                }
-                else if (selectedItem != null)
-                {
-                    itemPath = selectedItem.ToString();
-                }
-
-                var paneSession = _workspaceSessions.FirstOrDefault(s => s.PaneGroups.Any(pg => ReferenceEquals(pg, pane)));
-                var paneSessionId = paneSession?.Id ?? "null";
-
-                PerfLog.WriteVerbose($"workspace-pane-save-debug paneId={pane.Id} " +
-                    $"paneSessionId={paneSessionId} " +
-                    $"activeSessionId={activeSessionId} " +
-                    $"listViewExists={listView != null} " +
-                    $"scrollViewerExists={scrollViewer != null} " +
-                    $"offset={offset} " +
-                    $"selectedCount={selectedCount} " +
-                    $"activeTabStateSelectedCount={activeTabStateSelectedCount} " +
-                    $"selectedItemType=\"{itemType}\" " +
-                    $"selectedItemPath=\"{itemPath}\"");
-            }
-        }
-
-        foreach (var pane in targetPanes)
-        {
-            if (pane.ActiveTab is { } tab)
-            {
-                SaveWorkspacePaneNavigationViewState(pane, tab);
-            }
-        }
-    }
 
 
 }

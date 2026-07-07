@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace FileKakari;
 
@@ -1348,5 +1349,189 @@ public partial class MainWindow
     private void WorkspacePaneTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _ = ActivateWorkspacePaneFromSenderAsync(sender);
+    }
+
+    private async Task SwitchSubTabByOffsetAsync(int offset)
+    {
+        var pane = GetActiveFolderPane();
+        if (pane is null || pane.Tabs.Count <= 1)
+        {
+            return;
+        }
+
+        var newIndex = (pane.ActiveTabIndex + offset + pane.Tabs.Count) % pane.Tabs.Count;
+        if (IsDiagLogEnabled) WriteDiagLog($"SwitchSubTabByOffsetAsync index={pane.ActiveTabIndex}->{newIndex}");
+
+        var previousTab = pane.ActiveTab;
+        var targetTab = pane.Tabs[newIndex];
+
+        _isSwitchingSubTabByKey = true;
+        try
+        {
+            if (previousTab is not null)
+            {
+                SaveWorkspacePaneColumnWidthsForTab(pane, previousTab);
+                SaveWorkspacePaneNavigationViewState(pane, previousTab);
+            }
+
+            pane.SelectedTabId = targetTab.Id;
+
+            var listBox = FindSubTabBarListBoxForPane(pane);
+            if (listBox is not null)
+            {
+                if (!ReferenceEquals(listBox.SelectedItem, targetTab))
+                {
+                    listBox.SelectedItem = targetTab;
+                }
+                BringWorkspacePaneSelectedSubTabIntoView(listBox);
+            }
+
+            if (_activeWorkspaceSession is not null)
+            {
+                await ActivateWorkspacePaneFromSenderAsync(listBox ?? (object)pane);
+            }
+
+            targetTab.State.CurrentPath = targetTab.Navigation.CurrentPath;
+            ApplyDisplayModeToPane(pane);
+            pane.RefreshDisplay();
+
+            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
+
+            UpdateFolderWatchForWorkspacePanes();
+            ApplyColumnSettingsToWorkspacePane(pane);
+            UpdateWindowTitle();
+            ScheduleSessionSave("subtab-selection-changed-offset");
+        }
+        finally
+        {
+            _isSwitchingSubTabByKey = false;
+        }
+
+        FocusActiveFileList();
+        FocusSelectedListViewItemOfActivePane();
+    }
+
+    private void RestoreWorkspacePaneSubTabSelection(ListBox? listBox, FolderPane pane, FolderTab selectedTab)
+    {
+        RestoreWorkspacePaneSubTabSelection(listBox, pane, selectedTab.Id, selectedTab);
+    }
+
+    private void RestoreWorkspacePaneSubTabSelection(ListBox? listBox, FolderPane pane, string? selectedTabId = null)
+    {
+        RestoreWorkspacePaneSubTabSelection(listBox, pane, selectedTabId, selectedTab: null);
+    }
+
+    private void RestoreWorkspacePaneSubTabSelection(ListBox? listBox, FolderPane pane, string? selectedTabId, FolderTab? selectedTab)
+    {
+        if (listBox is null)
+        {
+            return;
+        }
+
+        ApplyWorkspacePaneSubTabSelection(listBox, pane, selectedTabId, selectedTab);
+        var scheduledSwitchGeneration = _workspaceSwitchGeneration;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (scheduledSwitchGeneration != _workspaceSwitchGeneration)
+            {
+                PerfLog.WriteVerbose($"workspace-subtab-selection-restore-skip reason=switch-generation-mismatch scheduledGeneration={scheduledSwitchGeneration} currentGeneration={_workspaceSwitchGeneration} paneId={pane.Id}");
+                return;
+            }
+
+            ApplyWorkspacePaneSubTabSelection(listBox, pane, selectedTabId, selectedTab);
+        }, DispatcherPriority.ContextIdle);
+    }
+
+    private void ApplyWorkspacePaneSubTabSelection(ListBox listBox, FolderPane pane, string? selectedTabId, FolderTab? selectedTab)
+    {
+        if (listBox.DataContext is not FolderPane currentPane
+            || !ReferenceEquals(currentPane, pane))
+        {
+            return;
+        }
+
+        var targetTab = selectedTab is not null && pane.Tabs.Contains(selectedTab)
+            ? selectedTab
+            : pane.Tabs.FirstOrDefault(tab => string.Equals(tab.Id, selectedTabId ?? pane.SelectedTabId, StringComparison.Ordinal));
+        if (targetTab is null)
+        {
+            return;
+        }
+
+        if (!string.Equals(pane.SelectedTabId, targetTab.Id, StringComparison.Ordinal))
+        {
+            pane.SelectedTabId = targetTab.Id;
+        }
+
+        if (!ReferenceEquals(listBox.SelectedItem, targetTab))
+        {
+            listBox.SelectedItem = targetTab;
+        }
+
+        if (!string.Equals(listBox.SelectedValue as string, targetTab.Id, StringComparison.Ordinal))
+        {
+            listBox.SelectedValue = targetTab.Id;
+        }
+
+        BringWorkspacePaneSelectedSubTabIntoView(listBox);
+    }
+
+    private async void WorkspacePaneSubTabBar_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isSwitchingSubTabByKey)
+        {
+            return;
+        }
+
+        if (sender is ListBox listBox
+            && listBox.DataContext is FolderPane pane)
+        {
+            if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+            {
+                PerfLog.WriteVerbose($"workspace-subtab-selection-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                return;
+            }
+
+            if (e.RemovedItems.OfType<FolderTab>().FirstOrDefault() is { } previousTab)
+            {
+                SaveWorkspacePaneColumnWidthsForTab(pane, previousTab);
+                SaveWorkspacePaneNavigationViewState(pane, previousTab);
+            }
+
+            if (pane.ActiveTab is { } activeTab)
+            {
+                if (_activeWorkspaceSession is not null)
+                {
+                    _ = ActivateWorkspacePaneFromSenderAsync(listBox);
+                }
+                BringWorkspacePaneSelectedSubTabIntoView(listBox);
+                activeTab.State.CurrentPath = activeTab.Navigation.CurrentPath;
+                ApplyDisplayModeToPane(pane);
+                pane.RefreshDisplay();
+                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
+                UpdateFolderWatchForWorkspacePanes();
+                ApplyColumnSettingsToWorkspacePane(pane);
+
+                UpdateWindowTitle();
+                ScheduleSessionSave("subtab-selection-changed");
+            }
+        }
+    }
+
+    private void BringWorkspacePaneSelectedSubTabIntoView(ListBox listBox)
+    {
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (listBox.SelectedItem is not { } selectedItem)
+            {
+                return;
+            }
+
+            listBox.UpdateLayout();
+            if (listBox.ItemContainerGenerator.ContainerFromItem(selectedItem) is FrameworkElement item)
+            {
+                item.BringIntoView();
+            }
+        }, DispatcherPriority.ContextIdle);
     }
 }

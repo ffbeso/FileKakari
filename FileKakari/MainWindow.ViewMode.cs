@@ -14,24 +14,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void WorkspacePaneViewModeButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetSelectedInternalPage() is not null) return;
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (sender is not FrameworkElement placementTarget
-            || GetWorkspacePaneFromSender(sender) is not { } pane
-            || pane.ActiveTabState is not { } state)
-        {
-            return;
-        }
 
-        _viewModeController.ShowWorkspaceMenu(
-            placementTarget,
-            pane,
-            state,
-            reason => _workspaceLocalState.MarkDirty(reason),
-            ApplyDisplayModeToPane);
-    }
 
     private void ApplyDisplayMode()
     {

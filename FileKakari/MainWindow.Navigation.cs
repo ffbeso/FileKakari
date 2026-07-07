@@ -205,43 +205,7 @@ public partial class MainWindow
         menu.IsOpen = true;
     }
 
-    private void WorkspacePanePlacesButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (sender is not FrameworkElement placementTarget
-            || GetWorkspacePaneFromSender(sender) is not { } pane)
-        {
-            return;
-        }
 
-        ShowPlacesMenu(placementTarget, path => NavigateWorkspacePaneToFolderAsync(pane, path, NavigationKind.New));
-    }
-
-    private async void WorkspacePanePathBox_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (sender is not TextBox textBox
-            || GetWorkspacePaneFromSender(sender) is not { } pane)
-        {
-            return;
-        }
-
-        if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            textBox.Text = pane.CurrentPath;
-            textBox.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        e.Handled = true;
-        await NavigateWorkspacePaneToFolderAsync(pane, textBox.Text, NavigationKind.New);
-        textBox.Visibility = Visibility.Collapsed;
-    }
 
     private ActiveNavigationContext GetActiveNavigationContext(FolderPane? targetPane = null)
     {
@@ -331,15 +295,7 @@ public partial class MainWindow
         }
     }
 
-    private async void WorkspacePaneBreadcrumbButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (sender is Button { Tag: string targetPath }
-            && GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await NavigateWorkspacePaneToFolderAsync(pane, targetPath, NavigationKind.New);
-        }
-    }
+
 
     private void PathBarHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -369,27 +325,7 @@ public partial class MainWindow
         }
     }
 
-    private void WorkspacePanePathBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (FindVisualParent<Button>(e.OriginalSource as DependencyObject) is not null
-            || IsInsideScrollBar(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
 
-        if (FindVisualChild<TextBox>((DependencyObject)sender) is { } textBox
-            && GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            e.Handled = true;
-            ShowPanePathTextBox(textBox, pane.CurrentPath);
-        }
-    }
-
-    private void WorkspacePaneTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-    }
 
     private void BeginPanePathEdit()
     {
@@ -448,13 +384,7 @@ public partial class MainWindow
         NormalPanePathBox.Visibility = Visibility.Collapsed;
     }
 
-    private void WorkspacePanePathBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-        {
-            textBox.Visibility = Visibility.Collapsed;
-        }
-    }
+
 
     private void PathBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {

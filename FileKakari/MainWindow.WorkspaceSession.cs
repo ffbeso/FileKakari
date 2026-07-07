@@ -1225,4 +1225,128 @@ public partial class MainWindow
             await ReloadFolderPanesShowingPathAsync(tab.Navigation.CurrentPath, context.Pane);
         }
     }
+
+    private void WorkspacePanePlacesButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (sender is not FrameworkElement placementTarget
+            || GetWorkspacePaneFromSender(sender) is not { } pane)
+        {
+            return;
+        }
+
+        ShowPlacesMenu(placementTarget, path => NavigateWorkspacePaneToFolderAsync(pane, path, NavigationKind.New));
+    }
+
+    private void WorkspacePaneViewModeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetSelectedInternalPage() is not null) return;
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (sender is not FrameworkElement placementTarget
+            || GetWorkspacePaneFromSender(sender) is not { } pane
+            || pane.ActiveTabState is not { } state)
+        {
+            return;
+        }
+
+        _viewModeController.ShowWorkspaceMenu(
+            placementTarget,
+            pane,
+            state,
+            reason => _workspaceLocalState.MarkDirty(reason),
+            ApplyDisplayModeToPane);
+    }
+
+    private async void WorkspacePaneNewFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await CreateNewItemAsync(NewItemKind.Folder, pane);
+        }
+    }
+
+    private async void WorkspacePaneNewFileButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await CreateNewItemAsync(NewItemKind.TextFile, pane);
+        }
+    }
+
+    private async void WorkspacePaneDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await DeleteSelectedAsync(pane);
+        }
+    }
+
+    private void WorkspacePanePathBar_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (FindVisualParent<Button>(e.OriginalSource as DependencyObject) is not null
+            || IsInsideScrollBar(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        if (FindVisualChild<TextBox>((DependencyObject)sender) is { } textBox
+            && GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            e.Handled = true;
+            ShowPanePathTextBox(textBox, pane.CurrentPath);
+        }
+    }
+
+    private async void WorkspacePaneBreadcrumbButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (sender is Button { Tag: string targetPath }
+            && GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await NavigateWorkspacePaneToFolderAsync(pane, targetPath, NavigationKind.New);
+        }
+    }
+
+    private async void WorkspacePanePathBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox textBox
+            || GetWorkspacePaneFromSender(sender) is not { } pane)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            textBox.Text = pane.CurrentPath;
+            textBox.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await NavigateWorkspacePaneToFolderAsync(pane, textBox.Text, NavigationKind.New);
+        textBox.Visibility = Visibility.Collapsed;
+    }
+
+    private void WorkspacePanePathBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            textBox.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void WorkspacePaneTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+    }
 }

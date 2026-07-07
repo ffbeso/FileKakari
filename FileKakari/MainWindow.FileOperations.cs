@@ -803,32 +803,7 @@ public partial class MainWindow
         await CreateNewItemAsync(NewItemKind.TextFile);
     }
 
-    private async void WorkspacePaneNewFolderButton_Click(object sender, RoutedEventArgs e)
-    {
-        await ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await CreateNewItemAsync(NewItemKind.Folder, pane);
-        }
-    }
 
-    private async void WorkspacePaneNewFileButton_Click(object sender, RoutedEventArgs e)
-    {
-        await ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await CreateNewItemAsync(NewItemKind.TextFile, pane);
-        }
-    }
-
-    private async void WorkspacePaneDeleteButton_Click(object sender, RoutedEventArgs e)
-    {
-        await ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await DeleteSelectedAsync(pane);
-        }
-    }
 
     private void RenameTextBox_Loaded(object sender, RoutedEventArgs e)
     {

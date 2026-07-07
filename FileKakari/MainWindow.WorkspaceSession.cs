@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 
 namespace FileKakari;
 
@@ -1077,5 +1078,151 @@ public partial class MainWindow
                 listBox is not ListView
                 && ReferenceEquals(listBox.DataContext, pane)
                 && ReferenceEquals(listBox.ItemsSource, pane.Tabs));
+    }
+
+    private async void WorkspacePaneButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element
+            || element.DataContext is not WorkspacePaneGroup paneGroup)
+        {
+            return;
+        }
+
+        var wasActive = ReferenceEquals(paneGroup, _activeWorkspaceSession?.ActivePaneGroup);
+        if (!TryRequestActivePane(paneGroup, "click"))
+        {
+            return;
+        }
+
+        if (!wasActive)
+        {
+            await SwitchWorkspacePaneGroupAsync(paneGroup);
+        }
+    }
+
+    private void WorkspacePaneFileList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is ListView listView && listView.DataContext is FolderPane pane)
+        {
+            TryRequestActivePane(pane, "focus", listView);
+        }
+    }
+
+    private async Task ActivateWorkspacePaneFromSenderAsync(object sender, bool allowRefresh = true)
+    {
+        if (_activeWorkspaceSession is null)
+        {
+            return;
+        }
+
+        if (GetWorkspacePaneFromSender(sender) is not { } pane)
+        {
+            return;
+        }
+
+        var wasActive = ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup);
+        if (!TryRequestActivePane(pane, "subtab", sender as DependencyObject))
+        {
+            return;
+        }
+
+        _lastInteractedWorkspaceDisplayPane = pane;
+        if (pane is not WorkspacePaneGroup paneGroup)
+        {
+            if (allowRefresh)
+            {
+                RefreshWorkspaceDisplayPanes();
+            }
+            UpdateWindowTitle();
+            return;
+        }
+
+        if (wasActive)
+        {
+            UpdateWindowTitle();
+            return;
+        }
+
+        await SwitchWorkspacePaneGroupAsync(paneGroup);
+    }
+
+    private async Task SwitchPaneFocusByOffsetAsync(int offset)
+    {
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var panes = _workspaceDisplayPanes;
+        if (panes is null || panes.Count <= 1)
+        {
+            return;
+        }
+
+        var activePane = GetActiveFolderPane();
+        if (activePane is null)
+        {
+            return;
+        }
+        var currentIndex = panes.IndexOf(activePane);
+        if (currentIndex < 0)
+        {
+            currentIndex = 0;
+        }
+
+        var nextIndex = (currentIndex + offset + panes.Count) % panes.Count;
+        var targetPane = panes[nextIndex];
+
+        if (IsDiagLogEnabled) WriteDiagLog($"SwitchPaneFocusByOffsetAsync index={currentIndex}->{nextIndex} paneId={targetPane.Id}");
+
+        // 既存のペインアクティブ化処理を通す
+        await ActivateWorkspacePaneFromSenderAsync(targetPane);
+
+        // アクティブ表示更新
+        UpdateWorkspacePaneActiveStates();
+
+        // リストビューにフォーカスを当て、選択項目へフォーカスを復元する
+        FocusActiveFileList();
+        FocusSelectedListViewItemOfActivePane();
+    }
+
+    private async void WorkspacePaneBackButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await NavigateHistoryAsync(NavigationDirection.Back, pane);
+        }
+    }
+
+    private async void WorkspacePaneForwardButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane)
+        {
+            await NavigateHistoryAsync(NavigationDirection.Forward, pane);
+        }
+    }
+
+    private async void WorkspacePaneUpButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is not { } pane)
+        {
+            return;
+        }
+
+        await _navigationController.OpenWorkspacePaneParentAsync(pane);
+    }
+
+    private async void WorkspacePaneRefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        var pane = GetWorkspacePaneFromSender(sender);
+        var context = GetActiveNavigationContext(pane);
+        if (context.Pane is not null && context.Tab is { } tab)
+        {
+            await ReloadFolderPanesShowingPathAsync(tab.Navigation.CurrentPath, context.Pane);
+        }
     }
 }

@@ -205,46 +205,6 @@ public partial class MainWindow
         menu.IsOpen = true;
     }
 
-    private async void WorkspacePaneBackButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await NavigateHistoryAsync(NavigationDirection.Back, pane);
-        }
-    }
-
-    private async void WorkspacePaneForwardButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is { } pane)
-        {
-            await NavigateHistoryAsync(NavigationDirection.Forward, pane);
-        }
-    }
-
-    private async void WorkspacePaneUpButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        if (GetWorkspacePaneFromSender(sender) is not { } pane)
-        {
-            return;
-        }
-
-        await _navigationController.OpenWorkspacePaneParentAsync(pane);
-    }
-
-    private async void WorkspacePaneRefreshButton_Click(object sender, RoutedEventArgs e)
-    {
-        _ = ActivateWorkspacePaneFromSenderAsync(sender);
-        var pane = GetWorkspacePaneFromSender(sender);
-        var context = GetActiveNavigationContext(pane);
-        if (context.Pane is not null && context.Tab is { } tab)
-        {
-            await ReloadFolderPanesShowingPathAsync(tab.Navigation.CurrentPath, context.Pane);
-        }
-    }
-
     private void WorkspacePanePlacesButton_Click(object sender, RoutedEventArgs e)
     {
         _ = ActivateWorkspacePaneFromSenderAsync(sender);

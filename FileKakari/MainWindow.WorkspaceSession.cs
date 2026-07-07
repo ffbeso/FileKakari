@@ -44,8 +44,7 @@ public partial class MainWindow
 
         if (existingSession is not null)
         {
-            _workspaceLocalState.SaveActiveLocalState();
-            SaveActiveTabViewState();
+            SaveAllActiveStates();
 
             var selectResult = _workspaceController.TrySelectSession(_activeWorkspaceSession, existingSession);
             if (selectResult.Success)
@@ -68,8 +67,8 @@ public partial class MainWindow
             return true;
         }
 
-        _workspaceLocalState.SaveActiveLocalState();
-        SaveActiveTabViewState();
+
+        SaveAllActiveStates();
         _loadCancellation?.Cancel();
         ClearLastClosedStates();
 
@@ -122,8 +121,8 @@ public partial class MainWindow
 
     private async Task ReplaceCurrentSessionWithWorkspaceAsync(WorkspaceDefinition workspace, string logReason)
     {
-        _workspaceLocalState.SaveActiveLocalState();
-        SaveActiveTabViewState();
+
+        SaveAllActiveStates();
         _loadCancellation?.Cancel();
         ClearLastClosedStates();
 

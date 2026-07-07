@@ -5650,11 +5650,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        SaveActiveTabViewState();
-        if (result.RequiresSaveActiveLocalState)
-        {
-            _workspaceLocalState.SaveActiveLocalState();
-        }
+        SaveAllActiveStates(result.RequiresSaveActiveLocalState);
 
         if (result.ClosedSessionIndex is { } index)
         {
@@ -5889,8 +5885,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        SaveActiveTabViewState();
-        _workspaceLocalState.SaveActiveLocalState();
+        SaveAllActiveStates();
+
         _isSwitchingTabs = true;
         try
         {
@@ -5928,8 +5924,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        SaveActiveTabViewState();
-        _workspaceLocalState.SaveActiveLocalState();
+        SaveAllActiveStates();
+
         _isSwitchingTabs = true;
         try
         {

@@ -1127,4 +1127,14 @@ public partial class MainWindow
             currentCancellation.Dispose();
         }
     }
+
+    private void SaveAllActiveStates(bool saveLocalState = true)
+    {
+        if (saveLocalState)
+        {
+            _workspaceLocalState.SaveActiveLocalState();
+        }
+
+        SaveActiveTabViewState();
+    }
 }

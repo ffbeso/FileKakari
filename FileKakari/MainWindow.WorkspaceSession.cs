@@ -1534,4 +1534,195 @@ public partial class MainWindow
             }
         }, DispatcherPriority.ContextIdle);
     }
+
+    private async void WorkspacePaneNewSubTabButton_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane && pane.ActiveTab is { } activeTab)
+        {
+            var newTab = _tabOperations.CreateNewTab(activeTab.Navigation.CurrentPath, activeTab);
+            pane.AddTab(newTab);
+
+            await _navigationController.NavigateWorkspacePaneToFolderAsync(pane, newTab.Navigation.CurrentPath, NavigationKind.New);
+            ScheduleSessionSave("new-subtab");
+        }
+    }
+
+    private async void WorkspacePaneSubTabClose_Click(object sender, RoutedEventArgs e)
+    {
+        _ = ActivateWorkspacePaneFromSenderAsync(sender);
+        if (sender is FrameworkElement element
+            && element.DataContext is FolderTab targetTab
+            && FindVisualParent<ListBox>(element) is ListBox listBox
+            && listBox.DataContext is FolderPane pane)
+        {
+            var activeTabBeforeClose = ReferenceEquals(_workspaceSubTabClosePaneBeforeClick, pane)
+                ? _workspaceSubTabCloseActiveTabBeforeClick
+                : null;
+            _workspaceSubTabClosePaneBeforeClick = null;
+            _workspaceSubTabCloseActiveTabBeforeClick = null;
+            await CloseWorkspacePaneSubTabAsync(pane, targetTab, listBox, activeTabBeforeClose);
+            e.Handled = true;
+        }
+        else
+        {
+            _workspaceSubTabClosePaneBeforeClick = null;
+            _workspaceSubTabCloseActiveTabBeforeClick = null;
+        }
+    }
+
+    private void WorkspacePaneSubTabClose_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement element
+            && FindVisualParent<ListBox>(element) is ListBox { DataContext: FolderPane pane })
+        {
+            _workspaceSubTabClosePaneBeforeClick = pane;
+            _workspaceSubTabCloseActiveTabBeforeClick = pane.ActiveTab;
+        }
+    }
+
+    private async Task CloseWorkspacePaneSubTabAsync(
+        FolderPane pane,
+        FolderTab tab,
+        ListBox? listBox = null,
+        FolderTab? activeTabBeforeClose = null)
+    {
+        SaveWorkspacePanesViewState();
+        var session = _workspaceSessions.FirstOrDefault(s => s.PaneGroups.Any(pg => ReferenceEquals(pg, pane)));
+        if (session is null)
+        {
+            return;
+        }
+
+        // 1. ロック済みサブタブの場合: 当然閉じない
+        if (tab.IsFolderLocked)
+        {
+            _performanceLogger.Write($"close-subtab-blocked reason=subtab-locked path=\"{tab.Navigation.CurrentPath}\"");
+            return;
+        }
+
+        var totalTabsInSession = session.PaneGroups.Sum(pg => pg.Tabs.Count);
+
+        // 2. 最後のサブタブの場合
+        if (totalTabsInSession == 1)
+        {
+            // ロック済みメインタブの場合: 最後のサブタブを閉じようとしても拒否
+            if (session.IsLocked)
+            {
+                _performanceLogger.Write($"close-subtab-blocked reason=maintab-locked path=\"{tab.Navigation.CurrentPath}\"");
+                return;
+            }
+
+            if (_workspaceSessions.Count > 1)
+            {
+                await CloseSessionAsync(session);
+            }
+            return;
+        }
+
+        // 3. 複数ペインWorkspaceで対象ペインの最後のサブタブを閉じる場合
+        if (pane.Tabs.Count == 1)
+        {
+            SaveTabViewState(tab);
+            _lastClosedSubTab = new ClosedSubTabState(
+                pane.Id,
+                _tabOperations.CaptureClosedTabState(tab, 0, 1) with { Index = 0 });
+            _lastClosedKind = LastClosedKind.SubTab;
+
+            CloseWorkspacePane(pane);
+            return;
+        }
+
+        // 4. それ以外の場合
+        var oldIndex = pane.Tabs.IndexOf(tab);
+        if (oldIndex < 0)
+        {
+            return;
+        }
+
+        var previousActiveTab = activeTabBeforeClose ?? pane.ActiveTab;
+        var wasActiveTab = ReferenceEquals(previousActiveTab, tab);
+        var previousSelectedTabId = previousActiveTab?.Id ?? pane.SelectedTabId;
+        SaveTabViewState(tab);
+        _lastClosedSubTab = new ClosedSubTabState(
+            pane.Id,
+            _tabOperations.CaptureClosedTabState(tab, oldIndex, pane.Tabs.Count) with { Index = oldIndex });
+        _lastClosedKind = LastClosedKind.SubTab;
+
+        pane.RemoveTab(tab, session.RootPath);
+        if (wasActiveTab)
+        {
+            await ActivateWorkspacePaneAfterSubTabCloseAsync(pane, oldIndex, listBox);
+        }
+        else
+        {
+            await RestoreWorkspacePaneActiveSubTabAfterNonActiveCloseAsync(pane, previousActiveTab, previousSelectedTabId, listBox);
+        }
+
+        _workspaceLocalState.QueueCapture(markDirty: true, reason: "remove-subtab");
+        UpdateFolderWatch();
+        UpdateWindowTitle();
+    }
+
+    private async Task ActivateWorkspacePaneAfterSubTabCloseAsync(FolderPane pane, int oldIndex, ListBox? listBox)
+    {
+        if (_activeWorkspaceSession is not { } session || pane.Tabs.Count == 0)
+        {
+            return;
+        }
+
+        var newIndex = Math.Clamp(oldIndex, 0, pane.Tabs.Count - 1);
+        var nextTab = pane.Tabs[newIndex];
+        pane.SelectedTabId = nextTab.Id;
+        if (pane is WorkspacePaneGroup paneGroup)
+        {
+            _lastInteractedWorkspaceDisplayPane = paneGroup;
+            _activeWorkspacePaneGroup = paneGroup;
+            session.ActivePaneGroup = paneGroup;
+            session.ActivePaneId = paneGroup.Id;
+            var rootOffset = session.Workspace?.HasRootPath == true ? 1 : 0;
+            session.SelectedTabIndex = Math.Clamp(
+                paneGroup.SelectedTabIndex + rootOffset,
+                0,
+                Math.Max(0, paneGroup.Tabs.Count));
+        }
+
+        RestoreWorkspacePaneSubTabSelection(listBox, pane, nextTab);
+        ApplyWorkspaceSessionToFolderTabs();
+        ApplyDisplayModeToPane(pane);
+        pane.RefreshDisplay();
+        await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
+        UpdateWorkspacePaneActiveStates();
+        UpdateFolderWatchForWorkspacePanes();
+        ApplyColumnSettingsToWorkspacePane(pane);
+        RefreshPreviewForActiveSelection();
+        ScheduleSessionSave("subtab-close-active");
+    }
+
+    private async Task RestoreWorkspacePaneActiveSubTabAfterNonActiveCloseAsync(
+        FolderPane pane,
+        FolderTab? previousActiveTab,
+        string? previousSelectedTabId,
+        ListBox? listBox)
+    {
+        var targetTab = previousActiveTab is not null && pane.Tabs.Contains(previousActiveTab)
+            ? previousActiveTab
+            : pane.Tabs.FirstOrDefault(tab => string.Equals(tab.Id, previousSelectedTabId, StringComparison.Ordinal));
+
+        if (targetTab is null)
+        {
+            RestoreWorkspacePaneSubTabSelection(listBox, pane, previousSelectedTabId);
+            return;
+        }
+
+        pane.SelectedTabId = targetTab.Id;
+        RestoreWorkspacePaneSubTabSelection(listBox, pane, targetTab);
+        ApplyWorkspaceSessionToFolderTabs();
+        pane.RefreshDisplay();
+        await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
+        UpdateFolderWatchForWorkspacePanes();
+        ApplyColumnSettingsToWorkspacePane(pane);
+        RefreshPreviewForActiveSelection();
+        ScheduleSessionSave("subtab-close-inactive");
+    }
 }

@@ -945,4 +945,186 @@ public partial class MainWindow
             }
         }
     }
+
+    private async Task RestoreWorkspaceTabAsync(WorkspaceSession workspaceSession)
+    {
+        var switchId = System.Threading.Interlocked.Increment(ref _workspaceSwitchGeneration);
+        var previousCancellation = _workspaceSwitchCancellation;
+        var currentCancellation = new CancellationTokenSource();
+        _workspaceSwitchCancellation = currentCancellation;
+
+        var requestedSessionId = workspaceSession.Id;
+        var requestedSession = workspaceSession;
+        var oldSession = _activeWorkspaceSession;
+        var targetPanes = requestedSession.PaneGroups.ToList();
+        var targetLayoutRoot = requestedSession.LayoutRoot;
+        var targetDisplayLayoutRoot = requestedSession.DisplayLayoutRoot;
+
+        WriteWorkspaceSwitchLog("workspace-switch-request", switchId, requestedSessionId, "selection-requested");
+
+        if (previousCancellation is not null)
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-cancel", switchId, requestedSessionId, "previous-switch-superseded");
+            previousCancellation.Cancel();
+        }
+
+        try
+        {
+            _workspaceSwitchRestoreDepth++;
+            var token = currentCancellation.Token;
+
+            var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, requestedSession);
+            if (!result.Success)
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "selection-rejected");
+                return;
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            UpdateCrashContextSnapshot("workspace-tab-restore");
+
+            if (result.RequiresSaveActiveLocalState)
+            {
+                SaveWorkspacePanesViewState(oldSession);
+                _workspaceLocalState.SaveActiveLocalState();
+            }
+
+            _activeWorkspaceSession = requestedSession;
+            UpdateActiveWorkspaceSessionUi(requestedSession);
+            RefreshWorkspaceDisplayPanes("workspace-switch-active-session-set", switchId, requestedSession);
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            if (result.ActiveSessionChanged)
+            {
+                CancelActiveLoadForWorkspaceSwitch(requestedSession, "workspace-restore");
+            }
+
+            ApplyWorkspaceSessionSelection(requestedSession, switchId);
+
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag", switchId, requestedSession);
+
+            if (HasUnresolvedWorkspacePaneViews(requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-wait-ui", switchId, requestedSession.Id, "pane-view-unresolved");
+                await Dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Loaded);
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSession.Id, "stale-switch");
+                return;
+            }
+
+            WriteWorkspacePaneDiagnostics("workspace-switch-diag-post", switchId, requestedSession);
+
+            if (HasUnresolvedWorkspacePaneViews(requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-container-unresolved", switchId, requestedSession.Id, "pane-view-still-unresolved");
+            }
+
+            PerfLog.WriteVerbose($"workspace-tab-restore sessionId={requestedSession.Id} root=\"{requestedSession.RootPath}\" panes={targetPanes.Count} selected={TabsControl.SelectedIndex} targetLayoutRoot=\"{DebugDumpLayout(targetLayoutRoot)}\" targetDisplayLayoutRoot=\"{DebugDumpLayout(targetDisplayLayoutRoot)}\"");
+
+            await LoadWorkspaceDisplayPanesOnSwitchAsync(switchId, requestedSession, targetPanes, token);
+
+            token.ThrowIfCancellationRequested();
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            try
+            {
+                if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+                {
+                    foreach (var lv in FindVisualChildren<ListView>(WorkspaceSplitGrid))
+                    {
+                        WriteWorkspaceListViewDiagnostics("workspace-listview-final", lv);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    WriteDiagLog($"event=workspace-listview-final-scan-error message=\"{ex.Message}\"");
+                }
+                catch { }
+            }
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            ApplyWorkspacePostLoadState(requestedSession, switchId);
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            if (!EnsureWorkspaceSwitchDisplayState(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "display-binding-mismatch");
+                return;
+            }
+
+            var visibleHostDiagnostics = WriteWorkspaceVisibleHostDiagnostics("workspace-visible-host-final", switchId, requestedSession);
+            var hitTestDiagnostics = WriteWorkspaceHitTestDiagnostics("workspace-hit-test-final", switchId, requestedSession);
+
+            if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "stale-switch");
+                return;
+            }
+
+            if (!EnsureWorkspaceSwitchDisplayState(switchId, requestedSession))
+            {
+                WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "display-binding-mismatch");
+                return;
+            }
+
+            WriteWorkspaceLayoutSyncDiagnostics("workspace-switch-apply:before", switchId, requestedSession);
+
+            if (!IsVisibleWorkspaceHostMatch(requestedSession, hitTestDiagnostics))
+            {
+                WriteWorkspaceVisibleHostMismatchDiagnostics(
+                    switchId,
+                    requestedSessionId,
+                    visibleHostDiagnostics,
+                    hitTestDiagnostics);
+            }
+
+            WriteWorkspaceSwitchLog("workspace-switch-apply", switchId, requestedSessionId, "completed");
+        }
+        catch (OperationCanceledException)
+        {
+            WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, requestedSessionId, "cancelled");
+        }
+        finally
+        {
+            if (_workspaceSwitchRestoreDepth > 0)
+            {
+                _workspaceSwitchRestoreDepth--;
+            }
+
+            if (ReferenceEquals(_workspaceSwitchCancellation, currentCancellation))
+            {
+                _workspaceSwitchCancellation = null;
+            }
+            currentCancellation.Dispose();
+        }
+    }
 }

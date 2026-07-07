@@ -14,15 +14,12 @@ public sealed class SelectionInteractionController
     private readonly Func<bool> _isLoading;
     private readonly Action _clearFileDragStart;
     private readonly Action _updateSelectedItemStatus;
-    private bool _moved;
-    private bool _additive;
+    private ListViewRangeSelectionSession? _session;
     private bool _isRestoringScroll;
-    private Point _startPoint;
     private Rect? _pendingRect;
     private ScrollViewer? _scrollViewer;
     private double _horizontalOffset;
     private double _verticalOffset;
-    private readonly HashSet<FileEntry> _baseSelection = [];
 
     public SelectionInteractionController(
         ListView itemsList,
@@ -51,14 +48,7 @@ public sealed class SelectionInteractionController
 
         _clearFileDragStart();
         IsSelecting = true;
-        _moved = false;
-        _additive = additive;
-        _startPoint = startPoint;
-        _baseSelection.Clear();
-        foreach (var entry in _itemsList.SelectedItems.OfType<FileEntry>())
-        {
-            _baseSelection.Add(entry);
-        }
+        _session = new ListViewRangeSelectionSession(_itemsList, startPoint, additive);
 
         _scrollViewer = FindVisualChild<ScrollViewer>(_itemsList);
         if (_scrollViewer is not null)
@@ -177,25 +167,22 @@ public sealed class SelectionInteractionController
 
     private void Update(Point currentPoint)
     {
-        if (Mouse.LeftButton != MouseButtonState.Pressed)
+        if (Mouse.LeftButton != MouseButtonState.Pressed || _session is null)
         {
             Finish();
             return;
         }
 
         currentPoint = ClampToItemsList(currentPoint);
-        if (!_moved
-            && Math.Abs(currentPoint.X - _startPoint.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(currentPoint.Y - _startPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        if (!_session.CheckMove(currentPoint))
         {
             return;
         }
 
-        _moved = true;
-        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(_startPoint, currentPoint);
+        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(_session.StartPoint, currentPoint);
         _pendingRect = selectionRect;
         DrawSelectionRect(selectionRect);
-        FileListRangeSelectionHelper.SelectItemsInRange(_itemsList, selectionRect, _additive, _baseSelection);
+        _session.ApplySelection(currentPoint);
     }
 
     private void EnsureMouseCapture()
@@ -220,14 +207,17 @@ public sealed class SelectionInteractionController
 
     private void Finish()
     {
-        if (_moved && _pendingRect is { } selectionRect)
+        if (_session is not null)
         {
-            FileListRangeSelectionHelper.SelectItemsInRange(_itemsList, selectionRect, _additive, _baseSelection);
-        }
+            if (_session.Moved && _pendingRect is { } selectionRect)
+            {
+                FileListRangeSelectionHelper.SelectItemsInRange(_itemsList, selectionRect, _session.Additive, _session.BaseSelection);
+            }
 
-        if (!_moved && !_additive)
-        {
-            _itemsList.SelectedItems.Clear();
+            if (!_session.Moved && !_session.Additive)
+            {
+                _itemsList.SelectedItems.Clear();
+            }
         }
 
         Clear();
@@ -237,10 +227,8 @@ public sealed class SelectionInteractionController
     private void Clear()
     {
         IsSelecting = false;
-        _moved = false;
-        _additive = false;
+        _session = null;
         _pendingRect = null;
-        _baseSelection.Clear();
         _scrollViewer = null;
         _horizontalOffset = 0;
         _verticalOffset = 0;

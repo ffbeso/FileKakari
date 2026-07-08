@@ -3125,151 +3125,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-
-
-    private async void WorkspacePaneSubTabBar_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (_activeWorkspaceSession is not null
-            && e.ChangedButton == MouseButton.Left)
-        {
-            await ActivateWorkspacePaneFromSenderAsync(sender);
-        }
-
-        if (e.ChangedButton == MouseButton.Middle
-            && sender is ListBox closeListBox
-            && closeListBox.DataContext is FolderPane closePane
-            && FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject) is { } closeItem
-            && closeItem.DataContext is FolderTab closeTab)
-        {
-            await CloseWorkspacePaneSubTabAsync(closePane, closeTab, closeListBox);
-            e.Handled = true;
-            return;
-        }
-
-        if (e.ChangedButton == MouseButton.Left
-            && e.ClickCount == 1
-            && sender is ListBox dragListBox
-            && dragListBox.DataContext is FolderPane dragPane
-            && FindVisualParent<Button>(e.OriginalSource as DependencyObject) is null
-            && FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject) is { } dragItem
-            && dragItem.DataContext is FolderTab dragTab)
-        {
-            _subTabDragStartPoint = e.GetPosition(dragListBox);
-            _draggedSubTabPane = dragPane;
-            _draggedSubTab = dragTab;
-        }
-
-        if (e.ChangedButton != MouseButton.Left
-            || e.ClickCount != 2
-            || sender is not ListBox listBox
-            || listBox.DataContext is not FolderPane pane)
-        {
-            return;
-        }
-
-        var source = e.OriginalSource as DependencyObject;
-        var listItem = FindVisualParent<ListBoxItem>(source);
-        if (listItem is not null)
-        {
-            // Close button click should not trigger lock toggling
-            if (FindVisualParent<Button>(source) is null && listItem.DataContext is FolderTab tab)
-            {
-                e.Handled = true;
-                ToggleWorkspacePaneSubTabLock(pane, tab);
-            }
-            return;
-        }
-
-        e.Handled = true;
-        await CreateWorkspacePaneSubTabAsync(pane);
-    }
-
-    private void WorkspacePaneSubTabBar_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_subTabDragStartPoint is null
-            || _draggedSubTabPane is null
-            || _draggedSubTab is null
-            || sender is not ListBox listBox
-            || !ReferenceEquals(listBox.DataContext, _draggedSubTabPane)
-            || e.LeftButton != MouseButtonState.Pressed)
-        {
-            if (e.LeftButton != MouseButtonState.Pressed)
-            {
-                ClearSubTabDragState();
-            }
-            return;
-        }
-
-        var position = e.GetPosition(listBox);
-        if (Math.Abs(position.X - _subTabDragStartPoint.Value.X) < SystemParameters.MinimumHorizontalDragDistance
-            && Math.Abs(position.Y - _subTabDragStartPoint.Value.Y) < SystemParameters.MinimumVerticalDragDistance)
-        {
-            return;
-        }
-
-        try
-        {
-            var data = new DataObject(SubTabDragFormat, _draggedSubTab);
-            e.Handled = true;
-            DragDrop.DoDragDrop(listBox, data, DragDropEffects.Move | DragDropEffects.Copy);
-        }
-        finally
-        {
-            ClearSubTabDragState();
-            ClearWorkspacePaneSubTabHover();
-            ClearMainTabHover();
-        }
-    }
-
-    private void WorkspacePaneSubTabBar_DragOver(object sender, DragEventArgs e)
-    {
-        QueueWorkspacePaneSubTabHover(sender, e);
-
-        if (CanDropSubTab(sender, e))
-        {
-            if (e.Data.GetDataPresent(TabDragFormat))
-            {
-                e.Effects = DragDropEffects.Move;
-            }
-            else
-            {
-                var isCopy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
-                e.Effects = isCopy ? DragDropEffects.Copy : DragDropEffects.Move;
-            }
-            e.Handled = true;
-            return;
-        }
-
-        if (GetWorkspacePaneSubTabFileDropTarget(sender, e) is { } fileDropTarget)
-        {
-            var dragItems = GetFileOperationDragItems(e);
-            var operationKind = GetFileDropOperationKind(e, fileDropTarget.Navigation.CurrentPath);
-            e.Effects = dragItems is not null
-                && CanDropFileItems(dragItems, fileDropTarget.Navigation.CurrentPath, operationKind)
-                    ? operationKind == PendingFileOperationKind.Copy
-                        ? DragDropEffects.Copy
-                        : DragDropEffects.Move
-                    : DragDropEffects.None;
-            e.Handled = true;
-            return;
-        }
-
-        if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is not null)
-        {
-            e.Effects = DragDropEffects.Link;
-            e.Handled = true;
-            return;
-        }
-
-        e.Effects = DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void WorkspacePaneSubTabBar_DragLeave(object sender, DragEventArgs e)
-    {
-        ClearWorkspacePaneSubTabHover();
-    }
-
     private async void WorkspacePaneSubTabBar_Drop(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
@@ -3380,16 +3235,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void WorkspacePaneSubTabAddTarget_DragOver(object sender, DragEventArgs e)
-    {
-        ClearWorkspacePaneSubTabHover();
-        e.Effects = GetWorkspacePaneFromSender(sender) is not null
-            && GetSingleExistingDirectoryDropPath(e) is not null
-                ? DragDropEffects.Link
-                : DragDropEffects.None;
-        e.Handled = true;
-    }
-
     private async void WorkspacePaneSubTabAddTarget_Drop(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
@@ -3407,30 +3252,6 @@ public partial class MainWindow : Window
         _performanceLogger.Write($"workspace-subtab-add-target-folder-drop paneId=\"{pane.Id}\" path=\"{folderPath}\"");
     }
 
-    private void QueueWorkspacePaneSubTabHover(object sender, DragEventArgs e)
-    {
-        if (sender is not ListBox { DataContext: FolderPane pane }
-            || FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is not FolderTab tab
-            || !IsWorkspacePaneSubTabHoverDrag(e)
-            || ReferenceEquals(pane.ActiveTab, tab))
-        {
-            ClearWorkspacePaneSubTabHover();
-            return;
-        }
-
-        if (ReferenceEquals(_subTabHoverPane, pane)
-            && ReferenceEquals(_subTabHoverTarget, tab)
-            && _subTabHoverTimer.IsEnabled)
-        {
-            return;
-        }
-
-        _subTabHoverPane = pane;
-        _subTabHoverTarget = tab;
-        _subTabHoverTimer.Stop();
-        _subTabHoverTimer.Start();
-    }
-
     private static bool IsWorkspacePaneSubTabHoverDrag(DragEventArgs e)
     {
         return e.Data.GetDataPresent(TabDragFormat)
@@ -3438,33 +3259,6 @@ public partial class MainWindow : Window
             || e.Data.GetDataPresent(FileDragFormat)
             || e.Data.GetDataPresent(BreadcrumbFolderDragFormat)
             || e.Data.GetDataPresent(DataFormats.FileDrop);
-    }
-
-    private void SubTabHoverTimer_Tick(object? sender, EventArgs e)
-    {
-        _subTabHoverTimer.Stop();
-        var pane = _subTabHoverPane;
-        var tab = _subTabHoverTarget;
-        _subTabHoverPane = null;
-        _subTabHoverTarget = null;
-
-        if (pane is null
-            || tab is null
-            || !_workspaceDisplayPanes.Contains(pane)
-            || !pane.Tabs.Contains(tab)
-            || ReferenceEquals(pane.ActiveTab, tab))
-        {
-            return;
-        }
-
-        pane.SelectedTabId = tab.Id;
-    }
-
-    private void ClearWorkspacePaneSubTabHover()
-    {
-        _subTabHoverPane = null;
-        _subTabHoverTarget = null;
-        _subTabHoverTimer.Stop();
     }
 
     private static FolderTab? GetWorkspacePaneSubTabFileDropTarget(object sender, DragEventArgs e)
@@ -3614,13 +3408,6 @@ public partial class MainWindow : Window
         }
 
         return Math.Clamp(targetMoveIndex, 0, pane.Tabs.Count);
-    }
-
-    private void ClearSubTabDragState()
-    {
-        _subTabDragStartPoint = null;
-        _draggedSubTabPane = null;
-        _draggedSubTab = null;
     }
 
     private async Task PromoteSubTabToMainTabAsync(FolderPane pane, FolderTab tab)

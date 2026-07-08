@@ -198,11 +198,34 @@ public partial class MainWindow
 
         var targetSession = GetDropTargetSession(e);
         var targetTab = targetSession is null ? null : GetSessionActiveTab(targetSession);
-        if (targetTabItem is null && GetMainTabFolderDropPath(e) is not null)
+
+        var folderDropPath = GetMainTabFolderDropPath(e);
+        if (folderDropPath is not null)
         {
-            e.Effects = DragDropEffects.Link;
+            if (targetTabItem is not null)
+            {
+                var mousePos = e.GetPosition(targetTabItem);
+                var zone = GetTabDropZone(targetTabItem, mousePos);
+                if (zone == TabDropZone.Center)
+                {
+                    e.Effects = DragDropEffects.None;
+                    if (targetSession is not null)
+                    {
+                        QueueMainTabHover(targetSession);
+                    }
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.Link;
+                    ClearMainTabHover();
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.Link;
+                ClearMainTabHover();
+            }
             ClearFileTabHover();
-            ClearMainTabHover();
             e.Handled = true;
             return;
         }
@@ -276,16 +299,41 @@ public partial class MainWindow
         }
 
         ClearFileTabHover();
-        if (targetTabItem is null && GetMainTabFolderDropPath(e) is { } directoryPath)
+        var folderDropPath = GetMainTabFolderDropPath(e);
+        if (folderDropPath is not null)
         {
-            e.Effects = DragDropEffects.Link;
+            if (targetTabItem is not null && targetSession is not null)
+            {
+                var mousePos = e.GetPosition(targetTabItem);
+                var zone = GetTabDropZone(targetTabItem, mousePos);
+                if (zone == TabDropZone.Center)
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+                else
+                {
+                    var targetIndex = _workspaceSessions.IndexOf(targetSession);
+                    if (targetIndex >= 0)
+                    {
+                        var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+                        e.Effects = DragDropEffects.Link;
+                        await CreateNewMainWindowTabAtAsync(folderDropPath, insertIndex);
+                    }
+                    else
+                    {
+                        e.Effects = DragDropEffects.None;
+                    }
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.Link;
+                await CreateNewMainWindowTabAsync(folderDropPath);
+            }
             e.Handled = true;
-            await CreateNewMainWindowTabAsync(directoryPath);
             return;
         }
 
-        // Main tabs are hover-switch targets only. The actual transfer must be
-        // dropped on a pane, subtab, or file list after the workspace switches.
         e.Effects = DragDropEffects.None;
         e.Handled = true;
     }

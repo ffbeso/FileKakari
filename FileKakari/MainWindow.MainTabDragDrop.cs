@@ -488,4 +488,65 @@ public partial class MainWindow
             TabsControl.ReleaseMouseCapture();
         }
     }
+
+    private enum TabDropZone
+    {
+        Left,
+        Center,
+        Right
+    }
+
+    private static TabDropZone GetTabDropZone(FrameworkElement tabItem, Point mousePosition)
+    {
+        var width = tabItem.ActualWidth;
+        var x = mousePosition.X;
+        if (x < width * 0.25)
+        {
+            return TabDropZone.Left;
+        }
+        else if (x > width * 0.75)
+        {
+            return TabDropZone.Right;
+        }
+        else
+        {
+            return TabDropZone.Center;
+        }
+    }
+
+    private async Task CreateNewMainWindowTabAtAsync(string path, int index)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        if (!SpecialLocationService.IsSpecialUri(path) && !System.IO.Directory.Exists(path))
+        {
+            throw new System.IO.DirectoryNotFoundException(_text.Get("OpenFailedMissing"));
+        }
+
+        var tab = new FolderTab(path, viewMode: _settingsService.Settings.DisplayMode);
+        var session = _workspaceController.CreateSinglePaneSession(tab);
+        var result = _workspaceController.InsertSession(index, _workspaceSessions, _activeWorkspaceSession, session);
+
+        _isSwitchingTabs = true;
+        try
+        {
+            var insertIndex = Math.Clamp(index, 0, _workspaceSessions.Count);
+            _workspaceSessions.Insert(insertIndex, session);
+            _activeWorkspaceSession = session;
+            UpdateActiveWorkspaceSessionUi(session);
+            ApplyWorkspaceSessionToFolderTabs();
+            RefreshWorkspaceDisplayPanes();
+            SelectWorkspaceSession(session);
+        }
+        finally
+        {
+            _isSwitchingTabs = false;
+        }
+
+        _workspaceLocalState.Capture(markDirty: true, reason: "tabs");
+        await RestoreActiveTabAsync();
+    }
 }

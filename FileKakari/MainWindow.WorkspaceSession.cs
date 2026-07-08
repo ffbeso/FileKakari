@@ -1164,6 +1164,32 @@ public partial class MainWindow
         _draggedSubTab = null;
     }
 
+    private async Task CreateWorkspacePaneSubTabAtAsync(
+        FolderPane pane,
+        string path,
+        int insertIndex)
+    {
+        if (_activeWorkspaceSession is null)
+        {
+            return;
+        }
+
+        var activeTab = pane.ActiveTab ?? pane.Tabs.FirstOrDefault();
+        if (activeTab is null)
+        {
+            return;
+        }
+        var paneCurrentPath = activeTab.Navigation.CurrentPath ?? _activeWorkspaceSession.RootPath;
+        var paneNewTabPath = _tabOperations.ResolveNewTabPath(path, paneCurrentPath);
+
+        var newTab = _tabOperations.CreateNewTab(paneNewTabPath, activeTab);
+        SeedNewTabCache(newTab, activeTab);
+
+        pane.Tabs.Insert(Math.Clamp(insertIndex, 0, pane.Tabs.Count), newTab);
+        await _navigationController.NavigateWorkspacePaneToFolderAsync(pane, newTab.Navigation.CurrentPath, NavigationKind.New);
+        _workspaceLocalState.QueueCapture(markDirty: true, reason: "new-subtab");
+    }
+
     private static WorkspaceLayoutNodeDefinition UpdateWorkspaceSplitRatio(
         WorkspaceLayoutNodeDefinition node,
         string splitId,

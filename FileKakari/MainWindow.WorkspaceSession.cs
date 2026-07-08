@@ -838,6 +838,121 @@ public partial class MainWindow
         ClearWorkspaceRangeSelectionAdorner();
     }
 
+    private void WorkspacePaneFileList_DragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not ListView listView
+            || listView.DataContext is not FolderPane pane)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        if (GetMainTabDemotionTarget(e, FindSessionContainingPane(pane), pane) is not null)
+        {
+            e.Effects = DragDropEffects.Move;
+            ClearFileDropHighlight();
+            e.Handled = true;
+            return;
+        }
+
+        var targetDirectory = GetWorkspacePaneFileDropTargetDirectory(pane, e);
+        if (targetDirectory is null)
+        {
+            e.Effects = DragDropEffects.None;
+            ClearFileDropHighlight();
+            e.Handled = true;
+            return;
+        }
+
+        var dragItems = GetFileOperationDragItems(e);
+        var operationKind = GetFileDropOperationKind(e, targetDirectory);
+        if (dragItems is null || !CanDropFileItems(dragItems, targetDirectory, operationKind))
+        {
+            e.Effects = DragDropEffects.None;
+            ClearFileDropHighlight();
+            e.Handled = true;
+            return;
+        }
+
+        e.Effects = operationKind == PendingFileOperationKind.Copy
+            ? DragDropEffects.Copy
+            : DragDropEffects.Move;
+        HighlightWorkspacePaneFileDropTarget(listView, e);
+        e.Handled = true;
+    }
+
+    private void WorkspacePaneFileList_DragLeave(object sender, DragEventArgs e)
+    {
+        ClearFileDropHighlight();
+    }
+
+    private async void WorkspacePaneFileList_Drop(object sender, DragEventArgs e)
+    {
+        ClearFileDropHighlight();
+        if (sender is not ListView listView
+            || listView.DataContext is not FolderPane pane)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        if (GetMainTabDemotionTarget(e, FindSessionContainingPane(pane), pane) is { } demotionTarget)
+        {
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            await DemoteMainTabToSubTabAsync(
+                demotionTarget.DraggedSession,
+                demotionTarget.TargetPane,
+                demotionTarget.TargetPane.Tabs.Count);
+            return;
+        }
+
+        if (GetWorkspacePaneFileDropTargetDirectory(pane, e) is not { } targetDirectory)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        var dragItems = GetFileOperationDragItems(e);
+        var operationKind = GetFileDropOperationKind(e, targetDirectory);
+        if (dragItems is null || !CanDropFileItems(dragItems, targetDirectory, operationKind))
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
+
+        e.Effects = operationKind == PendingFileOperationKind.Copy
+            ? DragDropEffects.Copy
+            : DragDropEffects.Move;
+        e.Handled = true;
+        var transferItems = dragItems
+            .Select(item => new FileTransferItem(item.SourcePath, item.Name, item.IsDirectory))
+            .ToList();
+        await ExecuteFileTransferAsync(
+            transferItems,
+            targetDirectory,
+            operationKind,
+            refreshActiveFolder: true,
+            refreshTab: pane.ActiveTab,
+            confirmNonSelfCopy: IsExplicitCopyDrop(e),
+            refreshPane: pane);
+    }
+
+    private void HighlightWorkspacePaneFileDropTarget(ListView listView, DragEventArgs e)
+    {
+        if (GetFileDropTargetEntry(e) is { } targetEntry)
+        {
+            HighlightFileDropTarget(listView, targetEntry);
+            return;
+        }
+
+        ClearFileDropHighlight();
+    }
+
     private static WorkspaceLayoutNodeDefinition UpdateWorkspaceSplitRatio(
         WorkspaceLayoutNodeDefinition node,
         string splitId,

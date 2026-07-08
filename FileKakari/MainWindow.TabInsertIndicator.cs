@@ -20,14 +20,15 @@ public partial class MainWindow
         }
 
         adornedElement.UpdateLayout();
-        var layer = AdornerLayer.GetAdornerLayer(adornedElement);
+        var adornerTarget = GetTabInsertIndicatorAdornerTarget(adornedElement);
+        var layer = AdornerLayer.GetAdornerLayer(adornerTarget);
         if (layer is null)
         {
             HideTabInsertIndicator();
             return;
         }
 
-        var x = GetTabInsertIndicatorX(adornedElement, target);
+        var x = GetTabInsertIndicatorX(adornerTarget, target);
         if (double.IsNaN(x))
         {
             HideTabInsertIndicator();
@@ -35,19 +36,32 @@ public partial class MainWindow
         }
 
         if (!ReferenceEquals(_tabInsertIndicatorLayer, layer)
-            || !ReferenceEquals(_tabInsertIndicatorElement, adornedElement)
+            || !ReferenceEquals(_tabInsertIndicatorElement, adornerTarget)
             || _tabInsertIndicatorAdorner is null)
         {
             HideTabInsertIndicator();
             var brush = TryFindResource("ActivePaneAccentBrush") as Brush
                 ?? SystemColors.HighlightBrush;
-            _tabInsertIndicatorAdorner = new TabInsertIndicatorAdorner(adornedElement, brush);
+            _tabInsertIndicatorAdorner = new TabInsertIndicatorAdorner(adornerTarget, brush);
             _tabInsertIndicatorLayer = layer;
-            _tabInsertIndicatorElement = adornedElement;
+            _tabInsertIndicatorElement = adornerTarget;
             layer.Add(_tabInsertIndicatorAdorner);
         }
 
         _tabInsertIndicatorAdorner.Update(x);
+    }
+
+    private static FrameworkElement GetTabInsertIndicatorAdornerTarget(FrameworkElement preferredTarget)
+    {
+        for (DependencyObject? current = preferredTarget; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is FrameworkElement element && AdornerLayer.GetAdornerLayer(element) is not null)
+            {
+                return element;
+            }
+        }
+
+        return preferredTarget;
     }
 
     private static double GetTabInsertIndicatorX(FrameworkElement adornedElement, TabInsertDropTarget target)

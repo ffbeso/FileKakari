@@ -3197,6 +3197,23 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
+            {
+                var insertTarget = GetWorkspacePaneSubTabInsertDropTarget(listBox, targetPane, e);
+                if (insertTarget.IsInsert)
+                {
+                    e.Effects = DragDropEffects.Link;
+                    await CreateWorkspacePaneSubTabAtAsync(targetPane, folderPath, insertTarget.InsertIndex);
+                    _performanceLogger.Write($"workspace-subtab-folder-drop-at paneId=\"{targetPane.Id}\" path=\"{folderPath}\" index={insertTarget.InsertIndex}");
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+                e.Handled = true;
+                return;
+            }
+
             if (GetWorkspacePaneSubTabFileDropTarget(sender, e) is { } fileDropTarget)
             {
                 var dragItems = GetFileOperationDragItems(e);
@@ -3224,23 +3241,6 @@ public partial class MainWindow : Window
                     refreshTab: fileDropTarget,
                     confirmNonSelfCopy: IsExplicitCopyDrop(e),
                     refreshPane: targetPane);
-                return;
-            }
-
-            if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
-            {
-                var insertTarget = GetWorkspacePaneSubTabInsertDropTarget(listBox, targetPane, e);
-                if (insertTarget.IsInsert)
-                {
-                    e.Effects = DragDropEffects.Link;
-                    await CreateWorkspacePaneSubTabAtAsync(targetPane, folderPath, insertTarget.InsertIndex);
-                    _performanceLogger.Write($"workspace-subtab-folder-drop-at paneId=\"{targetPane.Id}\" path=\"{folderPath}\" index={insertTarget.InsertIndex}");
-                }
-                else
-                {
-                    e.Effects = DragDropEffects.None;
-                }
-                e.Handled = true;
                 return;
             }
         }

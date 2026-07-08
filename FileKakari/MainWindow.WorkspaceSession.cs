@@ -1049,10 +1049,9 @@ public partial class MainWindow
 
     private void WorkspacePaneSubTabBar_DragOver(object sender, DragEventArgs e)
     {
-        QueueWorkspacePaneSubTabHover(sender, e);
-
         if (CanDropSubTab(sender, e))
         {
+            QueueWorkspacePaneSubTabHover(sender, e);
             if (e.Data.GetDataPresent(TabDragFormat))
             {
                 e.Effects = DragDropEffects.Move;
@@ -1068,6 +1067,7 @@ public partial class MainWindow
 
         if (GetWorkspacePaneSubTabFileDropTarget(sender, e) is { } fileDropTarget)
         {
+            QueueWorkspacePaneSubTabHover(sender, e);
             var dragItems = GetFileOperationDragItems(e);
             var operationKind = GetFileDropOperationKind(e, fileDropTarget.Navigation.CurrentPath);
             e.Effects = dragItems is not null
@@ -1080,13 +1080,34 @@ public partial class MainWindow
             return;
         }
 
-        if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is not null)
+        if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
         {
-            e.Effects = DragDropEffects.Link;
+            var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
+            if (targetItem is not null)
+            {
+                var mousePos = e.GetPosition(targetItem);
+                var zone = GetTabDropZone(targetItem, mousePos);
+                if (zone == TabDropZone.Center)
+                {
+                    e.Effects = DragDropEffects.None;
+                    QueueWorkspacePaneSubTabHover(sender, e);
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.Link;
+                    ClearWorkspacePaneSubTabHover();
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.Link;
+                ClearWorkspacePaneSubTabHover();
+            }
             e.Handled = true;
             return;
         }
 
+        QueueWorkspacePaneSubTabHover(sender, e);
         e.Effects = DragDropEffects.None;
         e.Handled = true;
     }

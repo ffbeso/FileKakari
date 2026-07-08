@@ -3223,10 +3223,40 @@ public partial class MainWindow : Window
 
             if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
             {
-                e.Effects = DragDropEffects.Link;
+                var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
+                var targetTab = targetItem?.DataContext as FolderTab;
+
+                if (targetItem is not null && targetTab is not null)
+                {
+                    var mousePos = e.GetPosition(targetItem);
+                    var zone = GetTabDropZone(targetItem, mousePos);
+                    if (zone == TabDropZone.Center)
+                    {
+                        e.Effects = DragDropEffects.None;
+                    }
+                    else
+                    {
+                        var targetIndex = targetPane.Tabs.IndexOf(targetTab);
+                        if (targetIndex >= 0)
+                        {
+                            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+                            e.Effects = DragDropEffects.Link;
+                            await CreateWorkspacePaneSubTabAtAsync(targetPane, folderPath, insertIndex);
+                            _performanceLogger.Write($"workspace-subtab-folder-drop-at paneId=\"{targetPane.Id}\" path=\"{folderPath}\" index={insertIndex}");
+                        }
+                        else
+                        {
+                            e.Effects = DragDropEffects.None;
+                        }
+                    }
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.Link;
+                    await CreateWorkspacePaneSubTabAsync(targetPane, folderPath, targetPane.ActiveTab);
+                    _performanceLogger.Write($"workspace-subtab-folder-drop paneId=\"{targetPane.Id}\" path=\"{folderPath}\"");
+                }
                 e.Handled = true;
-                await CreateWorkspacePaneSubTabAsync(targetPane, folderPath, targetPane.ActiveTab);
-                _performanceLogger.Write($"workspace-subtab-folder-drop paneId=\"{targetPane.Id}\" path=\"{folderPath}\"");
                 return;
             }
         }
@@ -3365,7 +3395,6 @@ public partial class MainWindow : Window
     {
         if (sender is not ListBox listBox
             || listBox.DataContext is not FolderPane pane
-            || FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject) is not null
             || GetSingleExistingDirectoryDropPath(e) is not { } directoryPath)
         {
             return null;

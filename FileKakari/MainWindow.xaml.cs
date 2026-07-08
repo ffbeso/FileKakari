@@ -4189,62 +4189,6 @@ public partial class MainWindow : Window
         tab.SetFolderLocked(!tab.IsFolderLocked);
         pane.ResolveTabHeaders();
         pane.RefreshDisplay();
-        _workspaceLocalState.Capture(markDirty: true, reason: "subtab-lock");
-    }
-
-    private void WorkspacePaneOperationsButton_Click(object sender, RoutedEventArgs e)
-    {
-        var pane = GetWorkspacePaneFromSender(sender);
-        if (pane is null) return;
-
-        if (sender is Button button && button.ContextMenu is not null)
-        {
-            button.Tag = pane;
-            button.ContextMenu.PlacementTarget = button;
-            button.ContextMenu.Tag = pane;
-
-            foreach (var item in button.ContextMenu.Items)
-            {
-                if (item is MenuItem menuItem)
-                {
-                    menuItem.IsEnabled = true;
-
-                    var headerStr = menuItem.Header?.ToString() ?? "";
-                    if (headerStr == "ペインを閉じる" || headerStr == _text.Get("WorkspacePaneMenuClose"))
-                    {
-                        menuItem.IsEnabled = _activeWorkspaceSession is not null && _activeWorkspaceSession.PaneGroups.Count > 1;
-                    }
-                }
-            }
-
-            button.ContextMenu.IsOpen = true;
-        }
-
-        ScheduleWorkspacePaneActivation(pane);
-    }
-
-    private void WorkspacePaneSplitRightMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetWorkspacePaneFromMenuItem(sender) is { } pane)
-        {
-            SplitWorkspacePane(pane, WorkspaceSplitOrientation.Horizontal);
-        }
-    }
-
-    private void WorkspacePaneSplitDownMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetWorkspacePaneFromMenuItem(sender) is { } pane)
-        {
-            SplitWorkspacePane(pane, WorkspaceSplitOrientation.Vertical);
-        }
-    }
-
-    private void WorkspacePaneCloseMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if (GetWorkspacePaneFromMenuItem(sender) is { } pane)
-        {
-            CloseWorkspacePane(pane);
-        }
     }
 
     private static FolderPane? GetWorkspacePaneFromMenuItem(object sender)
@@ -4281,51 +4225,6 @@ public partial class MainWindow : Window
             }
         }
         return null;
-    }
-
-    private async void SplitWorkspacePane(FolderPane pane, WorkspaceSplitOrientation orientation)
-    {
-        if (_activeWorkspaceSession is not { } session) return;
-
-        var activeTab = pane.ActiveTab;
-        if (activeTab is null) return;
-        var path = activeTab.Navigation.CurrentPath;
-        var paneId = $"pane_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
-        var tabId = $"tab_{Guid.NewGuid().ToString("N").Substring(0, 8)}";
-        var state = session.GetOrCreateTabState(paneId, path, activeTab.State.ViewMode, activeTab.State.SortColumn, activeTab.State.SortAscending, id: tabId);
-        state.FilterText = activeTab.State.FilterText;
-        state.SelectedPaths = activeTab.State.SelectedPaths;
-        state.VerticalOffset = activeTab.State.VerticalOffset;
-        var clonedTab = new FolderTab(path, tabId, activeTab.State.ViewMode, state);
-        clonedTab.SetFolderLocked(activeTab.IsFolderLocked);
-        var newPaneTabs = new ObservableCollection<FolderTab> { clonedTab };
-        var newPaneGroup = new WorkspacePaneGroup(paneId, newPaneTabs, path) { SelectedTabIndex = 0, SelectedTabId = tabId };
-        if (session.Workspace is not null) newPaneGroup.SetWorkspace(session.Workspace);
-
-        EnsureWorkspaceLayoutRoot(session);
-
-        var layoutReplaced = false;
-        var nextLayout = session.LayoutRoot is { } layoutRoot
-            ? ReplacePaneInLayout(layoutRoot, pane.Id, newPaneGroup, orientation, out layoutReplaced)
-            : null;
-
-        var insertIndex = pane is WorkspacePaneGroup wp ? session.PaneGroups.IndexOf(wp) : -1;
-        if (insertIndex >= 0) session.PaneGroups.Insert(insertIndex + 1, newPaneGroup);
-        else session.PaneGroups.Add(newPaneGroup);
-
-        session.LayoutRoot = nextLayout is not null && layoutReplaced
-            ? nextLayout
-            : BuildLayoutRootFromPaneGroups(session.PaneGroups, orientation);
-
-        // DisplayLayoutRoot は LayoutRoot から再構築する
-        session.DisplayLayoutRoot = BuildDisplayLayoutRoot(session);
-
-        session.PaneSplitOrientation = orientation;
-        session.ActivePaneGroup = newPaneGroup;
-        RefreshWorkspaceDisplayPanes();
-        await LoadFolderPaneItemsAsync(newPaneGroup, restoreTrigger: "active-pane-change");
-        ScheduleSessionSave("split-pane");
-        UpdateWindowTitle();
     }
 
     private void CloseWorkspacePane(FolderPane pane)

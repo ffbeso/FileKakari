@@ -2944,17 +2944,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task OpenWorkspacePaneSelectionAsync(FolderPane pane, FileEntry entry)
-    {
-        if (entry.IsDirectory)
-        {
-            await NavigateWorkspacePaneToFolderAsync(pane, entry.FullPath, NavigationKind.New);
-            return;
-        }
-
-        await OpenWorkspacePaneFileAsync(entry);
-    }
-
     private bool TryApplyWorkspacePanePendingSingleSelectionClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left
@@ -3168,42 +3157,6 @@ public partial class MainWindow : Window
         _workspaceRangeSelectionPane = null;
         _workspaceRangeSelectionSession = null;
         ClearWorkspaceRangeSelectionAdorner();
-    }
-
-    private async void WorkspacePaneFileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        CancelPendingRenameClick();
-        if (WorkspaceSplitGrid.Visibility != Visibility.Visible
-            || sender is not ListView listView
-            || listView.DataContext is not FolderPane pane)
-        {
-            return;
-        }
-
-        var source = e.OriginalSource as DependencyObject;
-        LogListViewClick(listView, pane, e, source);
-        if (e.ChangedButton != MouseButton.Left
-            || IsInsideScrollBar(source)
-            || FindVisualParent<GridViewColumnHeader>(source) is not null)
-        {
-            return;
-        }
-
-        var entry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
-        if (entry is null)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        e.Handled = true;
-        if (entry.IsDirectory)
-        {
-            await NavigateWorkspacePaneToFolderAsync(pane, entry.FullPath, NavigationKind.New);
-            return;
-        }
-
-        await OpenWorkspacePaneFileAsync(entry);
     }
 
     private void WorkspacePaneFileList_DragOver(object sender, DragEventArgs e)
@@ -4586,32 +4539,6 @@ public partial class MainWindow : Window
         }
 
         return pane.Tabs[Math.Clamp(pane.SelectedTabIndex, 0, pane.Tabs.Count - 1)];
-    }
-
-    private async Task OpenWorkspacePaneFileAsync(FileEntry entry)
-    {
-        if (!File.Exists(entry.FullPath))
-        {
-            StatusText.Text = _text.Get("OpenFailedMissing");
-            return;
-        }
-
-        if (WorkspaceService.IsWorkspaceFile(entry.FullPath)
-            && await OpenWorkspaceFileAsync(entry.FullPath))
-        {
-            return;
-        }
-
-        try
-        {
-            Process.Start(ExternalProcessStartInfo.CreateShellExecute(entry.FullPath, entry.ParentPath));
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = ex.Message;
-            _performanceLogger.Write($"folder-pane-file-open-failed path=\"{entry.FullPath}\" error=\"{ex.Message}\"");
-            MessageBox.Show(this, ex.Message, _text.Get("OpenFileFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
     }
 
     private void WorkspacePaneFileList_ScrollChanged(object sender, ScrollChangedEventArgs e)

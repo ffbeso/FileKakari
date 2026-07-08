@@ -186,26 +186,6 @@ public partial class MainWindow
         }
     }
 
-    private void WorkspacePaneFilterBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-    {
-        if (sender is not TextBox textBox
-            || GetWorkspacePaneFromSender(sender) is not { } pane
-            || pane.ActiveTabState is not { } state)
-        {
-            return;
-        }
-
-        var oldFilter = state.FilterText;
-        var filterChanged = !string.Equals(oldFilter, textBox.Text, StringComparison.Ordinal);
-        state.FilterText = textBox.Text;
-        LogFilterTextChanged(pane, state, oldFilter, state.FilterText, nameof(WorkspacePaneFilterBox_TextChanged), "workspace-pane-filter-box");
-        if (filterChanged)
-        {
-            ScheduleWorkspacePaneFilterApply(pane, state, state.FilterText);
-            _workspaceLocalState.MarkDirty("pane-filter");
-        }
-    }
-
     private void ScheduleNormalFilterApply(WorkspaceTabState state, string filter)
     {
         var generation = BeginFilterApplySchedule(GetNormalFolderPane(), state, filter);

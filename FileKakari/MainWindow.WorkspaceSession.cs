@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 namespace FileKakari;
 
@@ -600,6 +601,99 @@ public partial class MainWindow
                     textBlock.Text = baseText;
                 }
             }
+        }
+    }
+
+    private void WorkspacePaneFilterBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (sender is not TextBox textBox
+            || GetWorkspacePaneFromSender(sender) is not { } pane
+            || pane.ActiveTabState is not { } state)
+        {
+            return;
+        }
+
+        var oldFilter = state.FilterText;
+        var filterChanged = !string.Equals(oldFilter, textBox.Text, StringComparison.Ordinal);
+        state.FilterText = textBox.Text;
+        LogFilterTextChanged(pane, state, oldFilter, state.FilterText, nameof(WorkspacePaneFilterBox_TextChanged), "workspace-pane-filter-box");
+        if (filterChanged)
+        {
+            ScheduleWorkspacePaneFilterApply(pane, state, state.FilterText);
+            _workspaceLocalState.MarkDirty("pane-filter");
+        }
+    }
+
+    private async void WorkspacePaneFileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        CancelPendingRenameClick();
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible
+            || sender is not ListView listView
+            || listView.DataContext is not FolderPane pane)
+        {
+            return;
+        }
+
+        var source = e.OriginalSource as DependencyObject;
+        LogListViewClick(listView, pane, e, source);
+        if (e.ChangedButton != MouseButton.Left
+            || IsInsideScrollBar(source)
+            || FindVisualParent<GridViewColumnHeader>(source) is not null)
+        {
+            return;
+        }
+
+        var entry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
+        if (entry is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.Handled = true;
+        if (entry.IsDirectory)
+        {
+            await NavigateWorkspacePaneToFolderAsync(pane, entry.FullPath, NavigationKind.New);
+            return;
+        }
+
+        await OpenWorkspacePaneFileAsync(entry);
+    }
+
+    private async Task OpenWorkspacePaneSelectionAsync(FolderPane pane, FileEntry entry)
+    {
+        if (entry.IsDirectory)
+        {
+            await NavigateWorkspacePaneToFolderAsync(pane, entry.FullPath, NavigationKind.New);
+            return;
+        }
+
+        await OpenWorkspacePaneFileAsync(entry);
+    }
+
+    private async Task OpenWorkspacePaneFileAsync(FileEntry entry)
+    {
+        if (!File.Exists(entry.FullPath))
+        {
+            StatusText.Text = _text.Get("OpenFailedMissing");
+            return;
+        }
+
+        if (WorkspaceService.IsWorkspaceFile(entry.FullPath)
+            && await OpenWorkspaceFileAsync(entry.FullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(ExternalProcessStartInfo.CreateShellExecute(entry.FullPath, entry.ParentPath));
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
+            _performanceLogger.Write($"folder-pane-file-open-failed path=\"{entry.FullPath}\" error=\"{ex.Message}\"");
+            MessageBox.Show(this, ex.Message, _text.Get("OpenFileFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

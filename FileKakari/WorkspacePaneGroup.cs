@@ -452,34 +452,48 @@ public class FolderPane : INotifyPropertyChanged
         }
     }
 
+    private static string GetBaseHeader(FolderTab tab)
+    {
+        if (SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath))
+        {
+            return AppStrings.Get("LocationThisPc");
+        }
+
+        var path = tab.Navigation.CurrentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var name = Path.GetFileName(path);
+        return string.IsNullOrWhiteSpace(name) ? tab.Navigation.CurrentPath : name;
+    }
+
     public void ResolveTabHeaders()
     {
         if (Tabs.Count == 0) return;
 
-        var leafToTabs = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<FolderTab>>(System.StringComparer.OrdinalIgnoreCase);
+        var baseToTabs = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<FolderTab>>(System.StringComparer.OrdinalIgnoreCase);
         foreach (var tab in Tabs)
         {
             tab.SetHeaderOverride(null);
-            var leaf = tab.Header;
-            if (!leafToTabs.TryGetValue(leaf, out var list))
+            var baseName = GetBaseHeader(tab);
+            if (!baseToTabs.TryGetValue(baseName, out var list))
             {
                 list = new System.Collections.Generic.List<FolderTab>();
-                leafToTabs[leaf] = list;
+                baseToTabs[baseName] = list;
             }
             list.Add(tab);
         }
 
-        foreach (var kvp in leafToTabs)
+        foreach (var kvp in baseToTabs)
         {
-            var leaf = kvp.Key;
+            var baseName = kvp.Key;
             var tabList = kvp.Value;
 
             if (tabList.Count > 1)
             {
+                var parentToTabs = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<FolderTab>>(System.StringComparer.OrdinalIgnoreCase);
                 foreach (var tab in tabList)
                 {
                     var path = tab.Navigation.CurrentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                     var parentPath = Path.GetDirectoryName(path);
+                    string displayName;
                     if (!string.IsNullOrWhiteSpace(parentPath))
                     {
                         var parentName = Path.GetFileName(parentPath);
@@ -487,11 +501,45 @@ public class FolderPane : INotifyPropertyChanged
                         {
                             parentName = parentPath;
                         }
-                        tab.SetHeaderOverride($"{leaf} ({parentName})");
+                        displayName = $"{baseName} ({parentName})";
                     }
                     else
                     {
-                        tab.SetHeaderOverride(leaf);
+                        displayName = baseName;
+                    }
+
+                    if (!parentToTabs.TryGetValue(displayName, out var plist))
+                    {
+                        plist = new System.Collections.Generic.List<FolderTab>();
+                        parentToTabs[displayName] = plist;
+                    }
+                    plist.Add(tab);
+                }
+
+                foreach (var pkvp in parentToTabs)
+                {
+                    var displayName = pkvp.Key;
+                    var plist = pkvp.Value;
+
+                    if (plist.Count > 1)
+                    {
+                        foreach (var tab in plist)
+                        {
+                            var path = tab.Navigation.CurrentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                            var parentPath = Path.GetDirectoryName(path);
+                            if (!string.IsNullOrWhiteSpace(parentPath))
+                            {
+                                tab.SetHeaderOverride($"{baseName} ({parentPath})");
+                            }
+                            else
+                            {
+                                tab.SetHeaderOverride(displayName);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        plist[0].SetHeaderOverride(displayName);
                     }
                 }
             }

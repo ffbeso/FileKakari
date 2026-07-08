@@ -1725,21 +1725,6 @@ public partial class MainWindow : Window
 
 
 
-    private async Task CloseActiveSubTabAsync()
-    {
-        var pane = GetActiveFolderPane();
-        if (pane is null || pane.ActiveTab is null)
-        {
-            return;
-        }
-
-        if (IsDiagLogEnabled) WriteDiagLog($"CloseActiveSubTabAsync path={pane.ActiveTab.Navigation.CurrentPath}");
-        var listBox = FindSubTabBarListBoxForPane(pane);
-        await CloseWorkspacePaneSubTabAsync(pane, pane.ActiveTab, listBox);
-    }
-
-
-
     private void FocusSelectedListViewItemOfActivePane()
     {
         if (GetActivePreviewListView() is { IsVisible: true, IsEnabled: true } listView)
@@ -3341,41 +3326,6 @@ public partial class MainWindow : Window
         return pane.ActiveTabState is { } state
             ? GetFileDropTargetDirectory(state.CurrentPath, e)
             : null;
-    }
-
-
-
-    private async Task RestoreLastClosedSubTabAsync(FolderPane? preferredPane = null)
-    {
-        if (_lastClosedSubTab is not { } closedSubTab)
-        {
-            _performanceLogger.Write("restore-closed-subtab-skip reason=empty");
-            return;
-        }
-
-        var pane = FindWorkspacePaneById(closedSubTab.PaneId)
-            ?? GetActiveFolderPane()
-            ?? preferredPane;
-        if (pane is null)
-        {
-            _performanceLogger.Write("restore-closed-subtab-skip reason=no-pane");
-            return;
-        }
-
-        _lastClosedSubTab = null;
-        if (_lastClosedKind == LastClosedKind.SubTab)
-        {
-            _lastClosedKind = LastClosedKind.None;
-        }
-        var tab = _tabOperations.RestoreClosedTabState(closedSubTab.TabState);
-        var insertIndex = Math.Clamp(closedSubTab.TabState.Index, 0, pane.Tabs.Count);
-        pane.Tabs.Insert(insertIndex, tab);
-        pane.SelectedTabId = tab.Id;
-        pane.ResolveTabHeaders();
-        pane.RefreshDisplay();
-        await _navigationController.NavigateWorkspacePaneToFolderAsync(pane, tab.Navigation.CurrentPath, NavigationKind.New);
-        _workspaceLocalState.QueueCapture(markDirty: true, reason: "restore-subtab");
-        UpdateFolderWatch();
     }
 
     private FolderPane? FindWorkspacePaneById(string paneId)

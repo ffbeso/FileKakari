@@ -3254,9 +3254,7 @@ public partial class MainWindow : Window
 
     private static bool IsWorkspacePaneSubTabHoverDrag(DragEventArgs e)
     {
-        return e.Data.GetDataPresent(TabDragFormat)
-            || e.Data.GetDataPresent(SubTabDragFormat)
-            || e.Data.GetDataPresent(FileDragFormat)
+        return e.Data.GetDataPresent(FileDragFormat)
             || e.Data.GetDataPresent(BreadcrumbFolderDragFormat)
             || e.Data.GetDataPresent(DataFormats.FileDrop);
     }

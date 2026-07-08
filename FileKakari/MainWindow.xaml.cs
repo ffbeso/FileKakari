@@ -1348,6 +1348,11 @@ public partial class MainWindow : Window
         var isRenameTextBoxFocused = focusedTextBox?.DataContext is FileEntry
             || GetWorkspaceSession(focusedTextBox?.DataContext) is not null;
 
+        if (e.Key == Key.Escape)
+        {
+            HideTabInsertIndicator();
+        }
+
         if (_scrollBehavior.IsAutoScrolling && e.Key == Key.Escape)
         {
             _scrollBehavior.StopAutoScroll();
@@ -3128,6 +3133,7 @@ public partial class MainWindow : Window
     private async void WorkspacePaneSubTabBar_Drop(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
+        HideTabInsertIndicator();
         if (sender is ListBox listBox
             && listBox.DataContext is FolderPane targetPane)
         {
@@ -3223,38 +3229,16 @@ public partial class MainWindow : Window
 
             if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
             {
-                var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
-                var targetTab = targetItem?.DataContext as FolderTab;
-
-                if (targetItem is not null && targetTab is not null)
+                var insertTarget = GetWorkspacePaneSubTabInsertDropTarget(listBox, targetPane, e);
+                if (insertTarget.IsInsert)
                 {
-                    var mousePos = e.GetPosition(targetItem);
-                    var zone = GetTabDropZone(targetItem, mousePos);
-                    if (zone == TabDropZone.Center)
-                    {
-                        e.Effects = DragDropEffects.None;
-                    }
-                    else
-                    {
-                        var targetIndex = targetPane.Tabs.IndexOf(targetTab);
-                        if (targetIndex >= 0)
-                        {
-                            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
-                            e.Effects = DragDropEffects.Link;
-                            await CreateWorkspacePaneSubTabAtAsync(targetPane, folderPath, insertIndex);
-                            _performanceLogger.Write($"workspace-subtab-folder-drop-at paneId=\"{targetPane.Id}\" path=\"{folderPath}\" index={insertIndex}");
-                        }
-                        else
-                        {
-                            e.Effects = DragDropEffects.None;
-                        }
-                    }
+                    e.Effects = DragDropEffects.Link;
+                    await CreateWorkspacePaneSubTabAtAsync(targetPane, folderPath, insertTarget.InsertIndex);
+                    _performanceLogger.Write($"workspace-subtab-folder-drop-at paneId=\"{targetPane.Id}\" path=\"{folderPath}\" index={insertTarget.InsertIndex}");
                 }
                 else
                 {
-                    e.Effects = DragDropEffects.Link;
-                    await CreateWorkspacePaneSubTabAsync(targetPane, folderPath, targetPane.ActiveTab);
-                    _performanceLogger.Write($"workspace-subtab-folder-drop paneId=\"{targetPane.Id}\" path=\"{folderPath}\"");
+                    e.Effects = DragDropEffects.None;
                 }
                 e.Handled = true;
                 return;
@@ -3401,6 +3385,46 @@ public partial class MainWindow : Window
         }
 
         return directoryPath;
+    }
+
+    private TabInsertDropTarget GetWorkspacePaneSubTabInsertDropTarget(
+        ListBox listBox,
+        FolderPane pane,
+        DragEventArgs e)
+    {
+        var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
+        {
+            var targetIndex = pane.Tabs.IndexOf(targetTab);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var zone = GetTabDropZone(targetItem, e.GetPosition(targetItem));
+            if (zone == TabDropZone.Center)
+            {
+                return new TabInsertDropTarget(false, targetIndex, zone, targetItem);
+            }
+
+            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+            return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
+        }
+
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.Right, GetLastSubTabItem(listBox, pane));
+    }
+
+    private static FrameworkElement? GetLastSubTabItem(ListBox listBox, FolderPane pane)
+    {
+        for (var index = pane.Tabs.Count - 1; index >= 0; index--)
+        {
+            if (listBox.ItemContainerGenerator.ContainerFromIndex(index) is FrameworkElement item)
+            {
+                return item;
+            }
+        }
+
+        return null;
     }
 
     private int GetSubTabDropTargetIndex(DragEventArgs e, FolderPane pane)

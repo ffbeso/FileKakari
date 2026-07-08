@@ -145,6 +145,7 @@ public partial class MainWindow
         {
             ClearFileTabHover();
             ClearMainTabHover();
+            HideTabInsertIndicator();
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
@@ -153,6 +154,7 @@ public partial class MainWindow
         if (e.Data.GetDataPresent(SubTabDragFormat))
         {
             ClearFileTabHover();
+            HideTabInsertIndicator();
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
 
@@ -171,6 +173,7 @@ public partial class MainWindow
         if (GetDroppedSession(e) is not null)
         {
             ClearFileTabHover();
+            HideTabInsertIndicator();
             var targetSessionDrop = GetDropTargetSession(e);
             e.Effects = targetSessionDrop is not null
                 ? DragDropEffects.Move
@@ -202,28 +205,27 @@ public partial class MainWindow
         var folderDropPath = GetMainTabFolderDropPath(e);
         if (folderDropPath is not null)
         {
-            if (targetTabItem is not null)
+            var insertTarget = GetMainTabInsertDropTarget(e);
+            if (insertTarget.IsInsert)
             {
-                var mousePos = e.GetPosition(targetTabItem);
-                var zone = GetTabDropZone(targetTabItem, mousePos);
-                if (zone == TabDropZone.Center)
+                e.Effects = DragDropEffects.Link;
+                ClearMainTabHover();
+                ShowTabInsertIndicator(TabsControl, insertTarget);
+            }
+            else if (targetTabItem is not null)
+            {
+                e.Effects = DragDropEffects.None;
+                HideTabInsertIndicator();
+                if (targetSession is not null)
                 {
-                    e.Effects = DragDropEffects.None;
-                    if (targetSession is not null)
-                    {
-                        QueueMainTabHover(targetSession);
-                    }
-                }
-                else
-                {
-                    e.Effects = DragDropEffects.Link;
-                    ClearMainTabHover();
+                    QueueMainTabHover(targetSession);
                 }
             }
             else
             {
                 e.Effects = DragDropEffects.Link;
                 ClearMainTabHover();
+                ShowTabInsertIndicator(TabsControl, insertTarget);
             }
             ClearFileTabHover();
             e.Handled = true;
@@ -240,6 +242,7 @@ public partial class MainWindow
             e.Effects = DragDropEffects.None;
             ClearFileTabHover();
             ClearMainTabHover();
+            HideTabInsertIndicator();
             e.Handled = true;
             return;
         }
@@ -249,6 +252,7 @@ public partial class MainWindow
             : DragDropEffects.Move;
         QueueFileTabHover(targetTab);
         ClearMainTabHover();
+        HideTabInsertIndicator();
         e.Handled = true;
     }
 
@@ -256,11 +260,13 @@ public partial class MainWindow
     {
         ClearFileTabHover();
         ClearMainTabHover();
+        HideTabInsertIndicator();
     }
 
     private async void TabsControl_Drop(object sender, DragEventArgs e)
     {
         ClearMainTabHover();
+        HideTabInsertIndicator();
 
         var targetTabItem = FindVisualParent<TabItem>(e.OriginalSource as DependencyObject);
         if (targetTabItem?.DataContext is MainTabItem { IsInternalPage: true })
@@ -302,33 +308,20 @@ public partial class MainWindow
         var folderDropPath = GetMainTabFolderDropPath(e);
         if (folderDropPath is not null)
         {
-            if (targetTabItem is not null && targetSession is not null)
+            var insertTarget = GetMainTabInsertDropTarget(e);
+            if (insertTarget.IsInsert)
             {
-                var mousePos = e.GetPosition(targetTabItem);
-                var zone = GetTabDropZone(targetTabItem, mousePos);
-                if (zone == TabDropZone.Center)
-                {
-                    e.Effects = DragDropEffects.None;
-                }
-                else
-                {
-                    var targetIndex = _workspaceSessions.IndexOf(targetSession);
-                    if (targetIndex >= 0)
-                    {
-                        var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
-                        e.Effects = DragDropEffects.Link;
-                        await CreateNewMainWindowTabAtAsync(folderDropPath, insertIndex);
-                    }
-                    else
-                    {
-                        e.Effects = DragDropEffects.None;
-                    }
-                }
+                e.Effects = DragDropEffects.Link;
+                await CreateNewMainWindowTabAtAsync(folderDropPath, insertTarget.InsertIndex);
+            }
+            else if (targetTabItem is not null && targetSession is not null)
+            {
+                e.Effects = DragDropEffects.None;
             }
             else
             {
                 e.Effects = DragDropEffects.Link;
-                await CreateNewMainWindowTabAsync(folderDropPath);
+                await CreateNewMainWindowTabAtAsync(folderDropPath, _workspaceSessions.Count);
             }
             e.Handled = true;
             return;
@@ -341,6 +334,48 @@ public partial class MainWindow
     private string? GetMainTabFolderDropPath(DragEventArgs e)
     {
         return GetSingleExistingDirectoryDropPath(e);
+    }
+
+    private TabInsertDropTarget GetMainTabInsertDropTarget(DragEventArgs e)
+    {
+        var targetItem = FindVisualParent<TabItem>(e.OriginalSource as DependencyObject);
+        if (targetItem?.DataContext is MainTabItem { IsInternalPage: true })
+        {
+            return TabInsertDropTarget.None;
+        }
+
+        if (targetItem is not null && GetWorkspaceSession(targetItem.DataContext) is { } targetSession)
+        {
+            var targetIndex = _workspaceSessions.IndexOf(targetSession);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var zone = GetTabDropZone(targetItem, e.GetPosition(targetItem));
+            if (zone == TabDropZone.Center)
+            {
+                return new TabInsertDropTarget(false, targetIndex, zone, targetItem);
+            }
+
+            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+            return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
+        }
+
+        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.Right, GetLastMainTabItem());
+    }
+
+    private FrameworkElement? GetLastMainTabItem()
+    {
+        for (var index = _workspaceSessions.Count - 1; index >= 0; index--)
+        {
+            if (GetTabItem(_workspaceSessions[index]) is { } item)
+            {
+                return item;
+            }
+        }
+
+        return null;
     }
 
     private void ReorderSession(WorkspaceSession draggedSession, WorkspaceSession targetSession, Func<IInputElement, Point> getPosition)
@@ -544,6 +579,15 @@ public partial class MainWindow
         Right
     }
 
+    private readonly record struct TabInsertDropTarget(
+        bool IsInsert,
+        int InsertIndex,
+        TabDropZone Zone,
+        FrameworkElement? TargetElement)
+    {
+        public static TabInsertDropTarget None => new(false, -1, TabDropZone.Center, null);
+    }
+
     private static TabDropZone GetTabDropZone(FrameworkElement tabItem, Point mousePosition)
     {
         var width = tabItem.ActualWidth;
@@ -581,7 +625,7 @@ public partial class MainWindow
         _isSwitchingTabs = true;
         try
         {
-            var insertIndex = Math.Clamp(index, 0, _workspaceSessions.Count);
+            var insertIndex = result.InsertIndex ?? Math.Clamp(index, 0, _workspaceSessions.Count);
             _workspaceSessions.Insert(insertIndex, session);
             _activeWorkspaceSession = session;
             UpdateActiveWorkspaceSessionUi(session);

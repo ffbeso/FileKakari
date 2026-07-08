@@ -1051,6 +1051,7 @@ public partial class MainWindow
     {
         if (CanDropSubTab(sender, e))
         {
+            HideTabInsertIndicator();
             QueueWorkspacePaneSubTabHover(sender, e);
             if (e.Data.GetDataPresent(TabDragFormat))
             {
@@ -1067,6 +1068,7 @@ public partial class MainWindow
 
         if (GetWorkspacePaneSubTabFileDropTarget(sender, e) is { } fileDropTarget)
         {
+            HideTabInsertIndicator();
             QueueWorkspacePaneSubTabHover(sender, e);
             var dragItems = GetFileOperationDragItems(e);
             var operationKind = GetFileDropOperationKind(e, fileDropTarget.Navigation.CurrentPath);
@@ -1082,31 +1084,34 @@ public partial class MainWindow
 
         if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
         {
-            var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
-            if (targetItem is not null)
+            if (sender is ListBox listBox
+                && listBox.DataContext is FolderPane pane)
             {
-                var mousePos = e.GetPosition(targetItem);
-                var zone = GetTabDropZone(targetItem, mousePos);
-                if (zone == TabDropZone.Center)
-                {
-                    e.Effects = DragDropEffects.None;
-                    QueueWorkspacePaneSubTabHover(sender, e);
-                }
-                else
+                var insertTarget = GetWorkspacePaneSubTabInsertDropTarget(listBox, pane, e);
+                if (insertTarget.IsInsert)
                 {
                     e.Effects = DragDropEffects.Link;
                     ClearWorkspacePaneSubTabHover();
+                    ShowTabInsertIndicator(listBox, insertTarget);
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.None;
+                    HideTabInsertIndicator();
+                    QueueWorkspacePaneSubTabHover(sender, e);
                 }
             }
             else
             {
                 e.Effects = DragDropEffects.Link;
                 ClearWorkspacePaneSubTabHover();
+                HideTabInsertIndicator();
             }
             e.Handled = true;
             return;
         }
 
+        HideTabInsertIndicator();
         QueueWorkspacePaneSubTabHover(sender, e);
         e.Effects = DragDropEffects.None;
         e.Handled = true;
@@ -1115,11 +1120,13 @@ public partial class MainWindow
     private void WorkspacePaneSubTabBar_DragLeave(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
+        HideTabInsertIndicator();
     }
 
     private void WorkspacePaneSubTabAddTarget_DragOver(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
+        HideTabInsertIndicator();
         e.Effects = GetWorkspacePaneFromSender(sender) is not null
             && GetSingleExistingDirectoryDropPath(e) is not null
                 ? DragDropEffects.Link

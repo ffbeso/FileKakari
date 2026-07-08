@@ -167,26 +167,6 @@ public partial class MainWindow
         }
     }
 
-    private void WorkspacePaneFileList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (WorkspaceSplitGrid.Visibility != Visibility.Visible
-            || sender is not ListView listView
-            || listView.DataContext is not FolderPane pane)
-        {
-            return;
-        }
-
-        if (IsInsideScrollBar(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
-
-        var clickedEntry = FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject)?.DataContext as FileEntry;
-        PreparePaneRightClickSelection(pane, listView, clickedEntry);
-        e.Handled = true;
-        ShowWorkspacePaneContextMenu(pane, listView, clickedEntry);
-    }
-
     private void PreparePaneRightClickSelection(FolderPane pane, ListView listView, FileEntry? clickedEntry)
     {
         if (clickedEntry is not null)

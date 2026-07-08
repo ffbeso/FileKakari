@@ -2672,32 +2672,6 @@ public partial class MainWindow : Window
         }
     }
 
-
-
-    private void WorkspacePaneFileList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not ListView listView
-            || listView.DataContext is not FolderPane pane)
-        {
-            return;
-        }
-
-        var isAccepted = TryRequestActivePane(pane, "listview", listView);
-        if (!isAccepted)
-        {
-            return;
-        }
-
-        if (e.ChangedButton == MouseButton.Left)
-        {
-            PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e);
-        }
-
-        ScheduleWorkspacePaneActivation(pane);
-    }
-
-
-
     private void ItemsList_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (WorkspaceSplitGrid.Visibility != Visibility.Visible
@@ -2860,87 +2834,6 @@ public partial class MainWindow : Window
             _pendingSingleSelectionClickPoint = position;
             _pendingSingleSelectionClickPane = pane;
             _pendingSingleSelectionClickListView = listView;
-            e.Handled = true;
-        }
-    }
-
-    private async void WorkspacePaneFileList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (e.ChangedButton == MouseButton.Left && _workspacePendingRangeSelectionClickEntry is { } pendingEntry)
-        {
-            var entry = pendingEntry;
-            var listView = _workspacePendingRangeSelectionListView;
-            var pane = _workspacePendingRangeSelectionPane;
-            ClearFileDragStart();
-
-            if (listView is not null && pane is not null && IsPaneOwnedByActiveWorkspaceSession(pane))
-            {
-                var modifiers = Keyboard.Modifiers;
-                var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
-                var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
-
-                if (hasShift)
-                {
-                    FileListSelectionHelper.PerformShiftSelection(listView, _workspaceSelectionAnchorEntry, entry, hasControl);
-                }
-                else
-                {
-                    if (hasControl)
-                    {
-                        FileListSelectionHelper.ApplyControlSelection(listView, entry);
-                        _workspaceSelectionAnchorEntry = entry;
-                    }
-                    else
-                    {
-                        FileListSelectionHelper.ApplySingleSelection(listView, entry);
-                        _workspaceSelectionAnchorEntry = entry;
-                    }
-                }
-
-                listView.Focus();
-                SyncPaneSelectionFromListView(pane, listView);
-            }
-            e.Handled = true;
-            return;
-        }
-
-        if (sender is ListView upListView
-            && upListView.DataContext is FolderPane upPane
-            && _renameInteraction.PendingClickEntry is { } renameEntry)
-        {
-            if (!IsPaneOwnedByActiveWorkspaceSession(upPane))
-            {
-                ClearPendingRenameClick();
-                ClearFileDragStart();
-                return;
-            }
-
-            var currentPoint = e.GetPosition(upListView);
-            var startPoint = _renameInteraction.PendingClickPoint;
-            ClearPendingRenameClick();
-            ClearFileDragStart();
-
-            if (startPoint is not null
-                && Math.Abs(currentPoint.X - startPoint.Value.X) < SystemParameters.MinimumHorizontalDragDistance
-                && Math.Abs(currentPoint.Y - startPoint.Value.Y) < SystemParameters.MinimumVerticalDragDistance
-                && upListView.SelectedItems.Count == 1
-                && upListView.SelectedItems.Contains(renameEntry)
-                && e.ChangedButton == MouseButton.Left)
-            {
-                e.Handled = true;
-                await BeginRenameAfterClickDelayAsync(renameEntry, _renameInteraction.AdvanceGeneration(), upPane);
-                return;
-            }
-        }
-
-        if (CommitPendingSelection(sender, e))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        if (TryApplyWorkspacePanePendingSingleSelectionClick(sender, e))
-        {
             e.Handled = true;
         }
     }
@@ -3130,12 +3023,6 @@ public partial class MainWindow : Window
         layer.Add(_workspaceRangeSelectionAdorner);
     }
 
-    private void DrawWorkspacePaneRangeSelection(ListView listView, Rect selectionRect)
-    {
-        EnsureWorkspaceRangeSelectionAdorner(listView);
-        _workspaceRangeSelectionAdorner?.Update(selectionRect);
-    }
-
     private void ClearWorkspaceRangeSelectionAdorner()
     {
         if (_workspaceRangeSelectionAdorner is not null
@@ -3146,18 +3033,6 @@ public partial class MainWindow : Window
 
         _workspaceRangeSelectionAdorner = null;
         _workspaceRangeSelectionAdornerLayer = null;
-    }
-
-    private void ClearWorkspacePaneRangeSelection()
-    {
-        if (_workspaceRangeSelectionSession?.ListView?.IsMouseCaptured == true)
-        {
-            _workspaceRangeSelectionSession.ListView.ReleaseMouseCapture();
-        }
-
-        _workspaceRangeSelectionPane = null;
-        _workspaceRangeSelectionSession = null;
-        ClearWorkspaceRangeSelectionAdorner();
     }
 
     private void WorkspacePaneFileList_DragOver(object sender, DragEventArgs e)

@@ -697,6 +697,147 @@ public partial class MainWindow
         }
     }
 
+    private void WorkspacePaneFileList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not ListView listView
+            || listView.DataContext is not FolderPane pane)
+        {
+            return;
+        }
+
+        var isAccepted = TryRequestActivePane(pane, "listview", listView);
+        if (!isAccepted)
+        {
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e);
+        }
+
+        ScheduleWorkspacePaneActivation(pane);
+    }
+
+    private async void WorkspacePaneFileList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left && _workspacePendingRangeSelectionClickEntry is { } pendingEntry)
+        {
+            var entry = pendingEntry;
+            var listView = _workspacePendingRangeSelectionListView;
+            var pane = _workspacePendingRangeSelectionPane;
+            ClearFileDragStart();
+
+            if (listView is not null && pane is not null && IsPaneOwnedByActiveWorkspaceSession(pane))
+            {
+                var modifiers = Keyboard.Modifiers;
+                var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+                var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+                if (hasShift)
+                {
+                    FileListSelectionHelper.PerformShiftSelection(listView, _workspaceSelectionAnchorEntry, entry, hasControl);
+                }
+                else
+                {
+                    if (hasControl)
+                    {
+                        FileListSelectionHelper.ApplyControlSelection(listView, entry);
+                        _workspaceSelectionAnchorEntry = entry;
+                    }
+                    else
+                    {
+                        FileListSelectionHelper.ApplySingleSelection(listView, entry);
+                        _workspaceSelectionAnchorEntry = entry;
+                    }
+                }
+
+                listView.Focus();
+                SyncPaneSelectionFromListView(pane, listView);
+            }
+            e.Handled = true;
+            return;
+        }
+
+        if (sender is ListView upListView
+            && upListView.DataContext is FolderPane upPane
+            && _renameInteraction.PendingClickEntry is { } renameEntry)
+        {
+            if (!IsPaneOwnedByActiveWorkspaceSession(upPane))
+            {
+                ClearPendingRenameClick();
+                ClearFileDragStart();
+                return;
+            }
+
+            var currentPoint = e.GetPosition(upListView);
+            var startPoint = _renameInteraction.PendingClickPoint;
+            ClearPendingRenameClick();
+            ClearFileDragStart();
+
+            if (startPoint is not null
+                && Math.Abs(currentPoint.X - startPoint.Value.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(currentPoint.Y - startPoint.Value.Y) < SystemParameters.MinimumVerticalDragDistance
+                && upListView.SelectedItems.Count == 1
+                && upListView.SelectedItems.Contains(renameEntry)
+                && e.ChangedButton == MouseButton.Left)
+            {
+                e.Handled = true;
+                await BeginRenameAfterClickDelayAsync(renameEntry, _renameInteraction.AdvanceGeneration(), upPane);
+                return;
+            }
+        }
+
+        if (CommitPendingSelection(sender, e))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (TryApplyWorkspacePanePendingSingleSelectionClick(sender, e))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void WorkspacePaneFileList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (WorkspaceSplitGrid.Visibility != Visibility.Visible
+            || sender is not ListView listView
+            || listView.DataContext is not FolderPane pane)
+        {
+            return;
+        }
+
+        if (IsInsideScrollBar(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        var clickedEntry = FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject)?.DataContext as FileEntry;
+        PreparePaneRightClickSelection(pane, listView, clickedEntry);
+        e.Handled = true;
+        ShowWorkspacePaneContextMenu(pane, listView, clickedEntry);
+    }
+
+    private void DrawWorkspacePaneRangeSelection(ListView listView, Rect selectionRect)
+    {
+        EnsureWorkspaceRangeSelectionAdorner(listView);
+        _workspaceRangeSelectionAdorner?.Update(selectionRect);
+    }
+
+    private void ClearWorkspacePaneRangeSelection()
+    {
+        if (_workspaceRangeSelectionSession?.ListView?.IsMouseCaptured == true)
+        {
+            _workspaceRangeSelectionSession.ListView.ReleaseMouseCapture();
+        }
+
+        _workspaceRangeSelectionPane = null;
+        _workspaceRangeSelectionSession = null;
+        ClearWorkspaceRangeSelectionAdorner();
+    }
+
     private static WorkspaceLayoutNodeDefinition UpdateWorkspaceSplitRatio(
         WorkspaceLayoutNodeDefinition node,
         string splitId,

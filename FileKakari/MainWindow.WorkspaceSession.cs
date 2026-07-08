@@ -833,6 +833,7 @@ public partial class MainWindow
         _suppressWorkspaceScrollSync = true;
         try
         {
+            ApplyColumnWidthsToWorkspacePane(pane);
             await _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
             
             cancellationToken.ThrowIfCancellationRequested();

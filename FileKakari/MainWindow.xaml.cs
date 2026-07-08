@@ -771,6 +771,7 @@ public partial class MainWindow : Window
         ResetUpdateDiagnostics(loadId);
 
         SetFolderColumnHeaders();
+        ApplyColumnSettings(loadTab);
         _currentLoadPath = path;
         loadTab.Navigation.SetCurrentPath(path);
         loadState.CurrentPath = path;

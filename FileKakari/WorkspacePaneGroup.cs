@@ -464,6 +464,29 @@ public class FolderPane : INotifyPropertyChanged
         return string.IsNullOrWhiteSpace(name) ? tab.Navigation.CurrentPath : name;
     }
 
+    private static System.Collections.Generic.List<string> GetParentSegments(string path)
+    {
+        var segments = new System.Collections.Generic.List<string>();
+        var current = path;
+        while (!string.IsNullOrEmpty(current))
+        {
+            var name = Path.GetFileName(current);
+            if (string.IsNullOrEmpty(name))
+            {
+                name = current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (string.IsNullOrEmpty(name))
+                {
+                    break;
+                }
+                segments.Add(name);
+                break;
+            }
+            segments.Add(name);
+            current = Path.GetDirectoryName(current);
+        }
+        return segments;
+    }
+
     public void ResolveTabHeaders()
     {
         if (Tabs.Count == 0) return;
@@ -488,58 +511,135 @@ public class FolderPane : INotifyPropertyChanged
 
             if (tabList.Count > 1)
             {
-                var parentToTabs = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<FolderTab>>(System.StringComparer.OrdinalIgnoreCase);
+                var tabSegments = new System.Collections.Generic.Dictionary<FolderTab, System.Collections.Generic.List<string>>();
+                var segmentCounts = new System.Collections.Generic.Dictionary<FolderTab, int>();
+
                 foreach (var tab in tabList)
                 {
                     var path = tab.Navigation.CurrentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                     var parentPath = Path.GetDirectoryName(path);
-                    string displayName;
-                    if (!string.IsNullOrWhiteSpace(parentPath))
-                    {
-                        var parentName = Path.GetFileName(parentPath);
-                        if (string.IsNullOrWhiteSpace(parentName))
-                        {
-                            parentName = parentPath;
-                        }
-                        displayName = $"{baseName} ({parentName})";
-                    }
-                    else
-                    {
-                        displayName = baseName;
-                    }
-
-                    if (!parentToTabs.TryGetValue(displayName, out var plist))
-                    {
-                        plist = new System.Collections.Generic.List<FolderTab>();
-                        parentToTabs[displayName] = plist;
-                    }
-                    plist.Add(tab);
+                    tabSegments[tab] = GetParentSegments(parentPath ?? "");
+                    segmentCounts[tab] = 1;
                 }
 
-                foreach (var pkvp in parentToTabs)
-                {
-                    var displayName = pkvp.Key;
-                    var plist = pkvp.Value;
+                bool hasDuplicates = true;
+                int maxIterations = 20;
+                int iteration = 0;
 
-                    if (plist.Count > 1)
+                while (hasDuplicates && iteration < maxIterations)
+                {
+                    iteration++;
+                    hasDuplicates = false;
+
+                    var displayNames = new System.Collections.Generic.Dictionary<FolderTab, string>();
+                    var nameToTabs = new System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<FolderTab>>(System.StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var tab in tabList)
                     {
-                        foreach (var tab in plist)
+                        var segs = tabSegments[tab];
+                        var count = segmentCounts[tab];
+                        var taken = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Take(segs, System.Math.Min(count, segs.Count)));
+                        taken.Reverse();
+                        var suffix = string.Join("\\", taken);
+
+                        string displayName = string.IsNullOrEmpty(suffix) ? baseName : $"{baseName} ({suffix})";
+                        displayNames[tab] = displayName;
+
+                        if (!nameToTabs.TryGetValue(displayName, out var list))
                         {
-                            var path = tab.Navigation.CurrentPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                            var parentPath = Path.GetDirectoryName(path);
-                            if (!string.IsNullOrWhiteSpace(parentPath))
+                            list = new System.Collections.Generic.List<FolderTab>();
+                            nameToTabs[displayName] = list;
+                        }
+                        list.Add(tab);
+                    }
+
+                    foreach (var nameKvp in nameToTabs)
+                    {
+                        var list = nameKvp.Value;
+                        if (list.Count > 1)
+                        {
+                            bool canIncreaseAny = false;
+                            foreach (var tab in list)
                             {
-                                tab.SetHeaderOverride($"{baseName} ({parentPath})");
+                                var segs = tabSegments[tab];
+                                if (segmentCounts[tab] < segs.Count)
+                                {
+                                    segmentCounts[tab]++;
+                                    canIncreaseAny = true;
+                                }
                             }
-                            else
+                            if (canIncreaseAny)
                             {
-                                tab.SetHeaderOverride(displayName);
+                                hasDuplicates = true;
+                            }
+                        }
+                    }
+                }
+
+                // ドライブ名のみの優先短縮ルール判定
+                bool canUseDriveOnly = true;
+                System.Collections.Generic.List<string>? commonRest = null;
+
+                foreach (var tab in tabList)
+                {
+                    var segs = tabSegments[tab];
+                    var count = segmentCounts[tab];
+                    var taken = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Take(segs, System.Math.Min(count, segs.Count)));
+                    taken.Reverse();
+
+                    if (taken.Count >= 2 && taken[0].EndsWith(':'))
+                    {
+                        var rest = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Skip(taken, 1));
+                        if (commonRest == null)
+                        {
+                            commonRest = rest;
+                        }
+                        else
+                        {
+                            if (commonRest.Count != rest.Count || !System.Linq.Enumerable.SequenceEqual(commonRest, rest, System.StringComparer.OrdinalIgnoreCase))
+                            {
+                                canUseDriveOnly = false;
+                                break;
                             }
                         }
                     }
                     else
                     {
-                        plist[0].SetHeaderOverride(displayName);
+                        canUseDriveOnly = false;
+                        break;
+                    }
+                }
+
+                if (canUseDriveOnly)
+                {
+                    foreach (var tab in tabList)
+                    {
+                        var segs = tabSegments[tab];
+                        var count = segmentCounts[tab];
+                        var taken = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Take(segs, System.Math.Min(count, segs.Count)));
+                        taken.Reverse();
+                        var driveOnly = taken[0];
+                        tab.SetHeaderOverride($"{baseName} ({driveOnly})");
+                    }
+                }
+                else
+                {
+                    foreach (var tab in tabList)
+                    {
+                        var segs = tabSegments[tab];
+                        var count = segmentCounts[tab];
+                        var taken = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Take(segs, System.Math.Min(count, segs.Count)));
+                        taken.Reverse();
+                        var suffix = string.Join("\\", taken);
+
+                        if (string.IsNullOrEmpty(suffix))
+                        {
+                            tab.SetHeaderOverride(null);
+                        }
+                        else
+                        {
+                            tab.SetHeaderOverride($"{baseName} ({suffix})");
+                        }
                     }
                 }
             }

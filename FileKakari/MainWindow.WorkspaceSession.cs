@@ -441,6 +441,168 @@ public partial class MainWindow
         UpdateWindowTitle();
     }
 
+    private void WorkspacePaneFileList_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ListView listView)
+        {
+            try
+            {
+                WriteWorkspaceListViewDiagnostics("workspace-listview-loaded", listView);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    WriteDiagLog($"event=workspace-listview-diag-error message=\"{ex.Message}\"");
+                }
+                catch { }
+            }
+
+            if (listView.DataContext is FolderPane pane)
+            {
+                if (!IsPaneOwnedByActiveWorkspaceSession(pane))
+                {
+                    WriteDiagLog($"event=workspace-listview-loaded-skip reason=inactive-session-pane paneId={pane.Id} paneHash={pane.GetHashCode()} activeSessionId={_activeWorkspaceSession?.Id ?? "null"}");
+                    return;
+                }
+
+                ApplyDisplayModeToPane(listView, pane);
+                ApplyColumnSettingsToWorkspacePane(listView, pane);
+                HookWorkspacePaneColumnWidthChanges(listView, pane);
+            }
+        }
+    }
+
+    private void WorkspacePaneFileList_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ListView listView)
+        {
+            UnhookWorkspacePaneColumnWidthChanges(listView);
+        }
+    }
+
+    private void WorkspacePaneGridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not GridViewColumnHeader header)
+        {
+            return;
+        }
+
+        if (header.Column is not GridViewColumn column)
+        {
+            return;
+        }
+
+        if (sender is not FrameworkElement element || element.DataContext is not FolderPane pane)
+        {
+            return;
+        }
+
+        var targetState = pane.ActiveTabState;
+        if (targetState == null)
+        {
+            return;
+        }
+
+        // Capture current display order before updating sort properties
+        var currentOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int index = 0;
+        foreach (var item in pane.FileList.ItemsView)
+        {
+            if (item is FileEntry entry)
+            {
+                currentOrder[entry.FullPath] = index++;
+            }
+        }
+
+        string? columnId = null;
+        var headerObj = column.Header;
+        if (headerObj is string headerText)
+        {
+            if (headerText == WorkspacePaneColumnNameText) columnId = "Name";
+            else if (headerText == WorkspacePaneColumnSizeText) columnId = "Size";
+            else if (headerText == WorkspacePaneColumnModifiedText) columnId = "ModifiedAt";
+        }
+        else if (headerObj is TextBlock textBlock && textBlock.Tag is string tag)
+        {
+            columnId = tag;
+        }
+
+        if (columnId == null)
+        {
+            return;
+        }
+
+        if (targetState.SortColumn == columnId)
+        {
+            targetState.SortAscending = !targetState.SortAscending;
+        }
+        else
+        {
+            targetState.SortColumn = columnId;
+            targetState.SortAscending = true;
+        }
+
+        pane.FileList.ApplySort(
+            targetState.SortColumn,
+            targetState.SortAscending,
+            _settingsService.Settings.SortFoldersFirst,
+            currentOrder);
+
+        _folderPaneController.UpdateStatus(pane);
+        pane.RefreshDisplay();
+
+        if (sender is ListView listView)
+        {
+            UpdateWorkspacePaneColumnHeaders(listView, pane);
+        }
+
+        _workspaceLocalState.MarkDirty("sort");
+    }
+
+    private void UpdateWorkspacePaneColumnHeadersForPane(FolderPane pane)
+    {
+        var listView = FindListViewForPane(pane);
+        if (listView is not null)
+        {
+            UpdateWorkspacePaneColumnHeaders(listView, pane);
+        }
+    }
+
+    private void UpdateWorkspacePaneColumnHeaders(ListView listView, FolderPane pane)
+    {
+        if (listView.View is GridView gridView)
+        {
+            UpdateWorkspacePaneColumnHeaders(gridView, pane);
+        }
+    }
+
+    private void UpdateWorkspacePaneColumnHeaders(GridView gridView, FolderPane pane)
+    {
+        var targetState = pane.ActiveTabState;
+        var path = pane.ActiveTab?.Navigation.CurrentPath ?? "";
+        bool isSpecial = SpecialLocationService.IsSpecialUri(path);
+
+        foreach (var column in gridView.Columns)
+        {
+            if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
+            {
+                var normalizedId = ColumnLayoutService.NormalizeColumnId(columnId);
+                var resourceKey = GetHeaderResourceKey(normalizedId, isSpecial);
+                var baseText = _text.Get(resourceKey);
+
+                if (targetState is not null && string.Equals(targetState.SortColumn, normalizedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    textBlock.Text = baseText + (targetState.SortAscending ? " ↑" : " ↓");
+                }
+                else
+                {
+                    textBlock.Text = baseText;
+                }
+            }
+        }
+    }
+
     private static WorkspaceLayoutNodeDefinition UpdateWorkspaceSplitRatio(
         WorkspaceLayoutNodeDefinition node,
         string splitId,

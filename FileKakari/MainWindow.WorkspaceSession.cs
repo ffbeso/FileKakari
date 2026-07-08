@@ -1231,7 +1231,13 @@ public partial class MainWindow
         var newTab = _tabOperations.CreateNewTab(paneNewTabPath, activeTab);
         SeedNewTabCache(newTab, activeTab);
 
-        pane.Tabs.Insert(Math.Clamp(insertIndex, 0, pane.Tabs.Count), newTab);
+        var clampedIndex = Math.Clamp(insertIndex, 0, pane.Tabs.Count);
+        pane.Tabs.Insert(clampedIndex, newTab);
+        pane.SelectedTabId = newTab.Id;
+        pane.ResolveTabHeaders();
+        pane.RefreshDisplay();
+        RestoreWorkspacePaneSubTabSelection(FindWorkspacePaneSubTabListBox(pane), pane, newTab);
+
         await _navigationController.NavigateWorkspacePaneToFolderAsync(pane, newTab.Navigation.CurrentPath, NavigationKind.New);
         _workspaceLocalState.QueueCapture(markDirty: true, reason: "new-subtab");
     }

@@ -1044,6 +1044,7 @@ public partial class MainWindow
             ClearSubTabDragState();
             ClearWorkspacePaneSubTabHover();
             ClearMainTabHover();
+            HideTabInsertIndicator();
         }
     }
 
@@ -1051,8 +1052,17 @@ public partial class MainWindow
     {
         if (CanDropSubTab(sender, e))
         {
-            HideTabInsertIndicator();
-            QueueWorkspacePaneSubTabHover(sender, e);
+            ClearWorkspacePaneSubTabHover();
+            if (sender is ListBox listBox
+                && listBox.DataContext is FolderPane pane)
+            {
+                ShowTabInsertIndicator(listBox, GetWorkspacePaneSubTabDragInsertDropTarget(listBox, pane, e));
+            }
+            else
+            {
+                HideTabInsertIndicator();
+            }
+
             if (e.Data.GetDataPresent(TabDragFormat))
             {
                 e.Effects = DragDropEffects.Move;
@@ -1208,6 +1218,7 @@ public partial class MainWindow
         _subTabDragStartPoint = null;
         _draggedSubTabPane = null;
         _draggedSubTab = null;
+        HideTabInsertIndicator();
     }
 
     private async Task CreateWorkspacePaneSubTabAtAsync(

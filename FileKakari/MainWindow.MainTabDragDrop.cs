@@ -135,6 +135,7 @@ public partial class MainWindow
         {
             ClearTabDragState();
             ClearMainTabHover();
+            HideTabInsertIndicator();
         }
     }
 
@@ -154,9 +155,9 @@ public partial class MainWindow
         if (e.Data.GetDataPresent(SubTabDragFormat))
         {
             ClearFileTabHover();
-            HideTabInsertIndicator();
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
+            ShowTabInsertIndicator(TabsControl, GetMainTabEndInsertDropTarget());
 
             var targetSessionSub = GetDropTargetSession(e);
             if (targetSessionSub is not null)
@@ -173,7 +174,7 @@ public partial class MainWindow
         if (GetDroppedSession(e) is not null)
         {
             ClearFileTabHover();
-            HideTabInsertIndicator();
+            ShowTabInsertIndicator(TabsControl, GetMainTabDragInsertDropTarget(e));
             var targetSessionDrop = GetDropTargetSession(e);
             e.Effects = targetSessionDrop is not null
                 ? DragDropEffects.Move
@@ -362,6 +363,38 @@ public partial class MainWindow
             return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
         }
 
+        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.Right, GetLastMainTabItem());
+    }
+
+    private TabInsertDropTarget GetMainTabDragInsertDropTarget(DragEventArgs e)
+    {
+        var targetItem = FindVisualParent<TabItem>(e.OriginalSource as DependencyObject);
+        if (targetItem?.DataContext is MainTabItem { IsInternalPage: true })
+        {
+            return TabInsertDropTarget.None;
+        }
+
+        if (targetItem is not null && GetWorkspaceSession(targetItem.DataContext) is { } targetSession)
+        {
+            var targetIndex = _workspaceSessions.IndexOf(targetSession);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var insertAfterTarget = e.GetPosition(targetItem).X > targetItem.ActualWidth / 2;
+            return new TabInsertDropTarget(
+                true,
+                insertAfterTarget ? targetIndex + 1 : targetIndex,
+                insertAfterTarget ? TabDropZone.Right : TabDropZone.Left,
+                targetItem);
+        }
+
+        return GetMainTabEndInsertDropTarget();
+    }
+
+    private TabInsertDropTarget GetMainTabEndInsertDropTarget()
+    {
         return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.Right, GetLastMainTabItem());
     }
 
@@ -566,6 +599,7 @@ public partial class MainWindow
         _tabDragStartPoint = null;
         _draggedTab = null;
         ClearPendingWorkspaceRenameClick();
+        HideTabInsertIndicator();
         if (TabsControl.IsMouseCaptured)
         {
             TabsControl.ReleaseMouseCapture();

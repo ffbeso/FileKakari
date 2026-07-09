@@ -3252,6 +3252,7 @@ public partial class MainWindow : Window
     private async void WorkspacePaneSubTabAddTarget_Drop(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
+        HideTabInsertIndicator();
         if (GetWorkspacePaneFromSender(sender) is not { } pane
             || GetSingleExistingDirectoryDropPath(e) is not { } folderPath)
         {
@@ -3409,6 +3410,31 @@ public partial class MainWindow : Window
 
             var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
             return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
+        }
+
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.Right, GetLastSubTabItem(listBox, pane));
+    }
+
+    private TabInsertDropTarget GetWorkspacePaneSubTabDragInsertDropTarget(
+        ListBox listBox,
+        FolderPane pane,
+        DragEventArgs e)
+    {
+        var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
+        if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
+        {
+            var targetIndex = pane.Tabs.IndexOf(targetTab);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var insertAfterTarget = e.GetPosition(targetItem).X > targetItem.ActualWidth / 2;
+            return new TabInsertDropTarget(
+                true,
+                insertAfterTarget ? targetIndex + 1 : targetIndex,
+                insertAfterTarget ? TabDropZone.Right : TabDropZone.Left,
+                targetItem);
         }
 
         return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.Right, GetLastSubTabItem(listBox, pane));

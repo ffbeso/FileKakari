@@ -10,7 +10,12 @@ namespace FileKakari;
 public partial class MainWindow
 {
     private static readonly TimeSpan PreviewLoadDelay = TimeSpan.FromMilliseconds(200);
-    private readonly FilePreviewService _filePreviewService = new();
+    private readonly FilePreviewController _filePreviewController = new(new IFilePreviewProvider[]
+    {
+        new BuiltInTextPreviewProvider(),
+        new BuiltInImagePreviewProvider(),
+        new BuiltInVideoPreviewProvider()
+    });
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
     private int _previewMediaGeneration = -1;
@@ -302,7 +307,7 @@ public partial class MainWindow
             PreviewLoadingBar.Visibility = Visibility.Visible;
             await Task.Delay(PreviewLoadDelay, cancellationToken);
 
-            var result = await _filePreviewService.LoadAsync(path, cancellationToken);
+            var result = await _filePreviewController.LoadAsync(path, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (generation != _previewGeneration)
             {

@@ -1611,6 +1611,10 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
+                        <Border x:Name="PreviewShellHostContainer"
+                                Margin="8"
+                                ClipToBounds="True"
+                                Visibility="Collapsed" />
                         <TextBox x:Name="PreviewTextBox"
                                  Margin="8"
                                  Padding="8"

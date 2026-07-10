@@ -367,7 +367,7 @@ public partial class MainWindow
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
-                ReplacePreviewWithMessage($"Shell Preview Handler detected (CLSID: {result.Clsid:B}) - Stage 2-B implementation pending");
+                ReplacePreviewWithShell(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Video && result.FileInfo is not null:
@@ -440,6 +440,47 @@ public partial class MainWindow
         PreviewInfoModifiedText.Text = fileInfo.LastWriteTime.ToString("g");
         PreviewInfoPathText.Text = fileInfo.FullPath;
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
+    }
+
+    private void ReplacePreviewWithShell(string path, Guid clsid, FilePreviewInfo? fileInfo)
+    {
+        ClearPreviewContent();
+        try
+        {
+            var shellHost = new ShellPreviewHost(path, clsid);
+            PreviewShellHostContainer.Child = shellHost;
+            PreviewShellHostContainer.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            ClearShellPreviewHost();
+            if (fileInfo is not null)
+            {
+                ReplacePreviewWithUnsupportedInfo(fileInfo);
+            }
+            else
+            {
+                ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
+            }
+        }
+    }
+
+    private void ClearShellPreviewHost()
+    {
+        if (PreviewShellHostContainer.Child is ShellPreviewHost host)
+        {
+            try
+            {
+                host.Dispose();
+            }
+            catch
+            {
+                // Ignore exceptions during dispose
+            }
+        }
+
+        PreviewShellHostContainer.Child = null;
+        PreviewShellHostContainer.Visibility = Visibility.Collapsed;
     }
 
     private static BitmapImage DecodePreviewImage(byte[] imageBytes)
@@ -605,6 +646,7 @@ public partial class MainWindow
         PreviewImageScrollViewer.Visibility = Visibility.Collapsed;
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
+        ClearShellPreviewHost();
     }
 
     private void ClearPreviewContent()
@@ -620,6 +662,7 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
+        ClearShellPreviewHost();
     }
 
     private void ShowPreviewMessage(string message)

@@ -5,5 +5,6 @@ public enum FilePreviewKind
     Unsupported,
     Text,
     Image,
-    Video
+    Video,
+    Shell
 }

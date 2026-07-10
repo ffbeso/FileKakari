@@ -18,7 +18,8 @@ public sealed record FilePreviewResult(
     byte[]? ImageBytes = null,
     long? SizeLimit = null,
     string? ErrorMessage = null,
-    FilePreviewInfo? FileInfo = null);
+    FilePreviewInfo? FileInfo = null,
+    Guid? Clsid = null);
 
 public sealed record FilePreviewInfo(
     string FileName,

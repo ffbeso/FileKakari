@@ -14,7 +14,8 @@ public partial class MainWindow
     {
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
-        new BuiltInVideoPreviewProvider()
+        new BuiltInVideoPreviewProvider(),
+        new ShellPreviewHandlerProvider()
     });
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
@@ -363,6 +364,10 @@ public partial class MainWindow
 
                     ReplacePreviewWithMessage(_text.Format("PreviewLoadFailed", ex.Message));
                 }
+                break;
+
+            case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
+                ReplacePreviewWithMessage($"Shell Preview Handler detected (CLSID: {result.Clsid:B}) - Stage 2-B implementation pending");
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Video && result.FileInfo is not null:

@@ -367,6 +367,7 @@ public partial class MainWindow
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
+                PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.Shell for path='{result.FileInfo?.FullPath ?? ""}' CLSID='{result.Clsid.Value:B}'");
                 ReplacePreviewWithShell(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo);
                 break;
 
@@ -444,22 +445,28 @@ public partial class MainWindow
 
     private void ReplacePreviewWithShell(string path, Guid clsid, FilePreviewInfo? fileInfo)
     {
+        PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell: path='{path}', clsid='{clsid:B}', container_child_type='{PreviewShellHostContainer.Child?.GetType().FullName ?? "null"}'");
         ClearPreviewContent();
         try
         {
+            PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
             var shellHost = new ShellPreviewHost(path, clsid);
             PreviewShellHostContainer.Child = shellHost;
             PreviewShellHostContainer.Visibility = Visibility.Visible;
+            PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Attached ShellPreviewHost to container successfully.");
         }
-        catch
+        catch (Exception ex)
         {
+            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
             ClearShellPreviewHost();
             if (fileInfo is not null)
             {
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing unsupported metadata card.");
                 ReplacePreviewWithUnsupportedInfo(fileInfo);
             }
             else
             {
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing generic unsupported message.");
                 ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
             }
         }
@@ -469,13 +476,15 @@ public partial class MainWindow
     {
         if (PreviewShellHostContainer.Child is ShellPreviewHost host)
         {
+            PerfLog.Write("[MainWindow.Preview] ClearShellPreviewHost: Found active ShellPreviewHost, disposing...");
             try
             {
                 host.Dispose();
+                PerfLog.Write("[MainWindow.Preview] ClearShellPreviewHost: Disposed successfully.");
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore exceptions during dispose
+                PerfLog.Write($"[MainWindow.Preview] ClearShellPreviewHost dispose exception: {ex.Message}");
             }
         }
 
@@ -525,6 +534,9 @@ public partial class MainWindow
     {
         var generation = _previewMediaGeneration;
         var mediaUri = _previewMediaUri;
+
+        PerfLog.Write($"[PreviewMediaElement] MediaFailed: Uri='{mediaUri}', ErrorMessage='{e.ErrorException?.Message}', Exception='{e.ErrorException?.ToString() ?? "null"}'");
+
         if (!IsCurrentPreviewVideo(generation, mediaUri))
         {
             return;

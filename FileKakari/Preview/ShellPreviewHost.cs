@@ -16,10 +16,17 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private const int WS_CLIPSIBLINGS = 0x04000000;
     private const int WS_CLIPCHILDREN = 0x02000000;
 
+    private static void LogDiag(string message)
+    {
+        PerfLog.Write($"[ShellPreviewHost] {message}");
+    }
+
     public ShellPreviewHost(string filePath, Guid clsid)
     {
         _filePath = filePath;
         _clsid = clsid;
+
+        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}'");
 
         try
         {
@@ -28,26 +35,32 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             {
                 throw new InvalidOperationException($"Could not get type from CLSID {_clsid}");
             }
+            LogDiag("COM Type resolution success.");
 
             var instance = Activator.CreateInstance(comType);
+            LogDiag($"Activator.CreateInstance success. Instance type: {instance?.GetType().FullName ?? "null"}");
+
             _previewHandler = instance as IPreviewHandler;
             if (_previewHandler is null)
             {
                 throw new InvalidOperationException("Instance does not implement IPreviewHandler");
             }
+            LogDiag("Query IPreviewHandler success.");
 
             if (_previewHandler is IInitializeWithFile fileInit)
             {
-                // grfMode: STGM_READ = 0
+                LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
                 fileInit.Initialize(_filePath, 0);
+                LogDiag("IInitializeWithFile.Initialize success.");
             }
             else
             {
                 throw new NotSupportedException("Preview Handler does not support IInitializeWithFile");
             }
         }
-        catch
+        catch (Exception ex)
         {
+            LogDiag($"Constructor exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
             DisposePreviewHandler();
             throw;
         }
@@ -55,6 +68,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
     {
+        LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, size={ActualWidth}x{ActualHeight}");
+
         var hwndChild = CreateWindowEx(
             0,
             "static",
@@ -71,19 +86,28 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         if (hwndChild == IntPtr.Zero)
         {
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            var err = Marshal.GetLastWin32Error();
+            LogDiag($"CreateWindowEx failed: Win32Error={err}");
+            throw new System.ComponentModel.Win32Exception(err);
         }
+        LogDiag($"CreateWindowEx success: child HWND=0x{hwndChild.ToInt64():X}");
 
         if (_previewHandler is not null)
         {
             try
             {
                 var rect = new RECT(0, 0, (int)ActualWidth, (int)ActualHeight);
+                LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                 _previewHandler.SetWindow(hwndChild, ref rect);
+                LogDiag("IPreviewHandler.SetWindow success.");
+
+                LogDiag("Invoking IPreviewHandler.DoPreview...");
                 _previewHandler.DoPreview();
+                LogDiag("IPreviewHandler.DoPreview success.");
             }
-            catch
+            catch (Exception ex)
             {
+                LogDiag($"BuildWindowCore/DoPreview exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
                 DisposePreviewHandler();
                 if (hwndChild != IntPtr.Zero)
                 {
@@ -93,16 +117,22 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 throw;
             }
         }
+        else
+        {
+            LogDiag("Warning: BuildWindowCore run but _previewHandler is null.");
+        }
 
         return new HandleRef(this, hwndChild);
     }
 
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
+        LogDiag($"DestroyWindowCore start: HWND=0x{hwnd.Handle.ToInt64():X}");
         DisposePreviewHandler();
         if (hwnd.Handle != IntPtr.Zero)
         {
-            DestroyWindow(hwnd.Handle);
+            var success = DestroyWindow(hwnd.Handle);
+            LogDiag($"DestroyWindow success={success}");
         }
     }
 
@@ -112,13 +142,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         if (_previewHandler is not null && !_isDisposed)
         {
             var rect = new RECT(0, 0, (int)ActualWidth, (int)ActualHeight);
+            LogDiag($"OnRenderSizeChanged: New size={ActualWidth}x{ActualHeight}, invoking SetRect...");
             try
             {
                 _previewHandler.SetRect(ref rect);
+                LogDiag("IPreviewHandler.SetRect success.");
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore layout resize transient exceptions
+                LogDiag($"IPreviewHandler.SetRect exception (ignored): Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
             }
         }
     }
@@ -127,24 +159,29 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         if (_previewHandler is not null)
         {
+            LogDiag("DisposePreviewHandler starting...");
             try
             {
+                LogDiag("Invoking IPreviewHandler.Unload...");
                 _previewHandler.Unload();
+                LogDiag("IPreviewHandler.Unload success.");
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore exceptions during unload
+                LogDiag($"IPreviewHandler.Unload exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
             }
             finally
             {
-                Marshal.ReleaseComObject(_previewHandler);
+                var refCount = Marshal.ReleaseComObject(_previewHandler);
                 _previewHandler = null;
+                LogDiag($"ReleaseComObject done. Remaining RefCount={refCount}");
             }
         }
     }
 
     protected override void Dispose(bool disposing)
     {
+        LogDiag($"Dispose called: disposing={disposing}, _isDisposed={_isDisposed}");
         if (!_isDisposed)
         {
             if (disposing)

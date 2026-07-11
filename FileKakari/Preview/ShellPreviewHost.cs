@@ -113,23 +113,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
             bool initialized = false;
 
-            if (_previewHandler is IInitializeWithFile fileInit)
-            {
-                LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
-                int hr = fileInit.Initialize(_filePath, 0);
-                LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
-                if (hr == 0)
-                {
-                    initialized = true;
-                    LogDiag("[ShellPreviewHost] Initialization selected method=File");
-                }
-                else
-                {
-                    LogDiag("[ShellPreviewHost] InitializeWithFile failed; trying stream initializer.");
-                }
-            }
-
-            if (!initialized && _previewHandler is IInitializeWithStream streamInit)
+            if (_previewHandler is IInitializeWithStream streamInit)
             {
                 LogDiag("Query IInitializeWithStream success. Opening stream...");
                 try
@@ -152,7 +136,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     }
                     else
                     {
-                        LogDiag("[ShellPreviewHost] InitializeWithStream failed; trying item initializer.");
+                        LogDiag("[ShellPreviewHost] InitializeWithStream failed; trying file initializer.");
                         _fileStream.Dispose();
                         _fileStream = null;
                         _managedIStream = null;
@@ -167,6 +151,22 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                         _fileStream = null;
                     }
                     _managedIStream = null;
+                }
+            }
+
+            if (!initialized && _previewHandler is IInitializeWithFile fileInit)
+            {
+                LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
+                int hr = fileInit.Initialize(_filePath, 0);
+                LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
+                if (hr == 0)
+                {
+                    initialized = true;
+                    LogDiag("[ShellPreviewHost] Initialization selected method=File");
+                }
+                else
+                {
+                    LogDiag("[ShellPreviewHost] InitializeWithFile failed; trying item initializer.");
                 }
             }
 
@@ -294,12 +294,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 {
                     var rect = new RECT(0, 0, pixelWidth, pixelHeight);
                     LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
-                    _previewHandler.SetWindow(hwndChild, ref rect);
-                    LogDiag("IPreviewHandler.SetWindow success.");
+                    var setWindowHr = _previewHandler.SetWindow(hwndChild, ref rect);
+                    LogDiag($"IPreviewHandler.SetWindow HRESULT=0x{setWindowHr:X8}");
+                    ThrowIfFailed(setWindowHr);
 
                     LogDiag("Invoking IPreviewHandler.DoPreview...");
-                    _previewHandler.DoPreview();
-                    LogDiag("IPreviewHandler.DoPreview success.");
+                    var doPreviewHr = _previewHandler.DoPreview();
+                    LogDiag($"IPreviewHandler.DoPreview HRESULT=0x{doPreviewHr:X8}");
+                    ThrowIfFailed(doPreviewHr);
                     _isDoPreviewCalled = true;
                     ScheduleMarkdownDefaultZoom();
 
@@ -399,8 +401,9 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     var rect = new RECT(0, 0, pixelWidth, pixelHeight);
 
                     LogDiag($"Deferred SetWindow child HWND=0x{_childHwnd.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
-                    _previewHandler.SetWindow(_childHwnd, ref rect);
-                    LogDiag("Deferred SetWindow success.");
+                    var setWindowHr = _previewHandler.SetWindow(_childHwnd, ref rect);
+                    LogDiag($"Deferred SetWindow HRESULT=0x{setWindowHr:X8}");
+                    ThrowIfFailed(setWindowHr);
 
                     if (_isDeferredHandler)
                     {
@@ -409,8 +412,9 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     }
 
                     LogDiag("Invoking deferred DoPreview...");
-                    _previewHandler.DoPreview();
-                    LogDiag("Deferred DoPreview success.");
+                    var doPreviewHr = _previewHandler.DoPreview();
+                    LogDiag($"Deferred DoPreview HRESULT=0x{doPreviewHr:X8}");
+                    ThrowIfFailed(doPreviewHr);
                     _isDoPreviewCalled = true;
                     _pendingDoPreviewUntilNonZeroSize = false;
                     ScheduleMarkdownDefaultZoom();
@@ -434,8 +438,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 var rect = new RECT(0, 0, pixelWidth, pixelHeight);
                 try
                 {
-                    _previewHandler.SetRect(ref rect);
-                    LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) success");
+                    var setRectHr = _previewHandler.SetRect(ref rect);
+                    LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) HRESULT=0x{setRectHr:X8}");
                 }
                 catch (Exception ex)
                 {
@@ -551,8 +555,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             try
             {
                 LogDiag("Invoking IPreviewHandler.Unload...");
-                _previewHandler.Unload();
-                LogDiag("IPreviewHandler.Unload success.");
+                var unloadHr = _previewHandler.Unload();
+                LogDiag($"IPreviewHandler.Unload HRESULT=0x{unloadHr:X8}");
             }
             catch (Exception ex)
             {
@@ -611,6 +615,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         }
 
         return Math.Max(0, (int)Math.Ceiling(value * scale));
+    }
+
+    private static void ThrowIfFailed(int hr)
+    {
+        if (hr < 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -752,10 +764,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [Guid("8895b1c6-b41f-4c1c-a562-0d564250836f")]
     public interface IPreviewHandler
     {
-        void SetWindow(IntPtr hwnd, ref RECT rect);
-        void SetRect(ref RECT rect);
-        void DoPreview();
-        void Unload();
+        [PreserveSig]
+        int SetWindow(IntPtr hwnd, ref RECT rect);
+        [PreserveSig]
+        int SetRect(ref RECT rect);
+        [PreserveSig]
+        int DoPreview();
+        [PreserveSig]
+        int Unload();
         void SetFocus();
         void QueryFocus(out IntPtr phwnd);
         [PreserveSig]

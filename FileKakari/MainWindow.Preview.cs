@@ -506,7 +506,7 @@ public partial class MainWindow
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
                 PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.Shell for path='{result.FileInfo?.FullPath ?? ""}' CLSID='{result.Clsid.Value:B}'");
-                ReplacePreviewWithShell(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo);
+                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
@@ -606,60 +606,126 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
     }
 
-    private void ReplacePreviewWithShell(string path, Guid clsid, FilePreviewInfo? fileInfo)
+    private async Task ReplacePreviewWithShellAsync(string path, Guid clsid, FilePreviewInfo? fileInfo, int generation)
     {
-        PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell: path='{path}', clsid='{clsid:B}', container_child_type='{PreviewShellHostContainer.Child?.GetType().FullName ?? "null"}'");
-        ClearPreviewContent();
-        try
-        {
-            PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
-            var shellHost = new ShellPreviewHost(path, clsid);
-            ApplyShellPreviewHostBackground();
-            PreviewShellHostContainer.Child = shellHost;
-            PreviewShellHostContainer.Visibility = Visibility.Visible;
-            PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Attached ShellPreviewHost to container successfully.");
-        }
-        catch (Exception ex)
-        {
-            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
-            ClearShellPreviewHost();
+        const int maxAttempts = 2;
 
-            var ext = Path.GetExtension(path);
-            var isOffice = OfficeExtensions.Contains(ext ?? "");
-
-            if (isOffice)
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            if (generation != _previewGeneration)
             {
-                PerfLog.Write($"[MainWindow.Preview] Office preview failed; possible Protected View or Mark-of-the-Web block path=\"{path}\"");
+                PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
+                return;
             }
 
-            if (fileInfo is not null)
+            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell: path='{path}', clsid='{clsid:B}', attempt={attempt}, container_child_type='{PreviewShellHostContainer.Child?.GetType().FullName ?? "null"}'");
+            ClearPreviewContent();
+            ShellPreviewHost? shellHost = null;
+            try
             {
-                if (isOffice)
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
+                shellHost = new ShellPreviewHost(path, clsid);
+                ApplyShellPreviewHostBackground();
+                PreviewShellHostContainer.Child = shellHost;
+                PreviewShellHostContainer.Visibility = Visibility.Visible;
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Attached ShellPreviewHost to container successfully.");
+                return;
+            }
+            catch (Exception ex)
+            {
+                PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}', attempt={attempt}");
+                if (shellHost is not null && !ReferenceEquals(PreviewShellHostContainer.Child, shellHost))
                 {
-                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing Office Protected View message.");
-                    ReplacePreviewWithUnsupportedInfo(
-                        fileInfo,
-                        _text.Get("PreviewOfficeFailedTitle"),
-                        _text.Get("PreviewOfficeFailedHint"));
+                    try
+                    {
+                        shellHost.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell local host dispose exception: {disposeEx.Message}");
+                    }
                 }
-                else
+                ClearShellPreviewHost();
+
+                if (attempt < maxAttempts)
                 {
-                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing unsupported metadata card.");
-                    ReplacePreviewWithUnsupportedInfo(fileInfo);
+                    PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell retry scheduled path=\"{path}\" clsid=\"{clsid:B}\" delayMs=150");
+                    await Task.Delay(150);
+                    continue;
                 }
+
+                PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell fallback reason=\"shell-host-failed\" path=\"{path}\" clsid=\"{clsid:B}\"");
+                await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, ex);
+                return;
+            }
+        }
+    }
+
+    private async Task FallbackFromShellToBuiltInTextAsync(string path, FilePreviewInfo? fileInfo, int generation, Exception shellException)
+    {
+        var ext = Path.GetExtension(path);
+        var isOffice = OfficeExtensions.Contains(ext ?? "");
+
+        if (isOffice)
+        {
+            PerfLog.Write($"[MainWindow.Preview] Office preview failed; possible Protected View or Mark-of-the-Web block path=\"{path}\"");
+        }
+        else
+        {
+            try
+            {
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
+                var result = await new BuiltInTextPreviewProvider()
+                    .CreatePreviewAsync(new PreviewRequest(path), CancellationToken.None);
+
+                if (generation != _previewGeneration)
+                {
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
+                    return;
+                }
+
+                if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
+                {
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
+                    ReplacePreviewWithText(result.Text ?? "");
+                    return;
+                }
+
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider status={result.Status} kind={result.Kind} path=\"{path}\"");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider failed HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" path=\"{path}\"");
+            }
+        }
+
+        if (fileInfo is not null)
+        {
+            if (isOffice)
+            {
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing Office Protected View message.");
+                ReplacePreviewWithUnsupportedInfo(
+                    fileInfo,
+                    _text.Get("PreviewOfficeFailedTitle"),
+                    _text.Get("PreviewOfficeFailedHint"));
             }
             else
             {
-                if (isOffice)
-                {
-                    ReplacePreviewWithMessage(
-                        _text.Get("PreviewOfficeFailedTitle") + "\n\n" + _text.Get("PreviewOfficeFailedHint"));
-                }
-                else
-                {
-                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing generic unsupported message.");
-                    ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
-                }
+                PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing unsupported metadata card. shellHResult=0x{shellException.HResult:X8}");
+                ReplacePreviewWithUnsupportedInfo(fileInfo);
+            }
+        }
+        else
+        {
+            if (isOffice)
+            {
+                ReplacePreviewWithMessage(
+                    _text.Get("PreviewOfficeFailedTitle") + "\n\n" + _text.Get("PreviewOfficeFailedHint"));
+            }
+            else
+            {
+                PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing generic unsupported message. shellHResult=0x{shellException.HResult:X8}");
+                ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
             }
         }
     }
@@ -1001,7 +1067,7 @@ public partial class MainWindow
             if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
                 PerfLog.Write($"[WebViewPreview] Fallback to Shell reason=\"{ex.Message}\" path=\"{path}\"");
-                ReplacePreviewWithShell(path, clsid, fileInfo);
+                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation);
             }
             else
             {

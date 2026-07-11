@@ -29,15 +29,15 @@ public sealed class ShellPreviewHandlerProvider : IFilePreviewProvider
                 fileInfo.Length,
                 fileInfo.LastWriteTime);
 
-            if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(request.FilePath, out var clsid))
+            if (ShellPreviewHandlerRegistry.TryGetPreviewHandler(request.FilePath, out var registration))
             {
-                // ShellPreviewHandler is available. In Stage 2-B, the COM hosting/rendering will be implemented.
-                // For Stage 2-A, we return success with Shell kind as a stub, containing the detected CLSID.
+                PerfLog.Write(
+                    $"[ShellPreviewHandlerProvider] Handler resolved path=\"{request.FilePath}\" ext=\"{fileInfoResult.Extension}\" progId=\"{registration.ProgId ?? ""}\" perceivedType=\"{registration.PerceivedType ?? ""}\" contentType=\"{registration.ContentType ?? ""}\" clsid=\"{registration.Clsid:B}\" source=\"{registration.Hive}\\{registration.RegistryPath}\" sourceKind=\"{registration.SourceKind}\" description=\"{registration.ClsidDescription ?? ""}\"");
                 return Task.FromResult(new FilePreviewResult(
                     FilePreviewStatus.Success,
                     FilePreviewKind.Shell,
                     FileInfo: fileInfoResult,
-                    Clsid: clsid));
+                    Clsid: registration.Clsid));
             }
 
             return Task.FromResult(new FilePreviewResult(FilePreviewStatus.Unsupported, FilePreviewKind.Unsupported, FileInfo: fileInfoResult));

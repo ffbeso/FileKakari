@@ -695,6 +695,20 @@ public partial class MainWindow
                     ? ShellPreviewInitializationPreference.Default
                     : ShellPreviewInitializationPreference.FileFirst;
                 shellHost = new ShellPreviewHost(path, clsid, initializationPreference);
+
+                var currentGen = generation;
+                var currentPath = path;
+                var currentInfo = fileInfo;
+                shellHost.MonacoDedicatedActivationFailed += async (s, e) =>
+                {
+                    PerfLog.Write($"[MainWindow.Preview] Monaco dedicated thread activation failed. Triggering fallback for gen={currentGen} path=\"{currentPath}\"");
+                    if (currentGen == _previewGeneration)
+                    {
+                        ClearShellPreviewHost();
+                        await FallbackFromShellToBuiltInTextAsync(currentPath, currentInfo, currentGen, cancellationToken, new NotSupportedException("Monaco dedicated thread activation failed or timed out."));
+                    }
+                };
+
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;

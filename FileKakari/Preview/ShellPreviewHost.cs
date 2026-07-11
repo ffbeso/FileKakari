@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -23,6 +24,9 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
     private readonly bool _isMarkdownPreview;
+    private readonly bool _isMonacoDedicated;
+    private MonacoPreviewThreadHost? _monacoThreadHost;
+    public event EventHandler? MonacoDedicatedActivationFailed;
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
@@ -59,8 +63,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
+        _isMonacoDedicated = _clsid == MonacoPreviewHandlerClsid;
 
-        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}'");
+        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}', dedicated={_isMonacoDedicated}");
+
+        if (_isMonacoDedicated)
+        {
+            LogDiag("Dedicated thread activation selected for Monaco Preview Handler.");
+            return;
+        }
 
         try
         {
@@ -313,6 +324,60 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         var pixelWidth = ToCoveringPixelSize(ActualWidth, scaleX);
         var pixelHeight = ToCoveringPixelSize(ActualHeight, scaleY);
 
+        if (_isMonacoDedicated)
+        {
+            LogDiag($"BuildWindowCore (DedicatedThread) start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, size={pixelWidth}x{pixelHeight}");
+
+            var threadHost = new MonacoPreviewThreadHost();
+            if (!threadHost.Start())
+            {
+                threadHost.Dispose();
+                throw new NotSupportedException("Failed to start dedicated STA thread for Monaco Preview Handler.");
+            }
+
+            _monacoThreadHost = threadHost;
+            _childHwnd = threadHost.HostHwnd;
+
+            SetParent(_childHwnd, hwndParent.Handle);
+            const int styleVal = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+            SetWindowLongPtr(_childHwnd, GWL_STYLE, new IntPtr(styleVal));
+            ShowWindow(_childHwnd, SW_SHOW);
+
+            _monacoThreadHost.Resize(pixelWidth, pixelHeight);
+            _monacoThreadHost.Open(_filePath);
+
+            LogDiag($"BuildWindowCore (DedicatedThread) returns HWND=0x{_childHwnd.ToInt64():X}");
+
+            var hostVisual = this;
+            _ = Task.Run(async () =>
+            {
+                var limitTime = DateTime.Now.AddSeconds(1.5);
+                while (DateTime.Now < limitTime)
+                {
+                    if (threadHost.IsActivated()) break;
+                    await Task.Delay(100);
+                }
+
+                if (!threadHost.IsActivated())
+                {
+                    LogDiag("Monaco dedicated thread activation failed or timed out. Triggering fallback event.");
+                    _ = hostVisual.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        hostVisual.MonacoDedicatedActivationFailed?.Invoke(hostVisual, EventArgs.Empty);
+                    }));
+                }
+                else
+                {
+                    await Task.Delay(100);
+                    LogChildWindowState("dedicated-T=100ms");
+                    await Task.Delay(400);
+                    LogChildWindowState("dedicated-T=500ms");
+                }
+            });
+
+            return new HandleRef(this, _childHwnd);
+        }
+
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
         LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
 
@@ -406,6 +471,19 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
         LogDiag($"DestroyWindowCore start: HWND=0x{hwnd.Handle.ToInt64():X}");
+
+        if (_isMonacoDedicated)
+        {
+            LogDiag("DestroyWindowCore (DedicatedThread) triggering shutdown...");
+            if (_monacoThreadHost != null)
+            {
+                _monacoThreadHost.Dispose();
+                _monacoThreadHost = null;
+            }
+            _childHwnd = IntPtr.Zero;
+            return;
+        }
+
         DisposePreviewHandler();
         _childHwnd = IntPtr.Zero;
         if (hwnd.Handle != IntPtr.Zero)
@@ -437,6 +515,17 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         var pixelWidth = ToCoveringPixelSize(width, scaleX);
         var pixelHeight = ToCoveringPixelSize(height, scaleY);
+
+        if (_isMonacoDedicated)
+        {
+            LogDiag($"ResizePreviewHost (DedicatedThread): size={pixelWidth}x{pixelHeight}");
+            if (_childHwnd != IntPtr.Zero && _monacoThreadHost != null)
+            {
+                MoveWindow(_childHwnd, 0, 0, pixelWidth, pixelHeight, true);
+                _monacoThreadHost.Resize(pixelWidth, pixelHeight);
+            }
+            return;
+        }
 
         LogDiag($"ResizePreviewHost: width={width} height={height} scale={scaleX}x{scaleY} -> pixels={pixelWidth}x{pixelHeight}");
 
@@ -638,6 +727,16 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     private void DisposePreviewHandler()
     {
+        if (_isMonacoDedicated)
+        {
+            if (_monacoThreadHost != null)
+            {
+                LogDiag("DisposePreviewHandler (DedicatedThread) disposing thread host...");
+                _monacoThreadHost.Dispose();
+                _monacoThreadHost = null;
+            }
+        }
+
         if (_previewHandler is not null)
         {
             LogDiag("DisposePreviewHandler starting...");
@@ -1022,8 +1121,34 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         GetClientRect(_childHwnd, out client);
         IntPtr style = GetWindowLongPtr(_childHwnd, GWL_STYLE);
         IntPtr exStyle = GetWindowLongPtr(_childHwnd, GWL_EXSTYLE);
+        IntPtr parentHwnd = GetParent(_childHwnd);
 
-        LogDiag($"ChildWindowState stage=\"{stage}\" visible={visible} rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom}) client=({client.Left},{client.Top},{client.Right},{client.Bottom}) style=0x{style.ToInt64():X8} exStyle=0x{exStyle.ToInt64():X8}");
+        var classNameSb = new StringBuilder(256);
+        GetClassName(_childHwnd, classNameSb, 256);
+        string className = classNameSb.ToString();
+
+        List<string> childrenList = new List<string>();
+        try
+        {
+            EnumChildWindows(_childHwnd, (hwnd, lParam) =>
+            {
+                var childClassSb = new StringBuilder(256);
+                GetClassName(hwnd, childClassSb, 256);
+                RECT childRect = default;
+                GetWindowRect(hwnd, out childRect);
+                bool childVisible = IsWindowVisible(hwnd);
+                childrenList.Add($"[HWND:0x{hwnd.ToInt64():X} Class:{childClassSb} Visible:{childVisible} Rect:({childRect.Left},{childRect.Top},{childRect.Right},{childRect.Bottom})]");
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            LogDiag($"EnumChildWindows exception: {ex.Message}");
+        }
+
+        string childrenStr = childrenList.Count > 0 ? string.Join(" | ", childrenList) : "None";
+
+        LogDiag($"ChildWindowState stage=\"{stage}\" Class=\"{className}\" HWND=0x{_childHwnd.ToInt64():X} ParentHWND=0x{parentHwnd.ToInt64():X} visible={visible} rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom}) client=({client.Left},{client.Top},{client.Right},{client.Bottom}) style=0x{style.ToInt64():X8} exStyle=0x{exStyle.ToInt64():X8} Children=\"{childrenStr}\"");
     }
 
     private void LogParentContainerState()
@@ -1067,4 +1192,42 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             return "";
         }
     }
+
+
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetParent(IntPtr hWnd);
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(IntPtr hwndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLong", SetLastError = true)]
+    private static extern int SetWindowLong32(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr SetWindowLongPtr64(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    private static IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong)
+    {
+        if (IntPtr.Size == 8)
+        {
+            return SetWindowLongPtr64(hWnd, nIndex, dwNewLong);
+        }
+        else
+        {
+            return new IntPtr(SetWindowLong32(hWnd, nIndex, dwNewLong.ToInt32()));
+        }
+    }
+
 }

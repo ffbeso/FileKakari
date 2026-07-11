@@ -9,6 +9,7 @@ namespace FileKakari;
 public sealed class WebViewPreviewProvider : IFilePreviewProvider
 {
     private const long MaxHtmlPreviewBytes = 10L * 1024 * 1024; // 10 MiB
+    private const long MaxMhtmlPreviewBytes = 50L * 1024 * 1024; // 50 MiB
     private const long MaxSvgPreviewBytes = 5L * 1024 * 1024;   // 5 MiB
 
     private static readonly HashSet<string> WebViewExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -71,14 +72,14 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
             else if (string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase))
             {
-                if (fileInfo.Length > MaxHtmlPreviewBytes)
+                if (fileInfo.Length > MaxMhtmlPreviewBytes)
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: mhtml size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
-                    return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxHtmlPreviewBytes, FileInfo: fileInfoResult));
+                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: mhtml size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
+                    return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxMhtmlPreviewBytes, FileInfo: fileInfoResult));
                 }
                 else
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: mhtml size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
+                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: mhtml size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
                 }
             }
             else if (string.Equals(ext, ".svg", StringComparison.OrdinalIgnoreCase))

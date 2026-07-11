@@ -19,7 +19,8 @@ public sealed record FilePreviewResult(
     long? SizeLimit = null,
     string? ErrorMessage = null,
     FilePreviewInfo? FileInfo = null,
-    Guid? Clsid = null);
+    Guid? Clsid = null,
+    string? EncodingName = null);
 
 public sealed record FilePreviewInfo(
     string FileName,

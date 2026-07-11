@@ -45,6 +45,7 @@ public partial class MainWindow
     private const double MinPreviewPaneSize = 120;
     private const double MinFileListPaneSize = 180;
     private const double PreviewSplitterSize = 5;
+    private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
 
     private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
 
@@ -475,7 +476,7 @@ public partial class MainWindow
         switch (result.Status)
         {
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Text:
-                ReplacePreviewWithText(result.Text ?? "");
+                ApplyTextPreview(result, generation, cancellationToken, "BuiltInTextPreviewProvider");
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Image && result.ImageBytes is not null:
@@ -506,7 +507,7 @@ public partial class MainWindow
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
                 PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.Shell for path='{result.FileInfo?.FullPath ?? ""}' CLSID='{result.Clsid.Value:B}'");
-                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation);
+                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, cancellationToken);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
@@ -563,11 +564,63 @@ public partial class MainWindow
             $"[MainWindow.Preview] {label} path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} webViewVisibility={PreviewWebView.Visibility} shellHostVisibility={PreviewShellHostContainer.Visibility} textVisibility={PreviewTextBox.Visibility} imageVisibility={PreviewImageScrollViewer.Visibility} videoVisibility={PreviewVideoHost.Visibility} unsupportedVisibility={PreviewUnsupportedCard.Visibility} messageVisibility={PreviewMessageText.Visibility}");
     }
 
-    private void ReplacePreviewWithText(string text)
+    private void ApplyTextPreview(
+        FilePreviewResult result,
+        int generation,
+        CancellationToken cancellationToken,
+        string source)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != _previewGeneration)
+        {
+            PerfLog.Write($"[MainWindow.Preview] ApplyTextPreview skipped reason=generation-mismatch source=\"{source}\" current={_previewGeneration} requested={generation} path=\"{result.FileInfo?.FullPath ?? ""}\"");
+            return;
+        }
+
+        var text = result.Text ?? "";
+        LogTextPreviewPayload(
+            "ApplyTextPreview payload",
+            result.FileInfo?.FullPath ?? "",
+            text,
+            generation,
+            result.Status,
+            result.Kind,
+            source,
+            result.EncodingName);
+        ReplacePreviewWithText(text, generation, cancellationToken, source, result.FileInfo?.FullPath ?? "");
+    }
+
+    private void ReplacePreviewWithText(
+        string text,
+        int generation,
+        CancellationToken cancellationToken,
+        string source,
+        string path)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != _previewGeneration)
+        {
+            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithText skipped before-clear reason=generation-mismatch source=\"{source}\" current={_previewGeneration} requested={generation} path=\"{path}\"");
+            return;
+        }
+
+        var beforeLength = PreviewTextBox.Text?.Length ?? 0;
+        PerfLog.Write(
+            $"[MainWindow.Preview] Text UI set before source=\"{source}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} control=\"PreviewTextBox\" beforeLength={beforeLength} incomingLength={text.Length} visibility={PreviewTextBox.Visibility} isVisible={PreviewTextBox.IsVisible} opacity={PreviewTextBox.Opacity} fontFamily=\"{PreviewTextBox.FontFamily}\" fontSize={PreviewTextBox.FontSize} foreground=\"{PreviewTextBox.Foreground}\" background=\"{PreviewTextBox.Background}\" textWrapping={PreviewTextBox.TextWrapping} cancellationRequested={cancellationToken.IsCancellationRequested}");
+
         ClearPreviewContent();
+
+        if (generation != _previewGeneration)
+        {
+            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithText skipped after-clear reason=generation-mismatch source=\"{source}\" current={_previewGeneration} requested={generation} path=\"{path}\"");
+            return;
+        }
+
         PreviewTextBox.Text = text;
         PreviewTextBox.Visibility = Visibility.Visible;
+
+        PerfLog.Write(
+            $"[MainWindow.Preview] Text UI set after source=\"{source}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} control=\"PreviewTextBox\" afterLength={PreviewTextBox.Text.Length} visibility={PreviewTextBox.Visibility} isVisible={PreviewTextBox.IsVisible} opacity={PreviewTextBox.Opacity} fontFamily=\"{PreviewTextBox.FontFamily}\" fontSize={PreviewTextBox.FontSize} foreground=\"{PreviewTextBox.Foreground}\" background=\"{PreviewTextBox.Background}\" textWrapping={PreviewTextBox.TextWrapping} cancellationRequested={cancellationToken.IsCancellationRequested}");
     }
 
     private void ReplacePreviewWithImage(BitmapImage bitmap)
@@ -615,7 +668,12 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
     }
 
-    private async Task ReplacePreviewWithShellAsync(string path, Guid clsid, FilePreviewInfo? fileInfo, int generation)
+    private async Task ReplacePreviewWithShellAsync(
+        string path,
+        Guid clsid,
+        FilePreviewInfo? fileInfo,
+        int generation,
+        CancellationToken cancellationToken)
     {
         const int maxAttempts = 2;
 
@@ -659,21 +717,43 @@ public partial class MainWindow
                 }
                 ClearShellPreviewHost();
 
-                if (attempt < maxAttempts)
+                if (ShouldRetryShellPreview(clsid, ex) && attempt < maxAttempts)
                 {
                     PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell retry scheduled path=\"{path}\" clsid=\"{clsid:B}\" delayMs=150");
-                    await Task.Delay(150);
+                    await Task.Delay(150, cancellationToken);
                     continue;
                 }
 
                 PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell fallback reason=\"shell-host-failed\" path=\"{path}\" clsid=\"{clsid:B}\"");
-                await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, ex);
+                await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, cancellationToken, ex);
                 return;
             }
         }
     }
 
-    private async Task FallbackFromShellToBuiltInTextAsync(string path, FilePreviewInfo? fileInfo, int generation, Exception shellException)
+    private static bool ShouldRetryShellPreview(Guid clsid, Exception exception)
+    {
+        if (exception.Data.Contains(ShellPreviewHost.AllInitializersENoInterfaceDataKey))
+        {
+            PerfLog.Write($"[MainWindow.Preview] Shell retry skipped reason=\"all-initializers-e-nointerface\" clsid=\"{clsid:B}\" shellHResult=0x{exception.HResult:X8}");
+            return false;
+        }
+
+        if (clsid == WindowsTxtPreviewerClsid)
+        {
+            PerfLog.Write($"[MainWindow.Preview] Shell retry skipped reason=\"windows-txt-previewer-no-initializer\" clsid=\"{clsid:B}\" shellHResult=0x{exception.HResult:X8}");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task FallbackFromShellToBuiltInTextAsync(
+        string path,
+        FilePreviewInfo? fileInfo,
+        int generation,
+        CancellationToken cancellationToken,
+        Exception shellException)
     {
         var ext = Path.GetExtension(path);
         var isOffice = OfficeExtensions.Contains(ext ?? "");
@@ -695,7 +775,7 @@ public partial class MainWindow
                 {
                     PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
                     var result = await textProvider
-                        .CreatePreviewAsync(new PreviewRequest(path), CancellationToken.None);
+                        .CreatePreviewAsync(new PreviewRequest(path), cancellationToken);
 
                     if (generation != _previewGeneration)
                     {
@@ -703,10 +783,20 @@ public partial class MainWindow
                         return;
                     }
 
+                    LogTextPreviewPayload(
+                        "Shell fallback text loaded",
+                        path,
+                        result.Text ?? "",
+                        generation,
+                        result.Status,
+                        result.Kind,
+                        "ShellFallbackBuiltInTextPreviewProvider",
+                        result.EncodingName);
+
                     if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
                     {
                         PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
-                        ReplacePreviewWithText(result.Text ?? "");
+                        ApplyTextPreview(result, generation, cancellationToken, "ShellFallbackBuiltInTextPreviewProvider");
                         return;
                     }
 
@@ -786,6 +876,62 @@ public partial class MainWindow
         bitmap.EndInit();
         bitmap.Freeze();
         return bitmap;
+    }
+
+    private static void LogTextPreviewPayload(
+        string label,
+        string path,
+        string text,
+        int generation,
+        FilePreviewStatus status,
+        FilePreviewKind kind,
+        string source,
+        string? encodingName)
+    {
+        var lineCount = CountLines(text);
+        var prefixLength = Math.Min(80, text.Length);
+        var prefix = EscapePreviewPrefix(text[..prefixLength]);
+        PerfLog.Write(
+            $"[MainWindow.Preview] {label} source=\"{source}\" path=\"{path}\" length={text.Length} lineCount={lineCount} prefix=\"{prefix}\" generation={generation} status={status} kind={kind} encoding=\"{encodingName ?? ""}\"");
+    }
+
+    private static int CountLines(string text)
+    {
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        var count = 1;
+        foreach (var ch in text)
+        {
+            if (ch == '\n')
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static string EscapePreviewPrefix(string text)
+    {
+        var builder = new System.Text.StringBuilder(text.Length);
+        foreach (var ch in text)
+        {
+            _ = ch switch
+            {
+                '\r' => builder.Append("\\r"),
+                '\n' => builder.Append("\\n"),
+                '\t' => builder.Append("\\t"),
+                '"' => builder.Append("\\\""),
+                '\\' => builder.Append("\\\\"),
+                _ when char.IsControl(ch) => builder.Append("\\u").Append(((int)ch).ToString("X4")),
+                _ => builder.Append(ch)
+            };
+        }
+
+        return builder.ToString();
     }
 
     private void PreviewMediaElement_MediaOpened(object sender, RoutedEventArgs e)
@@ -1091,7 +1237,7 @@ public partial class MainWindow
             if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
                 PerfLog.Write($"[WebViewPreview] Fallback to Shell reason=\"{ex.Message}\" path=\"{path}\"");
-                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation);
+                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation, CancellationToken.None);
             }
             else
             {

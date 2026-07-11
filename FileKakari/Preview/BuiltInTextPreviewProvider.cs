@@ -77,7 +77,12 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
                 return new FilePreviewResult(FilePreviewStatus.Unsupported, FilePreviewKind.Text, ErrorMessage: errorTitle, FileInfo: fileInfoResult);
             }
 
-            return new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Text, Text: decodeResult.Text, FileInfo: fileInfoResult);
+            return new FilePreviewResult(
+                FilePreviewStatus.Success,
+                FilePreviewKind.Text,
+                Text: decodeResult.Text,
+                FileInfo: fileInfoResult,
+                EncodingName: decodeResult.EncodingName);
         }
         catch (OperationCanceledException)
         {

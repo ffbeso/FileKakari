@@ -16,6 +16,8 @@ public enum ShellPreviewInitializationPreference
 
 public sealed class ShellPreviewHost : HwndHost, IDisposable
 {
+    public const string AllInitializersENoInterfaceDataKey = "ShellPreviewAllInitializersENoInterface";
+
     private readonly string _filePath;
     private readonly Guid _clsid;
     private readonly ShellPreviewInitializationPreference _initializationPreference;
@@ -36,6 +38,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private const int WS_VISIBLE = 0x10000000;
     private const int WS_CLIPSIBLINGS = 0x04000000;
     private const int WS_CLIPCHILDREN = 0x02000000;
+    private const int ENoInterface = unchecked((int)0x80004002);
 
     private static void LogDiag(string message)
     {
@@ -79,6 +82,10 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             }
             LogDiag("Query IPreviewHandler success.");
 
+            int? fileInterfaceHr = null;
+            int? streamInterfaceHr = null;
+            int? itemInterfaceHr = null;
+
             // Run QueryInterface audit for diagnostics
             IntPtr pUnk = IntPtr.Zero;
             try
@@ -88,6 +95,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 {
                     var iidFile = new Guid("B7D14566-0509-4CCE-A71F-0A554233BD9B");
                     int hrFile = Marshal.QueryInterface(pUnk, in iidFile, out IntPtr ppvFile);
+                    fileInterfaceHr = hrFile;
                     LogDiag($"QueryInterface IInitializeWithFile IID={iidFile:B} HRESULT=0x{hrFile:X8}");
                     if (hrFile == 0 && ppvFile != IntPtr.Zero)
                     {
@@ -96,6 +104,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
                     var iidStream = new Guid("B824B643-2222-4A0E-AC22-D49149F10062");
                     int hrStream = Marshal.QueryInterface(pUnk, in iidStream, out IntPtr ppvStream);
+                    streamInterfaceHr = hrStream;
                     LogDiag($"QueryInterface IInitializeWithStream IID={iidStream:B} HRESULT=0x{hrStream:X8}");
                     if (hrStream == 0 && ppvStream != IntPtr.Zero)
                     {
@@ -104,6 +113,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
                     var iidItem = new Guid("7F73BE3F-FB79-493C-A6C7-7EE14E245841");
                     int hrItem = Marshal.QueryInterface(pUnk, in iidItem, out IntPtr ppvItem);
+                    itemInterfaceHr = hrItem;
                     LogDiag($"QueryInterface IInitializeWithItem IID={iidItem:B} HRESULT=0x{hrItem:X8}");
                     if (hrItem == 0 && ppvItem != IntPtr.Zero)
                     {
@@ -228,7 +238,16 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
             if (!initialized)
             {
-                throw new NotSupportedException("Preview Handler does not support or failed to initialize with IInitializeWithFile, IInitializeWithStream, or IInitializeWithItem");
+                var exception = new NotSupportedException("Preview Handler does not support or failed to initialize with IInitializeWithFile, IInitializeWithStream, or IInitializeWithItem");
+                if (fileInterfaceHr == ENoInterface
+                    && streamInterfaceHr == ENoInterface
+                    && itemInterfaceHr == ENoInterface)
+                {
+                    exception.Data[AllInitializersENoInterfaceDataKey] = true;
+                    LogDiag("Initialization failed reason=all-initializers-e-nointerface");
+                }
+
+                throw exception;
             }
         }
         catch (Exception ex)

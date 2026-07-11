@@ -19,6 +19,8 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
         ".svg",
         ".html",
         ".htm",
+        ".mht",
+        ".mhtml",
         ".mp3",
         ".wav",
         ".m4a"
@@ -64,6 +66,19 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
                 else
                 {
                     PerfLog.Write($"[WebViewPreviewProvider] Accepted: html size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
+                }
+            }
+            else if (string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase))
+            {
+                if (fileInfo.Length > MaxHtmlPreviewBytes)
+                {
+                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: mhtml size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
+                    return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxHtmlPreviewBytes, FileInfo: fileInfoResult));
+                }
+                else
+                {
+                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: mhtml size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
                 }
             }
             else if (string.Equals(ext, ".svg", StringComparison.OrdinalIgnoreCase))

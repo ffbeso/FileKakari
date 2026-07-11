@@ -408,7 +408,14 @@ public partial class MainWindow
                 break;
 
             case FilePreviewStatus.Unsupported when result.FileInfo is not null:
-                ReplacePreviewWithUnsupportedInfo(result.FileInfo);
+                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                {
+                    ReplacePreviewWithUnsupportedInfo(result.FileInfo, result.ErrorMessage, "");
+                }
+                else
+                {
+                    ReplacePreviewWithUnsupportedInfo(result.FileInfo);
+                }
                 break;
 
             case FilePreviewStatus.Unsupported:

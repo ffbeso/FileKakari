@@ -290,4 +290,5 @@ Details: {1}</value></data>
   <data name="PreviewOfficeFailedTitle" xml:space="preserve"><value>This Office document could not be previewed.</value></data>
   <data name="PreviewOfficeFailedHint" xml:space="preserve"><value>If this file was downloaded from the internet, Office Protected View or Windows file blocking may prevent previewing.
 Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the file, then try again.</value></data>
+  <data name="PreviewBinaryFileError" xml:space="preserve"><value>This file cannot be previewed as text. It may contain binary data.</value></data>
 </root>

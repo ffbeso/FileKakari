@@ -1451,6 +1451,12 @@ public partial class MainWindow : Window
             {
                 e.Handled = true;
             }
+            else if (_isPreviewMaximized)
+            {
+                e.Handled = true;
+                SetPreviewMaximized(false);
+                FocusActiveFileList();
+            }
             else if (IsPreviewVisible
                 && (focusedTextBox is null || ReferenceEquals(focusedTextBox, PreviewTextBox)))
             {
@@ -1546,7 +1552,14 @@ public partial class MainWindow : Window
         if (e.Key == Key.F3)
         {
             e.Handled = true;
-            TogglePreview();
+            if (hasControl)
+            {
+                TogglePreviewMaximized();
+            }
+            else
+            {
+                TogglePreview();
+            }
             return;
         }
 

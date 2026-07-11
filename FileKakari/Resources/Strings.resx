@@ -285,4 +285,6 @@ Details: {1}</value></data>
   <data name="UserCommandsSavedStatus" xml:space="preserve"><value>User commands saved successfully.</value></data>
   <data name="TargetSelectionDesc" xml:space="preserve"><value>Selection (Selected items)</value></data>
   <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (Current directory)</value></data>
+  <data name="PreviewMaximize" xml:space="preserve"><value>Maximize (Ctrl+F3)</value></data>
+  <data name="PreviewRestore" xml:space="preserve"><value>Restore (Ctrl+F3)</value></data>
 </root>

@@ -285,4 +285,6 @@
   <data name="UserCommandsSavedStatus" xml:space="preserve"><value>ユーザーコマンドを保存しました。</value></data>
   <data name="TargetSelectionDesc" xml:space="preserve"><value>Selection (選択中のアイテム)</value></data>
   <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (現在のフォルダー)</value></data>
+  <data name="PreviewMaximize" xml:space="preserve"><value>最大化 (Ctrl+F3)</value></data>
+  <data name="PreviewRestore" xml:space="preserve"><value>元に戻す (Ctrl+F3)</value></data>
 </root>

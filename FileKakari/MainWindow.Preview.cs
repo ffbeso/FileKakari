@@ -27,6 +27,9 @@ public partial class MainWindow
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
     private string? _currentWebViewUri;
+    private bool _isPreviewMaximized;
+    private GridLength _previousPreviewRowHeight;
+    private GridLength _previousPreviewColumnWidth;
 
     private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
 
@@ -155,6 +158,10 @@ public partial class MainWindow
     {
         if (!isVisible)
         {
+            if (_isPreviewMaximized)
+            {
+                SetPreviewMaximized(false);
+            }
             RememberPreviewPaneSize();
 
             CancelPreviewLoad();
@@ -175,6 +182,10 @@ public partial class MainWindow
     private void ApplyPreviewPanePlacement(bool? isVisible = null)
     {
         var visible = isVisible ?? IsPreviewVisible;
+        if (_isPreviewMaximized && visible)
+        {
+            return;
+        }
         var placement = AppSettings.NormalizePreviewPanePlacement(_settingsService.Settings.PreviewPanePlacement);
 
         Grid.SetRow(ItemsListHost, 0);
@@ -221,6 +232,10 @@ public partial class MainWindow
 
     private void RememberPreviewPaneSize()
     {
+        if (_isPreviewMaximized)
+        {
+            return;
+        }
         if (PreviewPaneRow.Height.Value > 0)
         {
             _previewPaneHeight = PreviewPaneRow.Height;
@@ -851,5 +866,71 @@ public partial class MainWindow
             }
         }
         PreviewWebView.Visibility = Visibility.Collapsed;
+    }
+
+    private void TogglePreviewMaximized()
+    {
+        SetPreviewMaximized(!_isPreviewMaximized);
+    }
+
+    private void SetPreviewMaximized(bool maximized)
+    {
+        if (_isPreviewMaximized == maximized)
+        {
+            return;
+        }
+
+        _isPreviewMaximized = maximized;
+        PerfLog.Write($"[MainWindow.Preview] SetPreviewMaximized: {maximized}");
+
+        if (maximized)
+        {
+            // Save state prior to maximize
+            RememberPreviewPaneSize();
+            _previousPreviewRowHeight = PreviewPaneRow.Height;
+            _previousPreviewColumnWidth = PreviewPaneColumn.Width;
+
+            ItemsListHost.Visibility = Visibility.Collapsed;
+            PreviewGridSplitter.Visibility = Visibility.Collapsed;
+
+            var placement = AppSettings.NormalizePreviewPanePlacement(_settingsService.Settings.PreviewPanePlacement);
+            if (placement == PreviewPanePlacement.Right)
+            {
+                PreviewSplitterColumn.Width = new GridLength(0);
+                PreviewPaneColumn.Width = new GridLength(1, GridUnitType.Star);
+            }
+            else
+            {
+                PreviewSplitterRow.Height = new GridLength(0);
+                PreviewPaneRow.Height = new GridLength(1, GridUnitType.Star);
+            }
+
+            PerfLog.Write("[MainWindow.Preview] Preview maximize enabled");
+        }
+        else
+        {
+            ItemsListHost.Visibility = Visibility.Visible;
+            PreviewGridSplitter.Visibility = Visibility.Visible;
+
+            ApplyPreviewPanePlacement(isVisible: true);
+
+            PerfLog.Write("[MainWindow.Preview] Preview maximize disabled");
+            PerfLog.Write("[MainWindow.Preview] Preview maximize layout restored");
+        }
+
+        if (PreviewMaximizeButton is not null)
+        {
+            PreviewMaximizeButton.Content = maximized ? "\uE923" : "\uE922";
+            PreviewMaximizeButton.ToolTip = _text.Get(maximized ? "PreviewRestore" : "PreviewMaximize");
+        }
+
+        // Run UpdateLayout to notify HwndHost and WebView2
+        PreviewShellHostContainer.UpdateLayout();
+        PreviewWebView.UpdateLayout();
+    }
+
+    private void PreviewMaximizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        TogglePreviewMaximized();
     }
 }

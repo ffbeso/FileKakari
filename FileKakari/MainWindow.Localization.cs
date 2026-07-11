@@ -17,6 +17,7 @@ public partial class MainWindow : Window
         SetToolbarButtonToolTip(NormalPaneNewFileButton, _text.Get("NewFileButton"));
         SetToolbarButtonToolTip(NormalPanePreviewButton, _text.Get("PreviewTitle"));
         SetToolbarButtonToolTip(PreviewCloseButton, _text.Get("PreviewCloseButton"));
+        SetToolbarButtonToolTip(PreviewMaximizeButton, _text.Get(_isPreviewMaximized ? "PreviewRestore" : "PreviewMaximize"));
         SetToolbarButtonToolTip(PreviewMediaPlayPauseButton, _text.Get("PreviewMediaPlay"));
         SetToolbarButtonToolTip(PreviewMediaStopButton, _text.Get("PreviewMediaStop"));
         PreviewHeaderText.Text = _text.Get("PreviewTitle");

@@ -1541,6 +1541,15 @@
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                     Content="&#xE711;"
                                     Click="PreviewCloseButton_Click" />
+                            <Button x:Name="PreviewMaximizeButton"
+                                    DockPanel.Dock="Right"
+                                    Width="28"
+                                    Height="24"
+                                    Padding="0"
+                                    Margin="8,0,0,0"
+                                    FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                    Content="&#xE922;"
+                                    Click="PreviewMaximizeButton_Click" />
                             <ProgressBar x:Name="PreviewLoadingBar"
                                          DockPanel.Dock="Right"
                                          Width="64"

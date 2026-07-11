@@ -33,6 +33,8 @@ public partial class MainWindow
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
     private string? _currentWebViewUri;
+    private int _webViewNavigationGeneration;
+    private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -805,11 +807,15 @@ public partial class MainWindow
                 throw new InvalidOperationException("CoreWebView2 is null after initialization.");
             }
 
+            _webViewNavigationGeneration = generation;
+            _currentWebViewFileInfo = fileInfo;
+            PerfLog.Write($"[WebViewPreview] Hide WebView before navigation generation={generation}");
+            PreviewWebView.Visibility = Visibility.Hidden;
+
             var absoluteUri = new Uri(path).AbsoluteUri;
             _currentWebViewUri = absoluteUri; // Track target URI before navigating
             PerfLog.Write($"[WebViewPreview] Navigate requested uri=\"{absoluteUri}\" generation={generation}");
             PreviewWebView.CoreWebView2.Navigate(absoluteUri);
-            PreviewWebView.Visibility = Visibility.Visible;
         }
         catch (Exception ex)
         {
@@ -862,6 +868,7 @@ public partial class MainWindow
 
         // Register security events to lock down navigation, new windows, and downloads
         PreviewWebView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
+        PreviewWebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
         PreviewWebView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
         PreviewWebView.CoreWebView2.DownloadStarting += CoreWebView2_DownloadStarting;
 
@@ -899,9 +906,44 @@ public partial class MainWindow
         PerfLog.Write($"[WebViewPreview] Download blocked uri='{e.DownloadOperation.Uri}'");
     }
 
+    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
+        if (currentUri == "about:blank")
+        {
+            // Do not show for blank page transitions (like ClearWebView)
+            return;
+        }
+
+        var completedGen = _webViewNavigationGeneration;
+        if (completedGen != _previewGeneration)
+        {
+            PerfLog.Write($"[WebViewPreview] NavigationCompleted ignored reason=generation-mismatch current={_previewGeneration} completed={completedGen}");
+            return;
+        }
+
+        if (e.IsSuccess)
+        {
+            PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success=True generation={completedGen}");
+            PerfLog.Write($"[WebViewPreview] Show WebView after navigation generation={completedGen}");
+            PreviewWebView.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PerfLog.Write($"[WebViewPreview] Navigation failed uri=\"{currentUri}\" error={e.WebErrorStatus}");
+            PreviewWebView.Visibility = Visibility.Collapsed;
+
+            if (_currentWebViewFileInfo is not null)
+            {
+                ReplacePreviewWithUnsupportedInfo(_currentWebViewFileInfo);
+            }
+        }
+    }
+
     private void ClearWebView()
     {
         _currentWebViewUri = null; // Clear tracked target URI
+        _currentWebViewFileInfo = null;
         if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
         {
             try

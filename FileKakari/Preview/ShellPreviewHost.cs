@@ -33,13 +33,16 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private bool _pendingDoPreviewUntilNonZeroSize;
     private bool _isMarkdownZoomScheduled;
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
+    private static readonly Guid MonacoPreviewHandlerClsid = new("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
+    private const uint CLSCTX_INPROC_SERVER = 1;
+    private const uint CLSCTX_LOCAL_SERVER = 4;
+    private static readonly Guid IID_IUnknown = new("00000000-0000-0000-C000-000000000046");
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
     private const int WS_CLIPSIBLINGS = 0x04000000;
     private const int WS_CLIPCHILDREN = 0x02000000;
     private const int ENoInterface = unchecked((int)0x80004002);
-
     private static void LogDiag(string message)
     {
         PerfLog.Write($"[ShellPreviewHost] {message}");
@@ -61,19 +64,57 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         try
         {
-            var comType = Type.GetTypeFromCLSID(_clsid, true);
-            if (comType is null)
-            {
-                throw new InvalidOperationException($"Could not get type from CLSID {_clsid}");
-            }
-            LogDiag("COM Type resolution success.");
+            object? instance = null;
+            var description = GetClsidDescription(_clsid);
 
-            var instance = Activator.CreateInstance(comType);
-            if (instance is null)
+            if (_clsid == MonacoPreviewHandlerClsid)
             {
-                throw new InvalidOperationException("Failed to create COM instance");
+                var activationContext = "LocalServer";
+                LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"PowerToysMonaco\" activationContext=\"{activationContext}\"");
+
+                IntPtr pUnkMonaco = IntPtr.Zero;
+                try
+                {
+                    int hr = CoCreateInstance(in _clsid, IntPtr.Zero, CLSCTX_LOCAL_SERVER, in IID_IUnknown, out pUnkMonaco);
+                    LogDiag($"CoCreateInstance HRESULT=0x{hr:X8}");
+                    if (hr < 0)
+                    {
+                        Marshal.ThrowExceptionForHR(hr);
+                    }
+                    instance = Marshal.GetObjectForIUnknown(pUnkMonaco);
+                }
+                catch (Exception ex)
+                {
+                    LogDiag($"CoCreateInstance failed for Monaco with CLSCTX_LOCAL_SERVER. HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\"");
+                    throw new NotSupportedException($"Failed to activate Monaco Preview Handler out-of-process (CLSCTX_LOCAL_SERVER) HRESULT=0x{ex.HResult:X8}", ex);
+                }
+                finally
+                {
+                    if (pUnkMonaco != IntPtr.Zero)
+                    {
+                        Marshal.Release(pUnkMonaco);
+                    }
+                }
             }
-            LogDiag($"Activator.CreateInstance success. Instance type: {instance.GetType().FullName}");
+            else
+            {
+                var activationContext = "InProc";
+                LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"Default\" activationContext=\"{activationContext}\"");
+
+                var comType = Type.GetTypeFromCLSID(_clsid, true);
+                if (comType is null)
+                {
+                    throw new InvalidOperationException($"Could not get type from CLSID {_clsid}");
+                }
+                LogDiag("COM Type resolution success.");
+
+                instance = Activator.CreateInstance(comType);
+                if (instance is null)
+                {
+                    throw new InvalidOperationException("Failed to create COM instance");
+                }
+                LogDiag($"Activator.CreateInstance success. Instance type: {instance.GetType().FullName}");
+            }
 
             _previewHandler = instance as IPreviewHandler;
             if (_previewHandler is null)
@@ -1003,6 +1044,27 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         catch (Exception ex)
         {
             LogDiag($"LogParentContainerState exception: {ex.Message}");
+        }
+    }
+
+    [DllImport("ole32.dll", PreserveSig = true)]
+    private static extern int CoCreateInstance(
+        in Guid rclsid,
+        IntPtr pUnkOuter,
+        uint dwClsContext,
+        in Guid riid,
+        out IntPtr ppv);
+
+    private static string GetClsidDescription(Guid clsid)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey($@"CLSID\{clsid:B}");
+            return key?.GetValue(null) as string ?? "";
+        }
+        catch
+        {
+            return "";
         }
     }
 }

@@ -17,6 +17,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private IShellItem? _shellItem;
     private bool _isDisposed;
     private IntPtr _childHwnd = IntPtr.Zero;
+    private bool _isDoPreviewCalled;
+    private bool _pendingDoPreviewUntilNonZeroSize;
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -231,6 +233,13 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         var pixelHeight = Math.Max(0, (int)Math.Round(ActualHeight * scaleY));
 
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
+        LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
+
+        bool isMonaco = _clsid.ToString().Equals("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA", StringComparison.OrdinalIgnoreCase);
+        if (isMonaco)
+        {
+            LogDiag($"Handler profile: PowerToysMonaco clsid=\"{_clsid:B}\"");
+        }
 
         var hwndChild = CreateWindowEx(
             0,
@@ -257,28 +266,37 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         if (_previewHandler is not null)
         {
-            try
+            if (isMonaco && pixelWidth == 0 && pixelHeight == 0)
             {
-                var rect = new RECT(0, 0, pixelWidth, pixelHeight);
-                LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
-                _previewHandler.SetWindow(hwndChild, ref rect);
-                LogDiag("IPreviewHandler.SetWindow success.");
-
-                LogDiag("Invoking IPreviewHandler.DoPreview...");
-                _previewHandler.DoPreview();
-                LogDiag("IPreviewHandler.DoPreview success.");
+                LogDiag("Deferring DoPreview until non-zero size for PowerToys Monaco.");
+                _pendingDoPreviewUntilNonZeroSize = true;
             }
-            catch (Exception ex)
+            else
             {
-                LogDiag($"BuildWindowCore/DoPreview exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
-                DisposePreviewHandler();
-                if (hwndChild != IntPtr.Zero)
+                try
                 {
-                    DestroyWindow(hwndChild);
-                    _childHwnd = IntPtr.Zero;
-                    hwndChild = IntPtr.Zero;
+                    var rect = new RECT(0, 0, pixelWidth, pixelHeight);
+                    LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
+                    _previewHandler.SetWindow(hwndChild, ref rect);
+                    LogDiag("IPreviewHandler.SetWindow success.");
+
+                    LogDiag("Invoking IPreviewHandler.DoPreview...");
+                    _previewHandler.DoPreview();
+                    LogDiag("IPreviewHandler.DoPreview success.");
+                    _isDoPreviewCalled = true;
                 }
-                throw;
+                catch (Exception ex)
+                {
+                    LogDiag($"BuildWindowCore/DoPreview exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
+                    DisposePreviewHandler();
+                    if (hwndChild != IntPtr.Zero)
+                    {
+                        DestroyWindow(hwndChild);
+                        _childHwnd = IntPtr.Zero;
+                        hwndChild = IntPtr.Zero;
+                    }
+                    throw;
+                }
             }
         }
         else
@@ -334,15 +352,41 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         if (_previewHandler is not null)
         {
-            var rect = new RECT(0, 0, pixelWidth, pixelHeight);
-            try
+            if (_pendingDoPreviewUntilNonZeroSize && pixelWidth > 0 && pixelHeight > 0)
             {
-                _previewHandler.SetRect(ref rect);
-                LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) success");
+                LogDiag($"Running deferred DoPreview size={pixelWidth}x{pixelHeight}.");
+                try
+                {
+                    var rect = new RECT(0, 0, pixelWidth, pixelHeight);
+
+                    LogDiag($"Deferred SetWindow child HWND=0x{_childHwnd.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
+                    _previewHandler.SetWindow(_childHwnd, ref rect);
+                    LogDiag("Deferred SetWindow success.");
+
+                    LogDiag("Invoking deferred DoPreview...");
+                    _previewHandler.DoPreview();
+                    LogDiag("Deferred DoPreview success.");
+                    _isDoPreviewCalled = true;
+                    _pendingDoPreviewUntilNonZeroSize = false;
+                }
+                catch (Exception ex)
+                {
+                    LogDiag($"Deferred DoPreview failed HRESULT=0x{ex.HResult:X8} exception: {ex.Message}");
+                    DisposePreviewHandler();
+                }
             }
-            catch (Exception ex)
+            else if (_isDoPreviewCalled)
             {
-                LogDiag($"SetRect exception: {ex.Message}");
+                var rect = new RECT(0, 0, pixelWidth, pixelHeight);
+                try
+                {
+                    _previewHandler.SetRect(ref rect);
+                    LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) success");
+                }
+                catch (Exception ex)
+                {
+                    LogDiag($"SetRect exception: {ex.Message}");
+                }
             }
         }
     }

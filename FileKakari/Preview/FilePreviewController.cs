@@ -18,6 +18,9 @@ public sealed class FilePreviewController
     public async Task<FilePreviewResult> LoadAsync(string path, CancellationToken cancellationToken)
     {
         var request = new PreviewRequest(path);
+        var extension = Path.GetExtension(path);
+        LogProviderCandidates(path, extension);
+
         if (ShouldTryShellFirst(path))
         {
             var shellResult = await TryLoadShellPreviewAsync(request, cancellationToken).ConfigureAwait(false);
@@ -37,15 +40,24 @@ public sealed class FilePreviewController
                     PerfLog.Write($"[MarkdownPreview] selected provider=\"{provider.GetType().Name}\"");
                 }
 
-                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{path}\" kind={result.Kind} status={result.Status}");
+                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{path}\" ext=\"{extension}\" kind={result.Kind} status={result.Status} fallback=false");
                 return result;
             }
         }
 
         // Fallback for unsupported formats (matches existing behavior of returning basic FileInfo)
         var fallbackResult = await CreateFallbackPreviewAsync(path);
-        PerfLog.Write($"[FilePreviewController] Fallback selected path=\"{path}\" kind={fallbackResult.Kind} status={fallbackResult.Status}");
+        PerfLog.Write($"[FilePreviewController] Fallback selected path=\"{path}\" ext=\"{extension}\" kind={fallbackResult.Kind} status={fallbackResult.Status} fallback=true");
         return fallbackResult;
+    }
+
+    private void LogProviderCandidates(string path, string extension)
+    {
+        foreach (var provider in _providers)
+        {
+            var canPreview = provider.CanPreview(path);
+            PerfLog.Write($"[FilePreviewController] Candidate provider path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" canPreview={canPreview}");
+        }
     }
 
     private async Task<FilePreviewResult?> TryLoadShellPreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
@@ -88,7 +100,7 @@ public sealed class FilePreviewController
                 {
                     PerfLog.Write("[MarkdownPreview] selected provider=\"ShellPreviewHandlerProvider\"");
                 }
-                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{request.FilePath}\" kind={result.Kind} status={result.Status}");
+                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{request.FilePath}\" ext=\"{ext}\" kind={result.Kind} status={result.Status} fallback=false");
                 return result;
             }
 

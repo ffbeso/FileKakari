@@ -14,8 +14,8 @@ public partial class MainWindow
     {
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
-        new BuiltInVideoPreviewProvider(),
         new WebViewPreviewProvider(),
+        new BuiltInVideoPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
     private static readonly System.Collections.Generic.HashSet<string> OfficeExtensions = new(System.StringComparer.OrdinalIgnoreCase)
@@ -511,10 +511,13 @@ public partial class MainWindow
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
                 PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.WebView for path='{result.FileInfo.FullPath}'");
+                LogPreviewUiState("Before WebView preview", generation, result.FileInfo.FullPath);
                 ReplacePreviewWithWebView(result.FileInfo.FullPath, result.FileInfo, generation);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Video && result.FileInfo is not null:
+                PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.Video for path='{result.FileInfo.FullPath}'");
+                LogPreviewUiState("Before Video preview", generation, result.FileInfo.FullPath);
                 ReplacePreviewWithVideo(result.FileInfo.FullPath, generation);
                 break;
 
@@ -552,6 +555,12 @@ public partial class MainWindow
                 ReplacePreviewWithMessage(_text.Format("PreviewLoadFailed", result.ErrorMessage ?? _text.Get("PreviewUnknownError")));
                 break;
         }
+    }
+
+    private void LogPreviewUiState(string label, int generation, string path)
+    {
+        PerfLog.Write(
+            $"[MainWindow.Preview] {label} path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} webViewVisibility={PreviewWebView.Visibility} shellHostVisibility={PreviewShellHostContainer.Visibility} textVisibility={PreviewTextBox.Visibility} imageVisibility={PreviewImageScrollViewer.Visibility} videoVisibility={PreviewVideoHost.Visibility} unsupportedVisibility={PreviewUnsupportedCard.Visibility} messageVisibility={PreviewMessageText.Visibility}");
     }
 
     private void ReplacePreviewWithText(string text)
@@ -675,30 +684,38 @@ public partial class MainWindow
         }
         else
         {
-            try
+            var textProvider = new BuiltInTextPreviewProvider();
+            if (!textProvider.CanPreview(path))
             {
-                PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
-                var result = await new BuiltInTextPreviewProvider()
-                    .CreatePreviewAsync(new PreviewRequest(path), CancellationToken.None);
-
-                if (generation != _previewGeneration)
-                {
-                    PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
-                    return;
-                }
-
-                if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
-                {
-                    PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
-                    ReplacePreviewWithText(result.Text ?? "");
-                    return;
-                }
-
-                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider status={result.Status} kind={result.Kind} path=\"{path}\"");
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=\"not-built-in-text-target\" path=\"{path}\" ext=\"{ext}\"");
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            else
             {
-                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider failed HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" path=\"{path}\"");
+                try
+                {
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
+                    var result = await textProvider
+                        .CreatePreviewAsync(new PreviewRequest(path), CancellationToken.None);
+
+                    if (generation != _previewGeneration)
+                    {
+                        PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
+                        return;
+                    }
+
+                    if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
+                    {
+                        PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
+                        ReplacePreviewWithText(result.Text ?? "");
+                        return;
+                    }
+
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider status={result.Status} kind={result.Kind} path=\"{path}\"");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                {
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider failed HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" path=\"{path}\"");
+                }
             }
         }
 
@@ -1004,7 +1021,9 @@ public partial class MainWindow
     private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation)
     {
         PerfLog.Write($"[WebViewPreview] Begin path=\"{path}\" generation={generation}");
+        LogPreviewUiState("WebView before clear", generation, path);
         ClearPreviewContent(keepWebView: true);
+        LogPreviewUiState("WebView after clear", generation, path);
 
         try
         {
@@ -1049,6 +1068,7 @@ public partial class MainWindow
             PerfLog.Write($"[WebViewPreview] Hide WebView before navigation generation={generation}");
             PerfLog.Write($"[WebViewPreview] WebView visibility changed Hidden reason=\"Hiding before navigation\" generation={generation}");
             PreviewWebView.Visibility = Visibility.Hidden;
+            LogPreviewUiState("WebView before navigate", generation, path);
 
             var absoluteUri = new Uri(path).AbsoluteUri;
             _currentWebViewUri = absoluteUri; // Track target URI before navigating
@@ -1060,6 +1080,7 @@ public partial class MainWindow
             PerfLog.Write($"[MainWindow.Preview] WebView2 initialization/navigation failed: Type={ex.GetType().FullName}, Msg='{ex.Message}'.");
 
             ClearWebView();
+            LogPreviewUiState("WebView after initialization failure clear", generation, path);
 
             if (generation != _previewGeneration)
             {

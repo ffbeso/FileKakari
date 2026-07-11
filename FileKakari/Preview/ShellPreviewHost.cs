@@ -102,49 +102,110 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
             }
 
+            bool initialized = false;
+
             if (_previewHandler is IInitializeWithFile fileInit)
             {
                 LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
-                fileInit.Initialize(_filePath, 0);
-                LogDiag("IInitializeWithFile.Initialize success.");
-            }
-            else if (_previewHandler is IInitializeWithStream streamInit)
-            {
-                LogDiag("Query IInitializeWithFile failed/not supported. Query IInitializeWithStream success. Opening stream...");
-
-                _fileStream = new FileStream(
-                    _filePath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.ReadWrite | FileShare.Delete);
-
-                _managedIStream = new ManagedIStream(_fileStream);
-                LogDiag($"Stream opened path='{_filePath}' length={_fileStream.Length}. Invoking Initialize...");
-
-                streamInit.Initialize(_managedIStream, 0);
-                LogDiag("IInitializeWithStream.Initialize success.");
-            }
-            else if (_previewHandler is IInitializeWithItem itemInit)
-            {
-                LogDiag("Query IInitializeWithStream failed/not supported. Query IInitializeWithItem success. Creating ShellItem...");
-
-                var shellItemGuid = new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
-                LogDiag($"SHCreateItemFromParsingName start path='{_filePath}'");
-                int hr = SHCreateItemFromParsingName(_filePath, IntPtr.Zero, ref shellItemGuid, out _shellItem);
-
-                if (hr < 0 || _shellItem is null)
+                int hr = fileInit.Initialize(_filePath, 0);
+                LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
+                if (hr == 0)
                 {
-                    LogDiag($"SHCreateItemFromParsingName fail HRESULT=0x{hr:X8}");
-                    throw new COMException("SHCreateItemFromParsingName failed", hr);
+                    initialized = true;
+                    LogDiag("[ShellPreviewHost] Initialization selected method=File");
                 }
-                LogDiag($"SHCreateItemFromParsingName success HRESULT=0x{hr:X8}. Invoking Initialize...");
-
-                itemInit.Initialize(_shellItem, 0);
-                LogDiag("IInitializeWithItem.Initialize success.");
+                else
+                {
+                    LogDiag("[ShellPreviewHost] InitializeWithFile failed; trying stream initializer.");
+                }
             }
-            else
+
+            if (!initialized && _previewHandler is IInitializeWithStream streamInit)
             {
-                throw new NotSupportedException("Preview Handler does not support IInitializeWithFile, IInitializeWithStream, or IInitializeWithItem");
+                LogDiag("Query IInitializeWithStream success. Opening stream...");
+                try
+                {
+                    _fileStream = new FileStream(
+                        _filePath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete);
+
+                    _managedIStream = new ManagedIStream(_fileStream);
+                    LogDiag($"Stream opened path='{_filePath}' length={_fileStream.Length}. Invoking Initialize...");
+
+                    int hr = streamInit.Initialize(_managedIStream, 0);
+                    LogDiag($"[ShellPreviewHost] IInitializeWithStream.Initialize HRESULT=0x{hr:X8}");
+                    if (hr == 0)
+                    {
+                        initialized = true;
+                        LogDiag("[ShellPreviewHost] Initialization selected method=Stream");
+                    }
+                    else
+                    {
+                        LogDiag("[ShellPreviewHost] InitializeWithStream failed; trying item initializer.");
+                        _fileStream.Dispose();
+                        _fileStream = null;
+                        _managedIStream = null;
+                    }
+                }
+                catch (Exception streamEx)
+                {
+                    LogDiag($"IInitializeWithStream preparation failed: {streamEx.Message}");
+                    if (_fileStream is not null)
+                    {
+                        _fileStream.Dispose();
+                        _fileStream = null;
+                    }
+                    _managedIStream = null;
+                }
+            }
+
+            if (!initialized && _previewHandler is IInitializeWithItem itemInit)
+            {
+                LogDiag("Query IInitializeWithItem success. Creating ShellItem...");
+                try
+                {
+                    var shellItemGuid = new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+                    LogDiag($"SHCreateItemFromParsingName start path='{_filePath}'");
+                    int hrItemCreate = SHCreateItemFromParsingName(_filePath, IntPtr.Zero, ref shellItemGuid, out _shellItem);
+
+                    if (hrItemCreate >= 0 && _shellItem is not null)
+                    {
+                        LogDiag($"SHCreateItemFromParsingName success HRESULT=0x{hrItemCreate:X8}. Invoking Initialize...");
+                        int hr = itemInit.Initialize(_shellItem, 0);
+                        LogDiag($"[ShellPreviewHost] IInitializeWithItem.Initialize HRESULT=0x{hr:X8}");
+                        if (hr == 0)
+                        {
+                            initialized = true;
+                            LogDiag("[ShellPreviewHost] Initialization selected method=Item");
+                        }
+                        else
+                        {
+                            LogDiag("[ShellPreviewHost] InitializeWithItem failed.");
+                            Marshal.ReleaseComObject(_shellItem);
+                            _shellItem = null;
+                        }
+                    }
+                    else
+                    {
+                        LogDiag($"SHCreateItemFromParsingName fail HRESULT=0x{hrItemCreate:X8}");
+                    }
+                }
+                catch (Exception itemEx)
+                {
+                    LogDiag($"IInitializeWithItem preparation failed: {itemEx.Message}");
+                    if (_shellItem is not null)
+                    {
+                        Marshal.ReleaseComObject(_shellItem);
+                        _shellItem = null;
+                    }
+                }
+            }
+
+            if (!initialized)
+            {
+                throw new NotSupportedException("Preview Handler does not support or failed to initialize with IInitializeWithFile, IInitializeWithStream, or IInitializeWithItem");
             }
         }
         catch (Exception ex)
@@ -500,7 +561,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [Guid("B7D14566-0509-4CCE-A71F-0A554233BD9B")]
     public interface IInitializeWithFile
     {
-        void Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);
+        [PreserveSig]
+        int Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);
     }
 
     [ComImport]
@@ -508,7 +570,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [Guid("b824b643-2222-4a0e-ac22-d49149f10062")]
     public interface IInitializeWithStream
     {
-        void Initialize(IStream stream, uint grfMode);
+        [PreserveSig]
+        int Initialize(IStream stream, uint grfMode);
     }
 
     [ComImport]
@@ -528,7 +591,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [Guid("7F73BE3F-FB79-493C-A6C7-7EE14E245841")]
     public interface IInitializeWithItem
     {
-        void Initialize([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint grfMode);
+        [PreserveSig]
+        int Initialize([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint grfMode);
     }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

@@ -501,16 +501,8 @@ public partial class MainWindow
         {
             PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
             var shellHost = new ShellPreviewHost(path, clsid);
+            ApplyShellPreviewHostBackground();
             PreviewShellHostContainer.Child = shellHost;
-            if (clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
-                clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3"))
-            {
-                PreviewShellHostContainer.Background = System.Windows.Media.Brushes.Magenta;
-            }
-            else
-            {
-                PreviewShellHostContainer.Background = System.Windows.Media.Brushes.Transparent;
-            }
             PreviewShellHostContainer.Visibility = Visibility.Visible;
             PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Attached ShellPreviewHost to container successfully.");
         }
@@ -576,8 +568,13 @@ public partial class MainWindow
         }
 
         PreviewShellHostContainer.Child = null;
-        PreviewShellHostContainer.Background = System.Windows.Media.Brushes.Transparent;
+        ApplyShellPreviewHostBackground();
         PreviewShellHostContainer.Visibility = Visibility.Collapsed;
+    }
+
+    private void ApplyShellPreviewHostBackground()
+    {
+        PreviewShellHostContainer.SetResourceReference(Border.BackgroundProperty, "PanelBackgroundBrush");
     }
 
     private static BitmapImage DecodePreviewImage(byte[] imageBytes)

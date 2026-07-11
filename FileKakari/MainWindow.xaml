@@ -1623,6 +1623,7 @@
                         </Border>
                         <Border x:Name="PreviewShellHostContainer"
                                 Margin="8"
+                                Background="{DynamicResource PanelBackgroundBrush}"
                                 ClipToBounds="True"
                                 Visibility="Collapsed" />
                         <wv2:WebView2 x:Name="PreviewWebView"

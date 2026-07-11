@@ -232,8 +232,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             scaleY = source.CompositionTarget.TransformToDevice.M22;
         }
 
-        var pixelWidth = Math.Max(0, (int)Math.Round(ActualWidth * scaleX));
-        var pixelHeight = Math.Max(0, (int)Math.Round(ActualHeight * scaleY));
+        var pixelWidth = ToCoveringPixelSize(ActualWidth, scaleX);
+        var pixelHeight = ToCoveringPixelSize(ActualHeight, scaleY);
 
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
         LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
@@ -354,8 +354,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             scaleY = source.CompositionTarget.TransformToDevice.M22;
         }
 
-        var pixelWidth = Math.Max(0, (int)Math.Round(width * scaleX));
-        var pixelHeight = Math.Max(0, (int)Math.Round(height * scaleY));
+        var pixelWidth = ToCoveringPixelSize(width, scaleX);
+        var pixelHeight = ToCoveringPixelSize(height, scaleY);
 
         LogDiag($"ResizePreviewHost: width={width} height={height} scale={scaleX}x{scaleY} -> pixels={pixelWidth}x{pixelHeight}");
 
@@ -497,6 +497,16 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 _managedIStream = null;
             }
         }
+    }
+
+    private static int ToCoveringPixelSize(double value, double scale)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, (int)Math.Ceiling(value * scale));
     }
 
     protected override void Dispose(bool disposing)

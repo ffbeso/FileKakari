@@ -26,6 +26,7 @@ public partial class MainWindow
     private GridLength _previewPaneHeight = new(240);
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
+    private string? _currentWebViewUri;
 
     private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
 
@@ -742,6 +743,7 @@ public partial class MainWindow
             }
 
             var absoluteUri = new Uri(path).AbsoluteUri;
+            _currentWebViewUri = absoluteUri; // Track target URI before navigating
             PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithWebView: Navigating WebView to '{absoluteUri}'");
             PreviewWebView.CoreWebView2.Navigate(absoluteUri);
             PreviewWebView.Visibility = Visibility.Visible;
@@ -787,16 +789,55 @@ public partial class MainWindow
         var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, userDataFolder);
         await PreviewWebView.EnsureCoreWebView2Async(env);
 
-        PreviewWebView.CoreWebView2.Settings.IsWebMessageEnabled = false;
-        PreviewWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+        // Security restrictions on WebView2 settings
         PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        PreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        PreviewWebView.CoreWebView2.Settings.AreHostObjectsAllowed = false;
+        PreviewWebView.CoreWebView2.Settings.IsWebMessageEnabled = false;
+        PreviewWebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+
+        // Register security events to lock down navigation, new windows, and downloads
+        PreviewWebView.CoreWebView2.NavigationStarting += CoreWebView2_NavigationStarting;
+        PreviewWebView.CoreWebView2.NewWindowRequested += CoreWebView2_NewWindowRequested;
+        PreviewWebView.CoreWebView2.DownloadStarting += CoreWebView2_DownloadStarting;
 
         _isWebViewInitialized = true;
         PerfLog.Write("[MainWindow.Preview] InitializeWebViewAsync: CoreWebView2 initialization completed.");
     }
 
+    private void CoreWebView2_NavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
+    {
+        var uri = e.Uri;
+        if (uri == "about:blank")
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(_currentWebViewUri) && uri == _currentWebViewUri)
+        {
+            return;
+        }
+
+        // Block all document redirections, link clicks or page jumps
+        e.Cancel = true;
+        PerfLog.Write($"[WebViewPreview] Navigation blocked uri='{uri}'");
+    }
+
+    private void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        PerfLog.Write($"[WebViewPreview] NewWindow blocked uri='{e.Uri}'");
+    }
+
+    private void CoreWebView2_DownloadStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2DownloadStartingEventArgs e)
+    {
+        e.Cancel = true;
+        PerfLog.Write($"[WebViewPreview] Download blocked uri='{e.DownloadOperation.Uri}'");
+    }
+
     private void ClearWebView()
     {
+        _currentWebViewUri = null; // Clear tracked target URI
         if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
         {
             try

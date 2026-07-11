@@ -18,11 +18,25 @@ public sealed class FilePreviewController
     public async Task<FilePreviewResult> LoadAsync(string path, CancellationToken cancellationToken)
     {
         var request = new PreviewRequest(path);
+        if (IsMarkdown(path))
+        {
+            var markdownResult = await TryLoadMarkdownPreviewAsync(request, cancellationToken).ConfigureAwait(false);
+            if (markdownResult is not null)
+            {
+                return markdownResult;
+            }
+        }
+
         foreach (var provider in _providers)
         {
             if (provider.CanPreview(path))
             {
                 var result = await provider.CreatePreviewAsync(request, cancellationToken);
+                if (IsMarkdown(path))
+                {
+                    PerfLog.Write($"[MarkdownPreview] selected provider=\"{provider.GetType().Name}\"");
+                }
+
                 PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{path}\" kind={result.Kind} status={result.Status}");
                 return result;
             }
@@ -32,6 +46,44 @@ public sealed class FilePreviewController
         var fallbackResult = await CreateFallbackPreviewAsync(path);
         PerfLog.Write($"[FilePreviewController] Fallback selected path=\"{path}\" kind={fallbackResult.Kind} status={fallbackResult.Status}");
         return fallbackResult;
+    }
+
+    private async Task<FilePreviewResult?> TryLoadMarkdownPreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
+    {
+        PerfLog.Write("[MarkdownPreview] ext=\".md\" checking shell preview handler");
+        if (!ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(request.FilePath, out var clsid))
+        {
+            PerfLog.Write("[MarkdownPreview] shell handler not found; fallback to built-in text");
+            return null;
+        }
+
+        PerfLog.Write($"[MarkdownPreview] shell handler found clsid=\"{clsid:B}\"");
+        foreach (var provider in _providers)
+        {
+            if (provider is not ShellPreviewHandlerProvider)
+            {
+                continue;
+            }
+
+            var result = await provider.CreatePreviewAsync(request, cancellationToken).ConfigureAwait(false);
+            if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Shell)
+            {
+                PerfLog.Write("[MarkdownPreview] selected provider=\"ShellPreviewHandlerProvider\"");
+                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{request.FilePath}\" kind={result.Kind} status={result.Status}");
+                return result;
+            }
+
+            PerfLog.Write($"[MarkdownPreview] shell provider returned status={result.Status} kind={result.Kind}; fallback to built-in text");
+            return null;
+        }
+
+        PerfLog.Write("[MarkdownPreview] shell provider unavailable; fallback to built-in text");
+        return null;
+    }
+
+    private static bool IsMarkdown(string path)
+    {
+        return string.Equals(Path.GetExtension(path), ".md", StringComparison.OrdinalIgnoreCase);
     }
 
     private Task<FilePreviewResult> CreateFallbackPreviewAsync(string path)

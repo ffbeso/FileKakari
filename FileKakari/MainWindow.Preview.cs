@@ -14,8 +14,8 @@ public partial class MainWindow
     {
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
-        new BuiltInVideoPreviewProvider(),
         new WebViewPreviewProvider(),
+        new BuiltInVideoPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
     private CancellationTokenSource? _previewCancellation;

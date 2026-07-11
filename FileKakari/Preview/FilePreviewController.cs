@@ -22,15 +22,16 @@ public sealed class FilePreviewController
         {
             if (provider.CanPreview(path))
             {
-                return await provider.CreatePreviewAsync(request, cancellationToken);
+                var result = await provider.CreatePreviewAsync(request, cancellationToken);
+                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{path}\" kind={result.Kind} status={result.Status}");
+                return result;
             }
         }
 
-        // TODO: Stage 2以降で Windows Shell Preview Handler をホストする。
-        // PowerToys File Explorer add-ons など、登録済み Preview Handler の利用をここで扱う。
-
         // Fallback for unsupported formats (matches existing behavior of returning basic FileInfo)
-        return await CreateFallbackPreviewAsync(path);
+        var fallbackResult = await CreateFallbackPreviewAsync(path);
+        PerfLog.Write($"[FilePreviewController] Fallback selected path=\"{path}\" kind={fallbackResult.Kind} status={fallbackResult.Status}");
+        return fallbackResult;
     }
 
     private Task<FilePreviewResult> CreateFallbackPreviewAsync(string path)

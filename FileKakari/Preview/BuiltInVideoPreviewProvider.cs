@@ -8,15 +8,15 @@ namespace FileKakari;
 
 public sealed class BuiltInVideoPreviewProvider : IFilePreviewProvider
 {
-    private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> MediaExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".mp4"
+        ".mp4", ".mp3", ".wav", ".m4a"
     };
 
     public bool CanPreview(string filePath)
     {
         var extension = Path.GetExtension(filePath);
-        return VideoExtensions.Contains(extension);
+        return MediaExtensions.Contains(extension);
     }
 
     public Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)

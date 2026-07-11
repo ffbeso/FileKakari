@@ -87,9 +87,17 @@
             </WrapPanel>
 
             <StackPanel Grid.Row="10" Grid.Column="1" Margin="0,8,0,0">
-                <CheckBox x:Name="AutoPlayVideoPreviewCheckBox" />
+                <CheckBox x:Name="AutoPlayVideoPreviewCheckBox"
+                          Checked="AutoPlayVideoPreviewCheckBox_Changed"
+                          Unchecked="AutoPlayVideoPreviewCheckBox_Changed" />
                 <TextBlock x:Name="AutoPlayVideoPreviewDescriptionText"
                            Margin="24,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
+                <CheckBox x:Name="MuteVideoPreviewOnAutoPlayCheckBox"
+                          Margin="24,8,0,0" />
+                <TextBlock x:Name="MuteVideoPreviewOnAutoPlayDescriptionText"
+                           Margin="48,4,0,0"
                            TextWrapping="Wrap"
                            Foreground="{DynamicResource SubtleTextBrush}" />
             </StackPanel>

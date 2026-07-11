@@ -199,8 +199,10 @@ Items: {1:N0}</value></data>
   <data name="SettingsPreviewPanePlacement" xml:space="preserve"><value>Preview pane position</value></data>
   <data name="SettingsPreviewPanePlacementRight" xml:space="preserve"><value>Right</value></data>
   <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>Bottom</value></data>
-  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>Auto-play video previews</value></data>
-  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>Automatically start playback when a video file is selected.</value></data>
+  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>Auto-play video and audio previews</value></data>
+  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>Automatically start playback when a video or audio file is selected.</value></data>
+  <data name="SettingsMuteVideoPreviewOnAutoPlay" xml:space="preserve"><value>Mute videos during auto-play</value></data>
+  <data name="SettingsMuteVideoPreviewOnAutoPlayDescription" xml:space="preserve"><value>Applies only when video previews start automatically. Audio files are not muted.</value></data>
   <data name="SettingsFontFamily" xml:space="preserve"><value>Font family</value></data>
   <data name="SettingsFontSize" xml:space="preserve"><value>Font size</value></data>
   <data name="SettingsRowHeight" xml:space="preserve"><value>Row height</value></data>

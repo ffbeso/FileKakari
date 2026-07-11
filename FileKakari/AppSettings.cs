@@ -45,6 +45,8 @@ public sealed class AppSettings
 
     public bool AutoPlayVideoPreview { get; set; }
 
+    public bool MuteVideoPreviewOnAutoPlay { get; set; } = true;
+
     public PreviewPanePlacement PreviewPanePlacement { get; set; } = PreviewPanePlacement.Right;
 
     public double? PreviewPaneWidth { get; set; }
@@ -81,6 +83,7 @@ public sealed class AppSettings
                 StringComparer.OrdinalIgnoreCase),
             SortFoldersFirst = SortFoldersFirst,
             AutoPlayVideoPreview = AutoPlayVideoPreview,
+            MuteVideoPreviewOnAutoPlay = MuteVideoPreviewOnAutoPlay,
             PreviewPanePlacement = PreviewPanePlacement,
             PreviewPaneWidth = PreviewPaneWidth,
             PreviewPaneHeight = PreviewPaneHeight,

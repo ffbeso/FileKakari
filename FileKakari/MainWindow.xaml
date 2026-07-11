@@ -1666,7 +1666,7 @@
                             <MediaElement x:Name="PreviewMediaElement"
                                           LoadedBehavior="Manual"
                                           UnloadedBehavior="Manual"
-                                          IsMuted="True"
+                                          IsMuted="False"
                                           Stretch="Uniform"
                                           HorizontalAlignment="Stretch"
                                           VerticalAlignment="Stretch"

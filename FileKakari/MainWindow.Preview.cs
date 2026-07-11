@@ -14,8 +14,8 @@ public partial class MainWindow
     {
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
-        new WebViewPreviewProvider(),
         new BuiltInVideoPreviewProvider(),
+        new WebViewPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
     private static readonly System.Collections.Generic.HashSet<string> OfficeExtensions = new(System.StringComparer.OrdinalIgnoreCase)
@@ -29,6 +29,7 @@ public partial class MainWindow
     private int _previewMediaGeneration = -1;
     private Uri? _previewMediaUri;
     private bool _isPreviewMediaPlaying;
+    private bool _isPreviewMediaVideo;
     private GridLength _previewPaneHeight = new(240);
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
@@ -571,11 +572,13 @@ public partial class MainWindow
     {
         _previewMediaGeneration = generation;
         _previewMediaUri = new Uri(path, UriKind.Absolute);
+        _isPreviewMediaVideo = IsVideoPreviewPath(path);
         PreviewVideoHost.Visibility = Visibility.Visible;
         PreviewVideoHost.Opacity = 0;
         PreviewVideoHost.IsHitTestVisible = false;
         PreviewMediaPlayPauseButton.IsEnabled = false;
         PreviewMediaStopButton.IsEnabled = false;
+        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia(autoPlay: _settingsService.Settings.AutoPlayVideoPreview);
         UpdatePreviewMediaPlayState(false);
         PreviewMediaElement.Source = _previewMediaUri;
     }
@@ -703,7 +706,7 @@ public partial class MainWindow
     {
         var generation = _previewMediaGeneration;
         var mediaUri = _previewMediaUri;
-        if (!IsCurrentPreviewVideo(generation, mediaUri))
+        if (!IsCurrentPreviewMedia(generation, mediaUri))
         {
             return;
         }
@@ -715,7 +718,7 @@ public partial class MainWindow
     {
         var generation = _previewMediaGeneration;
         var mediaUri = _previewMediaUri;
-        if (!IsCurrentPreviewVideo(generation, mediaUri))
+        if (!IsCurrentPreviewMedia(generation, mediaUri))
         {
             return;
         }
@@ -732,7 +735,7 @@ public partial class MainWindow
 
         PerfLog.Write($"[PreviewMediaElement] MediaFailed: Uri='{mediaUri}', ErrorMessage='{e.ErrorException?.Message}', Exception='{e.ErrorException?.ToString() ?? "null"}'");
 
-        if (!IsCurrentPreviewVideo(generation, mediaUri))
+        if (!IsCurrentPreviewMedia(generation, mediaUri))
         {
             return;
         }
@@ -751,6 +754,7 @@ public partial class MainWindow
         }
         else
         {
+            PreviewMediaElement.IsMuted = false;
             PreviewMediaElement.Play();
             UpdatePreviewMediaPlayState(true);
         }
@@ -768,7 +772,7 @@ public partial class MainWindow
 
     private void ShowOpenedPreviewMedia(bool autoPlay)
     {
-        PreviewMediaElement.IsMuted = true;
+        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia(autoPlay);
         if (autoPlay)
         {
             PreviewMediaElement.Play();
@@ -782,7 +786,7 @@ public partial class MainWindow
         UpdatePreviewMediaPlayState(autoPlay);
     }
 
-    private bool IsCurrentPreviewVideo(int generation, Uri? mediaUri)
+    private bool IsCurrentPreviewMedia(int generation, Uri? mediaUri)
     {
         return generation == _previewGeneration
             && generation == _previewMediaGeneration
@@ -838,11 +842,26 @@ public partial class MainWindow
             PreviewMediaElement.Source = null;
             _previewMediaGeneration = -1;
             _previewMediaUri = null;
+            _isPreviewMediaVideo = false;
         }
 
+        PreviewMediaElement.IsMuted = false;
         PreviewMediaPlayPauseButton.IsEnabled = false;
         PreviewMediaStopButton.IsEnabled = false;
         UpdatePreviewMediaPlayState(false);
+    }
+
+    private bool ShouldMutePreviewMedia(bool autoPlay)
+    {
+        return autoPlay
+            && _isPreviewMediaVideo
+            && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+    }
+
+    private static bool IsVideoPreviewPath(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ClearNonVideoPreviewContent()

@@ -36,6 +36,8 @@ public partial class SettingsView : UserControl
         PreviewPanePlacementLabel.Text = _text.Get("SettingsPreviewPanePlacement");
         AutoPlayVideoPreviewCheckBox.Content = _text.Get("SettingsAutoPlayVideoPreview");
         AutoPlayVideoPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayVideoPreviewDescription");
+        MuteVideoPreviewOnAutoPlayCheckBox.Content = _text.Get("SettingsMuteVideoPreviewOnAutoPlay");
+        MuteVideoPreviewOnAutoPlayDescriptionText.Text = _text.Get("SettingsMuteVideoPreviewOnAutoPlayDescription");
         FontFamilyLabel.Text = _text.Get("SettingsFontFamily");
         FontSizeLabel.Text = _text.Get("SettingsFontSize");
         RowHeightLabel.Text = _text.Get("SettingsRowHeight");
@@ -93,6 +95,8 @@ public partial class SettingsView : UserControl
         SortFoldersFirstCheckBox.IsChecked = Result.SortFoldersFirst;
         PreviewPanePlacementComboBox.SelectedValue = Result.PreviewPanePlacement;
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
+        MuteVideoPreviewOnAutoPlayCheckBox.IsChecked = Result.MuteVideoPreviewOnAutoPlay;
+        UpdateMuteVideoPreviewOnAutoPlayEnabled();
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
             ? Result.FontFamily
             : AppSettings.DefaultFontFamily;
@@ -179,6 +183,7 @@ public partial class SettingsView : UserControl
             ? previewPanePlacement
             : PreviewPanePlacement.Right;
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
+        Result.MuteVideoPreviewOnAutoPlay = MuteVideoPreviewOnAutoPlayCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;
         Result.FontFamily = string.IsNullOrWhiteSpace(selectedFontFamily)
             ? AppSettings.DefaultFontFamily
@@ -277,6 +282,18 @@ public partial class SettingsView : UserControl
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+    }
+
+    private void AutoPlayVideoPreviewCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        UpdateMuteVideoPreviewOnAutoPlayEnabled();
+    }
+
+    private void UpdateMuteVideoPreviewOnAutoPlayEnabled()
+    {
+        var enabled = AutoPlayVideoPreviewCheckBox.IsChecked == true;
+        MuteVideoPreviewOnAutoPlayCheckBox.IsEnabled = enabled;
+        MuteVideoPreviewOnAutoPlayDescriptionText.IsEnabled = enabled;
     }
 
     private sealed record SettingsChoice<T>(string Text, T Value);

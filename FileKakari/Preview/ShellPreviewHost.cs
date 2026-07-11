@@ -11,7 +11,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 {
     private readonly string _filePath;
     private readonly Guid _clsid;
-    private readonly bool _isMonaco;
+    private readonly bool _isDeferredHandler;
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
@@ -35,7 +35,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         _filePath = filePath;
         _clsid = clsid;
-        _isMonaco = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
+        _isDeferredHandler = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
+                             _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
         LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}'");
 
@@ -237,9 +238,10 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
         LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
 
-        if (_isMonaco)
+        if (_isDeferredHandler)
         {
-            LogDiag($"Handler profile: PowerToysMonaco clsid=\"{_clsid:B}\"");
+            string profile = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ? "PowerToysMonaco" : "PowerToysMarkdown";
+            LogDiag($"Handler profile: {profile} clsid=\"{_clsid:B}\"");
         }
 
         var hwndChild = CreateWindowEx(
@@ -265,7 +267,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         LogDiag($"CreateWindowEx success: child HWND=0x{hwndChild.ToInt64():X}");
         _childHwnd = hwndChild;
 
-        if (_isMonaco)
+        if (_isDeferredHandler)
         {
             var showRes = ShowWindow(hwndChild, SW_SHOW);
             LogDiag($"ShowWindow child HWND=0x{hwndChild.ToInt64():X} result={showRes}");
@@ -276,9 +278,10 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         if (_previewHandler is not null)
         {
-            if (_isMonaco && pixelWidth == 0 && pixelHeight == 0)
+            if (_isDeferredHandler && pixelWidth == 0 && pixelHeight == 0)
             {
-                LogDiag("Deferring DoPreview until non-zero size for PowerToys Monaco.");
+                string profile = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ? "PowerToys Monaco" : "PowerToys Markdown";
+                LogDiag($"Deferring DoPreview until non-zero size for {profile}.");
                 _pendingDoPreviewUntilNonZeroSize = true;
             }
             else
@@ -361,7 +364,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             var success = MoveWindow(_childHwnd, 0, 0, pixelWidth, pixelHeight, true);
             LogDiag($"MoveWindow child HWND=0x{_childHwnd.ToInt64():X} size={pixelWidth}x{pixelHeight} success={success}");
 
-            if (_isMonaco)
+            if (_isDeferredHandler)
             {
                 var showRes = ShowWindow(_childHwnd, SW_SHOW);
                 LogDiag($"ShowWindow (after-move) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
@@ -394,7 +397,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _previewHandler.SetWindow(_childHwnd, ref rect);
                     LogDiag("Deferred SetWindow success.");
 
-                    if (_isMonaco)
+                    if (_isDeferredHandler)
                     {
                         var showRes = ShowWindow(_childHwnd, SW_SHOW);
                         LogDiag($"ShowWindow (before-deferred-do-preview) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
@@ -406,7 +409,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _isDoPreviewCalled = true;
                     _pendingDoPreviewUntilNonZeroSize = false;
 
-                    if (_isMonaco)
+                    if (_isDeferredHandler)
                     {
                         var showRes = ShowWindow(_childHwnd, SW_SHOW);
                         LogDiag($"ShowWindow (after-deferred-do-preview) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");

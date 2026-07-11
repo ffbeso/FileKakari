@@ -502,7 +502,8 @@ public partial class MainWindow
             PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
             var shellHost = new ShellPreviewHost(path, clsid);
             PreviewShellHostContainer.Child = shellHost;
-            if (clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA"))
+            if (clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
+                clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3"))
             {
                 PreviewShellHostContainer.Background = System.Windows.Media.Brushes.Magenta;
             }

@@ -118,6 +118,29 @@ public partial class App : Application
         window.Show();
     }
 
+    protected override void OnExit(ExitEventArgs e)
+    {
+        try
+        {
+            var tempDir = Path.GetTempPath();
+            var pattern = $"FileKakari_media_preview_{Environment.ProcessId}_*.html";
+            foreach (var filePath in Directory.EnumerateFiles(tempDir, pattern))
+            {
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch
+                {
+                }
+            }
+        }
+        catch
+        {
+        }
+        base.OnExit(e);
+    }
+
     private static void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         PerfLog.Write($"unhandled-exception source=dispatcher {FormatException(e.Exception)} {FileKakari.MainWindow.GetCrashContextSnapshot()}");

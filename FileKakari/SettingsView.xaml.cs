@@ -291,9 +291,8 @@ public partial class SettingsView : UserControl
 
     private void UpdateMuteVideoPreviewOnAutoPlayEnabled()
     {
-        var enabled = AutoPlayVideoPreviewCheckBox.IsChecked == true;
-        MuteVideoPreviewOnAutoPlayCheckBox.IsEnabled = enabled;
-        MuteVideoPreviewOnAutoPlayDescriptionText.IsEnabled = enabled;
+        MuteVideoPreviewOnAutoPlayCheckBox.IsEnabled = true;
+        MuteVideoPreviewOnAutoPlayDescriptionText.IsEnabled = true;
     }
 
     private sealed record SettingsChoice<T>(string Text, T Value);

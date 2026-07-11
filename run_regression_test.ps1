@@ -18,6 +18,7 @@ New-Item -ItemType Directory -Path $testDir | Out-Null
 [System.IO.File]::WriteAllText("$testDir\03_test.txt", "Plain text content.")
 [System.IO.File]::WriteAllBytes("$testDir\04_test.pdf", @(0..10)) # ダミーPDF
 [System.IO.File]::WriteAllBytes("$testDir\05_test.mp4", @(0..10)) # ダミーMP4
+[System.IO.File]::WriteAllBytes("$testDir\06_日本語 空白 & #.mp3", @(0..10)) # 特殊文字MP3
 
 Write-Output "Test files prepared."
 

@@ -30,6 +30,11 @@ public partial class MainWindow
     private Uri? _previewMediaUri;
     private bool _isPreviewMediaPlaying;
     private bool _isPreviewMediaVideo;
+    private string? _currentTempMediaHtmlPath;
+    private int _currentTempMediaHtmlGeneration = -1;
+    private int _currentWebViewMediaGeneration = -1;
+    private bool _currentWebViewMediaAutoPlay;
+    private bool _currentWebViewMediaMuted;
     private GridLength _previewPaneHeight = new(240);
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
@@ -640,7 +645,7 @@ public partial class MainWindow
         PreviewVideoHost.IsHitTestVisible = false;
         PreviewMediaPlayPauseButton.IsEnabled = false;
         PreviewMediaStopButton.IsEnabled = false;
-        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia(autoPlay: _settingsService.Settings.AutoPlayVideoPreview);
+        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia();
         UpdatePreviewMediaPlayState(false);
         PreviewMediaElement.Source = _previewMediaUri;
     }
@@ -1008,7 +1013,7 @@ public partial class MainWindow
 
     private void ShowOpenedPreviewMedia(bool autoPlay)
     {
-        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia(autoPlay);
+        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia();
         if (autoPlay)
         {
             PreviewMediaElement.Play();
@@ -1087,11 +1092,9 @@ public partial class MainWindow
         UpdatePreviewMediaPlayState(false);
     }
 
-    private bool ShouldMutePreviewMedia(bool autoPlay)
+    private bool ShouldMutePreviewMedia()
     {
-        return autoPlay
-            && _isPreviewMediaVideo
-            && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+        return _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
     }
 
     private static bool IsVideoPreviewPath(string path)
@@ -1179,16 +1182,17 @@ public partial class MainWindow
         {
             if (new BuiltInVideoPreviewProvider().CanPreview(path))
             {
+                var originalMediaPath = path;
                 var isVideo = string.Equals(Path.GetExtension(path), ".mp4", StringComparison.OrdinalIgnoreCase) ||
                               string.Equals(Path.GetExtension(path), ".webm", StringComparison.OrdinalIgnoreCase);
 
                 var autoPlay = _settingsService.Settings.AutoPlayVideoPreview;
-                var muted = isVideo && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+                var muted = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
 
                 var autoplayAttr = autoPlay ? "autoplay" : "";
                 var mutedAttr = muted ? "muted" : "";
 
-                var mediaFileUri = new Uri(path).AbsoluteUri;
+                var mediaFileUri = System.Net.WebUtility.HtmlEncode(new Uri(Path.GetFullPath(path)).AbsoluteUri);
                 var mediaTag = isVideo
                     ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></video>"
                     : $"<audio id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></audio>";
@@ -1225,13 +1229,16 @@ public partial class MainWindow
 <body>
     {mediaTag}
     <script>
+        window.playError = '';
         window.addEventListener('DOMContentLoaded', () => {{
             var media = document.getElementById('media');
             if (media) {{
                 media.muted = {mutedJs};
                 if ({autoplayJs}) {{
                     media.play().catch(err => {{
+                        window.playError = err ? (err.name || err.message || 'UnknownError') : 'UnknownError';
                         console.log('Autoplay blocked or failed:', err);
+                        media.pause();
                     }});
                 }}
             }}
@@ -1242,9 +1249,31 @@ public partial class MainWindow
 
                 try
                 {
-                    var tempHtmlPath = Path.Combine(Path.GetTempPath(), "FileKakari_media_preview.html");
+                    DeleteCurrentTempMediaHtml();
+                }
+                catch (Exception ex)
+                {
+                    PerfLog.Write($"[WebViewPreview] Failed to delete old temporary media HTML: {ex.Message}");
+                }
+
+                try
+                {
+                    var tempFileName = $"FileKakari_media_preview_{Environment.ProcessId}_{generation}_{Guid.NewGuid():N}.html";
+                    var tempHtmlPath = Path.Combine(Path.GetTempPath(), tempFileName);
                     await File.WriteAllTextAsync(tempHtmlPath, html, System.Text.Encoding.UTF8);
+                    if (generation != _previewGeneration)
+                    {
+                        TryDeleteTempMediaHtml(tempHtmlPath, generation, "generation-mismatch-after-write");
+                        return;
+                    }
+
+                    _currentTempMediaHtmlPath = tempHtmlPath;
+                    _currentTempMediaHtmlGeneration = generation;
+                    _currentWebViewMediaGeneration = generation;
+                    _currentWebViewMediaAutoPlay = autoPlay;
+                    _currentWebViewMediaMuted = muted;
                     path = tempHtmlPath;
+                    PerfLog.Write($"[WebViewPreview] Media temp html created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" autoPlay={autoPlay} muted={muted}");
                 }
                 catch (Exception ex)
                 {
@@ -1442,6 +1471,11 @@ public partial class MainWindow
             PerfLog.Write($"[WebViewPreview] Show WebView after navigation generation={completedGen}");
             PerfLog.Write($"[WebViewPreview] WebView visibility changed Visible reason=\"Navigation completed (success={e.IsSuccess})\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
+
+            if (e.IsSuccess && currentUri.Contains("FileKakari_media_preview", StringComparison.OrdinalIgnoreCase))
+            {
+                _ = LogMediaPlaybackStateAsync(completedGen);
+            }
         }
         else
         {
@@ -1472,8 +1506,18 @@ public partial class MainWindow
 
     private void ClearWebView()
     {
+        try
+        {
+            DeleteCurrentTempMediaHtml();
+        }
+        catch (Exception ex)
+        {
+            PerfLog.Write($"[MainWindow.Preview] ClearWebView delete temp html failed: {ex.Message}");
+        }
+
         _currentWebViewUri = null; // Clear tracked target URI
         _currentWebViewFileInfo = null;
+        _currentWebViewMediaGeneration = -1;
         if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
         {
             try
@@ -1554,5 +1598,74 @@ public partial class MainWindow
     private void PreviewMaximizeButton_Click(object sender, RoutedEventArgs e)
     {
         TogglePreviewMaximized();
+    }
+
+    private async Task LogMediaPlaybackStateAsync(int generation)
+    {
+        await Task.Delay(700);
+        if (generation != _previewGeneration)
+        {
+            return;
+        }
+
+        try
+        {
+            var expectedAutoPlay = generation == _currentWebViewMediaGeneration && _currentWebViewMediaAutoPlay;
+            var expectedMuted = generation == _currentWebViewMediaGeneration && _currentWebViewMediaMuted;
+            var js = @"(() => {
+                var media = document.getElementById('media');
+                if (!media) return JSON.stringify({ error: 'No media element found' });
+                var playError = window.playError || '';
+                var autoplaySatisfied = media.autoplay ? (!media.paused || media.currentTime > 0 || !!playError) : true;
+                var stoppedSatisfied = media.autoplay ? true : (media.paused && media.currentTime < 0.1);
+                return JSON.stringify({
+                    paused: media.paused,
+                    muted: media.muted,
+                    autoplay: media.autoplay,
+                    currentTime: media.currentTime,
+                    readyState: media.readyState,
+                    playError: playError,
+                    autoplaySatisfied: autoplaySatisfied,
+                    stoppedSatisfied: stoppedSatisfied
+                });
+            })()";
+
+            if (_isWebViewInitialized && PreviewWebView.CoreWebView2 != null)
+            {
+                var jsonResult = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(js);
+                if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null")
+                {
+                    PerfLog.Write($"[MediaPlaybackState] expectedAutoPlay={expectedAutoPlay} expectedMuted={expectedMuted} state={jsonResult} generation={generation}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PerfLog.Write($"[MediaPlaybackState] Failed to query playback state: {ex.Message}");
+        }
+    }
+
+    private void DeleteCurrentTempMediaHtml()
+    {
+        if (string.IsNullOrEmpty(_currentTempMediaHtmlPath))
+        {
+            return;
+        }
+
+        var path = _currentTempMediaHtmlPath;
+        var ownerGeneration = _currentTempMediaHtmlGeneration;
+        _currentTempMediaHtmlPath = null;
+        _currentTempMediaHtmlGeneration = -1;
+
+        TryDeleteTempMediaHtml(path, ownerGeneration, "owner-cleared");
+    }
+
+    private static void TryDeleteTempMediaHtml(string path, int generation, string reason)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+            PerfLog.Write($"[WebViewPreview] Temp media html deleted path=\"{path}\" generation={generation} reason=\"{reason}\"");
+        }
     }
 }

@@ -43,7 +43,7 @@ public partial class MainWindow
             });
             await Task.Delay(1000);
 
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 6; i++)
             {
                 FileEntry? entry = null;
                 await Dispatcher.InvokeAsync(() =>

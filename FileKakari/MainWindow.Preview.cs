@@ -1190,6 +1190,81 @@ public partial class MainWindow
 
         try
         {
+            if (new BuiltInVideoPreviewProvider().CanPreview(path))
+            {
+                var isVideo = string.Equals(Path.GetExtension(path), ".mp4", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(Path.GetExtension(path), ".webm", StringComparison.OrdinalIgnoreCase);
+
+                var autoPlay = _settingsService.Settings.AutoPlayVideoPreview;
+                var muted = isVideo && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+
+                var autoplayAttr = autoPlay ? "autoplay" : "";
+                var mutedAttr = muted ? "muted" : "";
+
+                var mediaFileUri = new Uri(path).AbsoluteUri;
+                var mediaTag = isVideo
+                    ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></video>"
+                    : $"<audio id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></audio>";
+
+                var autoplayJs = autoPlay ? "true" : "false";
+                var mutedJs = muted ? "true" : "false";
+
+                var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }}
+        video, audio {{
+            max-width: 100%;
+            max-height: 100%;
+            outline: none;
+        }}
+        audio {{
+            width: 80%;
+        }}
+    </style>
+</head>
+<body>
+    {mediaTag}
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {{
+            var media = document.getElementById('media');
+            if (media) {{
+                media.muted = {mutedJs};
+                if ({autoplayJs}) {{
+                    media.play().catch(err => {{
+                        console.log('Autoplay blocked or failed:', err);
+                    }});
+                }}
+            }}
+        }});
+    </script>
+</body>
+</html>";
+
+                try
+                {
+                    var tempHtmlPath = Path.Combine(Path.GetTempPath(), "FileKakari_media_preview.html");
+                    await File.WriteAllTextAsync(tempHtmlPath, html, System.Text.Encoding.UTF8);
+                    path = tempHtmlPath;
+                }
+                catch (Exception ex)
+                {
+                    PerfLog.Write($"[WebViewPreview] Failed to write temporary media HTML: {ex.Message}");
+                }
+            }
+
             PerfLog.Write($"[WebViewPreview] InitializeWebViewAsync begin generation={generation}");
             bool wasInitialized = _isWebViewInitialized;
             await InitializeWebViewAsync();
@@ -1316,7 +1391,7 @@ public partial class MainWindow
             {
                 var targetUriObj = new Uri(_currentWebViewUri);
                 var currentUriObj = new Uri(uri);
-                if (targetUriObj.AbsoluteUri == currentUriObj.AbsoluteUri)
+                if (string.Equals(targetUriObj.AbsoluteUri, currentUriObj.AbsoluteUri, StringComparison.OrdinalIgnoreCase))
                 {
                     allowed = true;
                 }
@@ -1324,7 +1399,7 @@ public partial class MainWindow
         }
         catch
         {
-            allowed = (uri == _currentWebViewUri);
+            allowed = string.Equals(uri, _currentWebViewUri, StringComparison.OrdinalIgnoreCase);
         }
 
         PerfLog.Write($"[WebViewPreview] NavigationStarting uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri ?? ""}\" allowed={allowed} generation={_previewGeneration}");

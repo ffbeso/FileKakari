@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32;
 
 namespace FileKakari;
@@ -42,6 +44,12 @@ public static class ShellPreviewHandlerRegistry
         }
 
         LogDiag($"TryGetPreviewHandlerClsid starting lookup for extension '{extension}' (file: '{filePath}')");
+
+        if (TryGetPreviewHandlerFromAssociationApi(extension, out registration))
+        {
+            LogDiag($"Success: Found CLSID {registration.Clsid} using AssocQueryString for extension '{extension}'");
+            return true;
+        }
 
         // Scan Registry64 and Registry32 explicitly.
         var views = new[] { RegistryView.Registry64, RegistryView.Registry32 };
@@ -163,6 +171,60 @@ public static class ShellPreviewHandlerRegistry
             registryPath,
             sourceKind,
             description);
+    }
+
+    private static bool TryGetPreviewHandlerFromAssociationApi(string extension, out ShellPreviewHandlerRegistration registration)
+    {
+        registration = ShellPreviewHandlerRegistration.Empty;
+        var buffer = new StringBuilder(128);
+        var length = buffer.Capacity;
+        var hr = AssocQueryString(
+            AssocF.None,
+            AssocStr.ShellExtension,
+            extension,
+            PreviewHandlerGuid,
+            buffer,
+            ref length);
+
+        if (hr == HResultFromWin32InsufficientBuffer && length > buffer.Capacity)
+        {
+            buffer = new StringBuilder(length);
+            hr = AssocQueryString(
+                AssocF.None,
+                AssocStr.ShellExtension,
+                extension,
+                PreviewHandlerGuid,
+                buffer,
+                ref length);
+        }
+
+        LogDiag($"AssocQueryString: ext=\"{extension}\" extra=\"{PreviewHandlerGuid}\" HRESULT=0x{hr:X8} length={length} value=\"{buffer}\"");
+        if (hr != 0)
+        {
+            return false;
+        }
+
+        var value = buffer.ToString();
+        if (!Guid.TryParse(value, out var clsid))
+        {
+            LogDiag($"AssocQueryString returned value '{value}' but it failed to parse as GUID.");
+            return false;
+        }
+
+        var description = GetClsidDescription(clsid, RegistryView.Registry64)
+            ?? GetClsidDescription(clsid, RegistryView.Registry32);
+        registration = new ShellPreviewHandlerRegistration(
+            clsid,
+            extension,
+            null,
+            null,
+            null,
+            RegistryHive.ClassesRoot,
+            RegistryView.Default,
+            $"AssocQueryString:{extension}:{PreviewHandlerGuid}",
+            "assoc-query",
+            description);
+        return true;
     }
 
     private static string? GetProgIdFromBase(RegistryKey baseKey, string extensionPath, RegistryHive hive, RegistryView view)
@@ -342,6 +404,28 @@ public static class ShellPreviewHandlerRegistry
         }
         return false;
     }
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int AssocQueryString(
+        AssocF flags,
+        AssocStr str,
+        string pszAssoc,
+        string? pszExtra,
+        StringBuilder pszOut,
+        ref int pcchOut);
+
+    [Flags]
+    private enum AssocF
+    {
+        None = 0
+    }
+
+    private enum AssocStr
+    {
+        ShellExtension = 16
+    }
+
+    private const int HResultFromWin32InsufficientBuffer = unchecked((int)0x8007007A);
 }
 
 public sealed record ShellPreviewHandlerRegistration(

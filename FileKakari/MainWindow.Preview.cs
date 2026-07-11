@@ -624,7 +624,10 @@ public partial class MainWindow
             try
             {
                 PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell: Instantiating ShellPreviewHost...");
-                shellHost = new ShellPreviewHost(path, clsid);
+                var initializationPreference = attempt == 1
+                    ? ShellPreviewInitializationPreference.Default
+                    : ShellPreviewInitializationPreference.FileFirst;
+                shellHost = new ShellPreviewHost(path, clsid, initializationPreference);
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;

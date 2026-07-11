@@ -8,10 +8,17 @@ using System.Windows.Interop;
 
 namespace FileKakari;
 
+public enum ShellPreviewInitializationPreference
+{
+    Default,
+    FileFirst
+}
+
 public sealed class ShellPreviewHost : HwndHost, IDisposable
 {
     private readonly string _filePath;
     private readonly Guid _clsid;
+    private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
     private readonly bool _isMarkdownPreview;
     private IPreviewHandler? _previewHandler;
@@ -23,6 +30,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private bool _isDoPreviewCalled;
     private bool _pendingDoPreviewUntilNonZeroSize;
     private bool _isMarkdownZoomScheduled;
+    private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -34,15 +42,19 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         PerfLog.Write($"[ShellPreviewHost] {message}");
     }
 
-    public ShellPreviewHost(string filePath, Guid clsid)
+    public ShellPreviewHost(
+        string filePath,
+        Guid clsid,
+        ShellPreviewInitializationPreference initializationPreference = ShellPreviewInitializationPreference.Default)
     {
         _filePath = filePath;
         _clsid = clsid;
+        _initializationPreference = initializationPreference;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
-        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}'");
+        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}'");
 
         try
         {
@@ -112,8 +124,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             }
 
             bool initialized = false;
+            var preferFileInitialization = _initializationPreference == ShellPreviewInitializationPreference.FileFirst
+                || _clsid == WindowsTxtPreviewerClsid;
 
-            if (_previewHandler is IInitializeWithStream streamInit)
+            if (preferFileInitialization && _previewHandler is IInitializeWithFile preferredFileInit)
+            {
+                initialized = TryInitializeWithFile(preferredFileInit);
+            }
+
+            if (!initialized && _previewHandler is IInitializeWithStream streamInit)
             {
                 LogDiag("Query IInitializeWithStream success. Opening stream...");
                 try
@@ -154,20 +173,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
             }
 
-            if (!initialized && _previewHandler is IInitializeWithFile fileInit)
+            if (!initialized && !preferFileInitialization && _previewHandler is IInitializeWithFile fileInit)
             {
-                LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
-                int hr = fileInit.Initialize(_filePath, 0);
-                LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
-                if (hr == 0)
-                {
-                    initialized = true;
-                    LogDiag("[ShellPreviewHost] Initialization selected method=File");
-                }
-                else
-                {
-                    LogDiag("[ShellPreviewHost] InitializeWithFile failed; trying item initializer.");
-                }
+                initialized = TryInitializeWithFile(fileInit);
+            }
+
+            if (!initialized && preferFileInitialization && _previewHandler is IInitializeWithFile fallbackFileInit)
+            {
+                LogDiag("[ShellPreviewHost] Retrying file initializer after stream attempt for Windows TXT Previewer.");
+                initialized = TryInitializeWithFile(fallbackFileInit);
             }
 
             if (!initialized && _previewHandler is IInitializeWithItem itemInit)
@@ -447,6 +461,21 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
             }
         }
+    }
+
+    private bool TryInitializeWithFile(IInitializeWithFile fileInit)
+    {
+        LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
+        int hr = fileInit.Initialize(_filePath, 0);
+        LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
+        if (hr == 0)
+        {
+            LogDiag("[ShellPreviewHost] Initialization selected method=File");
+            return true;
+        }
+
+        LogDiag("[ShellPreviewHost] InitializeWithFile failed; trying next initializer.");
+        return false;
     }
 
     private void ScheduleMarkdownDefaultZoom()

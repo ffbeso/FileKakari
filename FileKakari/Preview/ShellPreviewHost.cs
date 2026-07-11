@@ -43,7 +43,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             LogDiag("COM Type resolution success.");
 
             var instance = Activator.CreateInstance(comType);
-            LogDiag($"Activator.CreateInstance success. Instance type: {instance?.GetType().FullName ?? "null"}");
+            if (instance is null)
+            {
+                throw new InvalidOperationException("Failed to create COM instance");
+            }
+            LogDiag($"Activator.CreateInstance success. Instance type: {instance.GetType().FullName}");
 
             _previewHandler = instance as IPreviewHandler;
             if (_previewHandler is null)
@@ -51,6 +55,50 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 throw new InvalidOperationException("Instance does not implement IPreviewHandler");
             }
             LogDiag("Query IPreviewHandler success.");
+
+            // Run QueryInterface audit for diagnostics
+            IntPtr pUnk = IntPtr.Zero;
+            try
+            {
+                pUnk = Marshal.GetIUnknownForObject(instance);
+                if (pUnk != IntPtr.Zero)
+                {
+                    var iidFile = new Guid("B7D14566-0509-4CCE-A71F-0A554233BD9B");
+                    int hrFile = Marshal.QueryInterface(pUnk, in iidFile, out IntPtr ppvFile);
+                    LogDiag($"QueryInterface IInitializeWithFile IID={iidFile:B} HRESULT=0x{hrFile:X8}");
+                    if (hrFile == 0 && ppvFile != IntPtr.Zero)
+                    {
+                        Marshal.Release(ppvFile);
+                    }
+
+                    var iidStream = new Guid("B824B643-2222-4A0E-AC22-D49149F10062");
+                    int hrStream = Marshal.QueryInterface(pUnk, in iidStream, out IntPtr ppvStream);
+                    LogDiag($"QueryInterface IInitializeWithStream IID={iidStream:B} HRESULT=0x{hrStream:X8}");
+                    if (hrStream == 0 && ppvStream != IntPtr.Zero)
+                    {
+                        Marshal.Release(ppvStream);
+                    }
+
+                    var iidItem = new Guid("7F73BE3F-FB79-493C-A6C7-7EE14E245841");
+                    int hrItem = Marshal.QueryInterface(pUnk, in iidItem, out IntPtr ppvItem);
+                    LogDiag($"QueryInterface IInitializeWithItem IID={iidItem:B} HRESULT=0x{hrItem:X8}");
+                    if (hrItem == 0 && ppvItem != IntPtr.Zero)
+                    {
+                        Marshal.Release(ppvItem);
+                    }
+                }
+            }
+            catch (Exception qie)
+            {
+                LogDiag($"QueryInterface diagnostics exception: {qie.Message}");
+            }
+            finally
+            {
+                if (pUnk != IntPtr.Zero)
+                {
+                    Marshal.Release(pUnk);
+                }
+            }
 
             if (_previewHandler is IInitializeWithFile fileInit)
             {
@@ -405,7 +453,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     [ComImport]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    [Guid("b773d5a1-d859-11d4-850d-00902717b6bd")]
+    [Guid("B7D14566-0509-4CCE-A71F-0A554233BD9B")]
     public interface IInitializeWithFile
     {
         void Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);

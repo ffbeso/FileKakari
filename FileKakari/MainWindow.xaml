@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:FileKakari"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
         Title="FileKakari" Height="720" Width="1080"
         MinHeight="420" MinWidth="720">
@@ -1615,6 +1616,9 @@
                                 Margin="8"
                                 ClipToBounds="True"
                                 Visibility="Collapsed" />
+                        <wv2:WebView2 x:Name="PreviewWebView"
+                                      Margin="8"
+                                      Visibility="Collapsed" />
                         <TextBox x:Name="PreviewTextBox"
                                  Margin="8"
                                  Padding="8"

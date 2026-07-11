@@ -15,6 +15,7 @@ public partial class MainWindow
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
         new BuiltInVideoPreviewProvider(),
+        new WebViewPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
     private CancellationTokenSource? _previewCancellation;
@@ -24,6 +25,7 @@ public partial class MainWindow
     private bool _isPreviewMediaPlaying;
     private GridLength _previewPaneHeight = new(240);
     private GridLength _previewPaneWidth = new(320);
+    private bool _isWebViewInitialized;
 
     private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
 
@@ -371,6 +373,11 @@ public partial class MainWindow
                 ReplacePreviewWithShell(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo);
                 break;
 
+            case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
+                PerfLog.Write($"[MainWindow.Preview] Received FilePreviewKind.WebView for path='{result.FileInfo.FullPath}'");
+                ReplacePreviewWithWebView(result.FileInfo.FullPath, result.FileInfo, generation);
+                break;
+
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Video && result.FileInfo is not null:
                 ReplacePreviewWithVideo(result.FileInfo.FullPath, generation);
                 break;
@@ -659,6 +666,7 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         ClearShellPreviewHost();
+        ClearWebView();
     }
 
     private void ClearPreviewContent()
@@ -675,6 +683,7 @@ public partial class MainWindow
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
         ClearShellPreviewHost();
+        ClearWebView();
     }
 
     private void ShowPreviewMessage(string message)
@@ -711,5 +720,95 @@ public partial class MainWindow
         }
 
         return unit == 0 ? $"{bytes:N0} B" : $"{value:N1} {units[unit]}";
+    }
+
+    private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation)
+    {
+        PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithWebView: path='{path}'");
+        ClearPreviewContent();
+
+        try
+        {
+            await InitializeWebViewAsync();
+            if (generation != _previewGeneration)
+            {
+                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithWebView: Selection changed during WebView initialization. Aborting.");
+                return;
+            }
+
+            if (PreviewWebView.CoreWebView2 is null)
+            {
+                throw new InvalidOperationException("CoreWebView2 is null after initialization.");
+            }
+
+            var absoluteUri = new Uri(path).AbsoluteUri;
+            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithWebView: Navigating WebView to '{absoluteUri}'");
+            PreviewWebView.CoreWebView2.Navigate(absoluteUri);
+            PreviewWebView.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            PerfLog.Write($"[MainWindow.Preview] WebView2 initialization/navigation failed: Type={ex.GetType().FullName}, Msg='{ex.Message}'. Falling back to Shell/Unsupported.");
+
+            ClearWebView();
+
+            if (generation != _previewGeneration)
+            {
+                return;
+            }
+
+            if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
+            {
+                PerfLog.Write($"[MainWindow.Preview] WebView fallback: Found Shell Preview Handler CLSID={clsid:B}. Routing to Shell.");
+                ReplacePreviewWithShell(path, clsid, fileInfo);
+            }
+            else
+            {
+                PerfLog.Write("[MainWindow.Preview] WebView fallback: No Shell Preview Handler. Showing unsupported card.");
+                ReplacePreviewWithUnsupportedInfo(fileInfo);
+            }
+        }
+    }
+
+    private async System.Threading.Tasks.Task InitializeWebViewAsync()
+    {
+        if (_isWebViewInitialized)
+        {
+            return;
+        }
+
+        PerfLog.Write("[MainWindow.Preview] InitializeWebViewAsync: Starting CoreWebView2 initialization...");
+
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var userDataFolder = Path.Combine(localAppData, "FileKakari", "WebView2");
+
+        PerfLog.Write($"[MainWindow.Preview] WebView2 UserDataFolder: '{userDataFolder}'");
+
+        var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null, userDataFolder);
+        await PreviewWebView.EnsureCoreWebView2Async(env);
+
+        PreviewWebView.CoreWebView2.Settings.IsWebMessageEnabled = false;
+        PreviewWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+        PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+
+        _isWebViewInitialized = true;
+        PerfLog.Write("[MainWindow.Preview] InitializeWebViewAsync: CoreWebView2 initialization completed.");
+    }
+
+    private void ClearWebView()
+    {
+        if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
+        {
+            try
+            {
+                PerfLog.Write("[MainWindow.Preview] ClearWebView: Navigating WebView to about:blank to release file lock.");
+                PreviewWebView.CoreWebView2.Navigate("about:blank");
+            }
+            catch (Exception ex)
+            {
+                PerfLog.Write($"[MainWindow.Preview] ClearWebView navigate exception: {ex.Message}");
+            }
+        }
+        PreviewWebView.Visibility = Visibility.Collapsed;
     }
 }

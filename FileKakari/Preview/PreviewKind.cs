@@ -6,5 +6,6 @@ public enum FilePreviewKind
     Text,
     Image,
     Video,
-    Shell
+    Shell,
+    WebView
 }

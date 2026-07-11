@@ -94,6 +94,21 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
                     PerfLog.Write($"[WebViewPreviewProvider] Accepted: svg size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxSvgPreviewBytes}");
                 }
             }
+            else if (string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".webm", StringComparison.OrdinalIgnoreCase))
+            {
+                PerfLog.Write($"[WebViewPreviewProvider] Accepted: media path=\"{request.FilePath}\" ext=\"{ext}\"");
+            }
+            else if (string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".m4a", StringComparison.OrdinalIgnoreCase))
+            {
+                PerfLog.Write($"[WebViewPreviewProvider] Accepted: audio path=\"{request.FilePath}\" ext=\"{ext}\"");
+            }
+            else if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                PerfLog.Write($"[WebViewPreviewProvider] Accepted: pdf path=\"{request.FilePath}\"");
+            }
 
             var result = new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.WebView, FileInfo: fileInfoResult);
             return Task.FromResult(result);

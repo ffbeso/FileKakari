@@ -968,18 +968,24 @@ public partial class MainWindow
             return;
         }
 
-        if (e.IsSuccess)
+        var ext = Path.GetExtension(currentUri);
+        bool isMediaOrAudio = string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(ext, ".webm", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(ext, ".m4a", StringComparison.OrdinalIgnoreCase);
+
+        if (e.IsSuccess || isMediaOrAudio)
         {
-            PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success=True generation={completedGen}");
+            PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success={e.IsSuccess} (isMediaOrAudio={isMediaOrAudio}) generation={completedGen}");
             PerfLog.Write($"[WebViewPreview] Show WebView after navigation generation={completedGen}");
-            PerfLog.Write($"[WebViewPreview] WebView visibility changed Visible reason=\"Navigation completed successfully\" generation={completedGen}");
+            PerfLog.Write($"[WebViewPreview] WebView visibility changed Visible reason=\"Navigation completed (success={e.IsSuccess})\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
         }
         else
         {
             PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success=False webErrorStatus={e.WebErrorStatus} generation={completedGen}");
 
-            var ext = Path.GetExtension(currentUri);
             bool isMhtml = string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
                            string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase);
 

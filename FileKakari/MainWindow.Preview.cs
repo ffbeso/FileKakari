@@ -1285,12 +1285,14 @@ public partial class MainWindow
 
                 try
                 {
-                    var tempFileName = $"FileKakari_media_preview_{Environment.ProcessId}_{generation}_{Guid.NewGuid():N}.html";
-                    var tempHtmlPath = Path.Combine(Path.GetTempPath(), tempFileName);
-                    await File.WriteAllTextAsync(tempHtmlPath, document.Html, System.Text.Encoding.UTF8);
+                    var tempHtmlPath = PreviewTemporaryFileManager.CreateMediaPreviewHtmlPath(generation);
+                    await PreviewTemporaryFileManager.WriteMediaPreviewHtmlAsync(tempHtmlPath, document.Html);
                     if (generation != _previewGeneration)
                     {
-                        TryDeleteTempMediaHtml(tempHtmlPath, generation, "generation-mismatch-after-write");
+                        PreviewTemporaryFileManager.DeleteMediaPreviewHtml(
+                            tempHtmlPath,
+                            generation,
+                            "generation-mismatch-after-write");
                         return;
                     }
 
@@ -1502,7 +1504,7 @@ public partial class MainWindow
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Visible reason=\"Navigation completed\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
 
-            if (e.IsSuccess && currentUri.Contains("FileKakari_media_preview", StringComparison.OrdinalIgnoreCase))
+            if (e.IsSuccess && PreviewTemporaryFileManager.IsMediaPreviewHtmlUri(currentUri))
             {
                 _ = LogMediaPlaybackStateAsync(completedGen);
             }
@@ -1704,15 +1706,6 @@ public partial class MainWindow
         _currentTempMediaHtmlPath = null;
         _currentTempMediaHtmlGeneration = -1;
 
-        TryDeleteTempMediaHtml(path, ownerGeneration, "owner-cleared");
-    }
-
-    private static void TryDeleteTempMediaHtml(string path, int generation, string reason)
-    {
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-            PreviewDiagnostics.Verbose("PreviewMedia", $"Temporary media HTML deleted path=\"{path}\" generation={generation} reason=\"{reason}\"");
-        }
+        PreviewTemporaryFileManager.DeleteMediaPreviewHtml(path, ownerGeneration, "owner-cleared");
     }
 }

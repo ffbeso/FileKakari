@@ -122,18 +122,7 @@ public partial class App : Application
     {
         try
         {
-            var tempDir = Path.GetTempPath();
-            var pattern = $"FileKakari_media_preview_{Environment.ProcessId}_*.html";
-            foreach (var filePath in Directory.EnumerateFiles(tempDir, pattern))
-            {
-                try
-                {
-                    File.Delete(filePath);
-                }
-                catch
-                {
-                }
-            }
+            PreviewTemporaryFileManager.CleanupCurrentProcessMediaPreviewFiles();
         }
         catch
         {

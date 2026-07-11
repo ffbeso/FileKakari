@@ -74,6 +74,7 @@ sealed class WorkspaceSessionFactory
             paneGroup.Tabs,
             definition.SelectedTabId,
             definition.SelectedTabIndex);
+        paneGroup.ResolveTabHeaders();
 
         return paneGroup;
     }

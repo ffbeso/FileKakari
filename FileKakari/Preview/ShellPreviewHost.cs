@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Windows.Interop;
 
 namespace FileKakari;
@@ -9,6 +11,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private readonly string _filePath;
     private readonly Guid _clsid;
     private IPreviewHandler? _previewHandler;
+    private FileStream? _fileStream;
+    private ManagedIStream? _managedIStream;
     private bool _isDisposed;
 
     private const int WS_CHILD = 0x40000000;
@@ -53,9 +57,25 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 fileInit.Initialize(_filePath, 0);
                 LogDiag("IInitializeWithFile.Initialize success.");
             }
+            else if (_previewHandler is IInitializeWithStream streamInit)
+            {
+                LogDiag("Query IInitializeWithFile failed/not supported. Query IInitializeWithStream success. Opening stream...");
+
+                _fileStream = new FileStream(
+                    _filePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete);
+
+                _managedIStream = new ManagedIStream(_fileStream);
+                LogDiag($"Stream opened path='{_filePath}' length={_fileStream.Length}. Invoking Initialize...");
+
+                streamInit.Initialize(_managedIStream, 0);
+                LogDiag("IInitializeWithStream.Initialize success.");
+            }
             else
             {
-                throw new NotSupportedException("Preview Handler does not support IInitializeWithFile");
+                throw new NotSupportedException("Preview Handler does not support IInitializeWithFile or IInitializeWithStream");
             }
         }
         catch (Exception ex)
@@ -177,6 +197,24 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 LogDiag($"ReleaseComObject done. Remaining RefCount={refCount}");
             }
         }
+
+        if (_fileStream is not null)
+        {
+            try
+            {
+                _fileStream.Dispose();
+                LogDiag("Stream disposed");
+            }
+            catch (Exception ex)
+            {
+                LogDiag($"Stream dispose exception: {ex.Message}");
+            }
+            finally
+            {
+                _fileStream = null;
+                _managedIStream = null;
+            }
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -191,6 +229,90 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             _isDisposed = true;
         }
         base.Dispose(disposing);
+    }
+
+    // Custom Managed IStream implementation wrapping FileStream
+    private sealed class ManagedIStream : IStream
+    {
+        private readonly FileStream _fileStream;
+
+        public ManagedIStream(FileStream fileStream)
+        {
+            _fileStream = fileStream ?? throw new ArgumentNullException(nameof(fileStream));
+        }
+
+        public void Read(byte[] pv, int cb, IntPtr pcbRead)
+        {
+            int bytesRead = _fileStream.Read(pv, 0, cb);
+            if (pcbRead != IntPtr.Zero)
+            {
+                Marshal.WriteInt32(pcbRead, bytesRead);
+            }
+        }
+
+        public void Write(byte[] pv, int cb, IntPtr pcbWritten)
+        {
+            _fileStream.Write(pv, 0, cb);
+            if (pcbWritten != IntPtr.Zero)
+            {
+                Marshal.WriteInt32(pcbWritten, cb);
+            }
+        }
+
+        public void Seek(long dlibMove, int dwOrigin, IntPtr plibNewPosition)
+        {
+            var origin = (SeekOrigin)dwOrigin;
+            long newPos = _fileStream.Seek(dlibMove, origin);
+            if (plibNewPosition != IntPtr.Zero)
+            {
+                Marshal.WriteInt64(plibNewPosition, newPos);
+            }
+        }
+
+        public void SetSize(long libNewSize)
+        {
+            _fileStream.SetLength(libNewSize);
+        }
+
+        public void CopyTo(IStream pstm, long cb, IntPtr pcbRead, IntPtr pcbWritten)
+        {
+            throw new COMException("CopyTo is not implemented.", unchecked((int)0x80004001)); // E_NOTIMPL
+        }
+
+        public void Commit(int grfCommitFlags)
+        {
+            _fileStream.Flush();
+        }
+
+        public void Revert()
+        {
+            throw new COMException("Revert is not implemented.", unchecked((int)0x80004001)); // E_NOTIMPL
+        }
+
+        public void LockRegion(long libOffset, long cb, int dwLockType)
+        {
+            throw new COMException("LockRegion is not implemented.", unchecked((int)0x80004001)); // E_NOTIMPL
+        }
+
+        public void UnlockRegion(long libOffset, long cb, int dwLockType)
+        {
+            throw new COMException("UnlockRegion is not implemented.", unchecked((int)0x80004001)); // E_NOTIMPL
+        }
+
+        public void Stat(out STATSTG pstatstg, int grfStatFlag)
+        {
+            pstatstg = new STATSTG
+            {
+                type = 2, // STGTY_STREAM
+                cbSize = _fileStream.Length,
+                grfMode = 0 // STGM_READ
+            };
+        }
+
+        public void Clone(out IStream ppstm)
+        {
+            throw new COMException("Clone is not implemented.", unchecked((int)0x80004001)); // E_NOTIMPL
+        }
     }
 
     // Win32 imports and structs
@@ -250,6 +372,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     public interface IInitializeWithFile
     {
         void Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("b824b643-2222-4a0e-ac22-d49149f10062")]
+    public interface IInitializeWithStream
+    {
+        void Initialize(IStream stream, uint grfMode);
     }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

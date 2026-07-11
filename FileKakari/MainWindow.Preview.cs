@@ -406,6 +406,13 @@ public partial class MainWindow
                 ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
                 break;
 
+            case FilePreviewStatus.TooLarge when result.FileInfo is not null:
+                ReplacePreviewWithUnsupportedInfo(
+                    result.FileInfo,
+                    _text.Format("PreviewTooLarge", FormatPreviewSize(result.SizeLimit ?? 0)),
+                    "");
+                break;
+
             case FilePreviewStatus.TooLarge:
                 ReplacePreviewWithMessage(_text.Format("PreviewTooLarge", FormatPreviewSize(result.SizeLimit ?? 0)));
                 break;

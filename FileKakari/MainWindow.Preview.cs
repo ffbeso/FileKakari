@@ -18,6 +18,12 @@ public partial class MainWindow
         new BuiltInVideoPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
+    private static readonly System.Collections.Generic.HashSet<string> OfficeExtensions = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm",
+        ".xls", ".xlsx", ".xlsm", ".xlt", ".xltx", ".xltm",
+        ".ppt", ".pptx", ".pptm", ".pot", ".potx", ".potm", ".pps", ".ppsx", ".ppsm"
+    };
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
     private int _previewMediaGeneration = -1;
@@ -495,12 +501,7 @@ public partial class MainWindow
             ClearShellPreviewHost();
 
             var ext = Path.GetExtension(path);
-            var isOffice = string.Equals(ext, ".doc", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".docx", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".xls", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".xlsx", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".ppt", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(ext, ".pptx", StringComparison.OrdinalIgnoreCase);
+            var isOffice = OfficeExtensions.Contains(ext ?? "");
 
             if (isOffice)
             {

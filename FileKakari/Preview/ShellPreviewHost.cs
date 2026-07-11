@@ -13,6 +13,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
+    private IShellItem? _shellItem;
     private bool _isDisposed;
 
     private const int WS_CHILD = 0x40000000;
@@ -73,9 +74,27 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 streamInit.Initialize(_managedIStream, 0);
                 LogDiag("IInitializeWithStream.Initialize success.");
             }
+            else if (_previewHandler is IInitializeWithItem itemInit)
+            {
+                LogDiag("Query IInitializeWithStream failed/not supported. Query IInitializeWithItem success. Creating ShellItem...");
+
+                var shellItemGuid = new Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+                LogDiag($"SHCreateItemFromParsingName start path='{_filePath}'");
+                int hr = SHCreateItemFromParsingName(_filePath, IntPtr.Zero, ref shellItemGuid, out _shellItem);
+
+                if (hr < 0 || _shellItem is null)
+                {
+                    LogDiag($"SHCreateItemFromParsingName fail HRESULT=0x{hr:X8}");
+                    throw new COMException("SHCreateItemFromParsingName failed", hr);
+                }
+                LogDiag($"SHCreateItemFromParsingName success HRESULT=0x{hr:X8}. Invoking Initialize...");
+
+                itemInit.Initialize(_shellItem, 0);
+                LogDiag("IInitializeWithItem.Initialize success.");
+            }
             else
             {
-                throw new NotSupportedException("Preview Handler does not support IInitializeWithFile or IInitializeWithStream");
+                throw new NotSupportedException("Preview Handler does not support IInitializeWithFile, IInitializeWithStream, or IInitializeWithItem");
             }
         }
         catch (Exception ex)
@@ -195,6 +214,24 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 var refCount = Marshal.ReleaseComObject(_previewHandler);
                 _previewHandler = null;
                 LogDiag($"ReleaseComObject done. Remaining RefCount={refCount}");
+            }
+        }
+
+        if (_shellItem is not null)
+        {
+            LogDiag("Release IShellItem starting...");
+            try
+            {
+                var refCount = Marshal.ReleaseComObject(_shellItem);
+                LogDiag($"Release IShellItem success. Remaining RefCount={refCount}");
+            }
+            catch (Exception ex)
+            {
+                LogDiag($"Release IShellItem fail: {ex.Message}");
+            }
+            finally
+            {
+                _shellItem = null;
             }
         }
 
@@ -382,6 +419,26 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         void Initialize(IStream stream, uint grfMode);
     }
 
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
+    public interface IShellItem
+    {
+        void BindToHandler(IntPtr pbc, [MarshalAs(UnmanagedType.LPStruct)] Guid bhid, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IntPtr ppv);
+        void GetParent(out IShellItem ppsi);
+        void GetDisplayName(uint sigdnName, out IntPtr ppszName);
+        void GetAttributes(uint sfgaoMask, out uint psfgaoAttribs);
+        void Compare(IShellItem psi, uint hint, out int piOrder);
+    }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("7F73BE3F-FB79-493C-A6C7-7EE14E245841")]
+    public interface IInitializeWithItem
+    {
+        void Initialize([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint grfMode);
+    }
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr CreateWindowEx(
         int dwExStyle,
@@ -400,4 +457,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyWindow(IntPtr hwnd);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
+    private static extern int SHCreateItemFromParsingName(
+        string pszPath,
+        IntPtr pbc,
+        ref Guid riid,
+        out IShellItem ppv);
 }

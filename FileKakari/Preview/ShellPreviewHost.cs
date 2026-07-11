@@ -24,9 +24,6 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
     private readonly bool _isMarkdownPreview;
-    private readonly bool _isMonacoDedicated;
-    private MonacoPreviewThreadHost? _monacoThreadHost;
-    public event EventHandler? MonacoDedicatedActivationFailed;
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
@@ -38,7 +35,6 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private bool _isMarkdownZoomScheduled;
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
     private static readonly Guid MonacoPreviewHandlerClsid = new("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
-    private const uint CLSCTX_INPROC_SERVER = 1;
     private const uint CLSCTX_LOCAL_SERVER = 4;
     private static readonly Guid IID_IUnknown = new("00000000-0000-0000-C000-000000000046");
 
@@ -52,6 +48,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         PerfLog.Write($"[ShellPreviewHost] {message}");
     }
 
+    private static bool IsPowerToysMonaco(Guid clsid)
+    {
+        return clsid == MonacoPreviewHandlerClsid;
+    }
+
     public ShellPreviewHost(
         string filePath,
         Guid clsid,
@@ -61,24 +62,17 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         _clsid = clsid;
         _initializationPreference = initializationPreference;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
-        _isDeferredHandler = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
+        _isDeferredHandler = _clsid == MonacoPreviewHandlerClsid ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
-        _isMonacoDedicated = _clsid == MonacoPreviewHandlerClsid;
 
-        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}', dedicated={_isMonacoDedicated}");
-
-        if (_isMonacoDedicated)
-        {
-            LogDiag("Dedicated thread activation selected for Monaco Preview Handler.");
-            return;
-        }
+        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}'");
 
         try
         {
             object? instance = null;
             var description = GetClsidDescription(_clsid);
 
-            if (_clsid == MonacoPreviewHandlerClsid)
+            if (IsPowerToysMonaco(_clsid))
             {
                 var activationContext = "LocalServer";
                 LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"PowerToysMonaco\" activationContext=\"{activationContext}\"");
@@ -87,7 +81,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 try
                 {
                     int hr = CoCreateInstance(in _clsid, IntPtr.Zero, CLSCTX_LOCAL_SERVER, in IID_IUnknown, out pUnkMonaco);
-                    LogDiag($"CoCreateInstance HRESULT=0x{hr:X8}");
+                    LogDiag($"CoCreateInstance activationContext=\"LocalServer\" HRESULT=0x{hr:X8}");
                     if (hr < 0)
                     {
                         Marshal.ThrowExceptionForHR(hr);
@@ -96,7 +90,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    LogDiag($"CoCreateInstance failed for Monaco with CLSCTX_LOCAL_SERVER. HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\"");
+                    LogDiag($"CoCreateInstance failed for Monaco with CLSCTX_LOCAL_SERVER. HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" fallbackReason=\"monaco-local-server-activation-failed\"");
                     throw new NotSupportedException($"Failed to activate Monaco Preview Handler out-of-process (CLSCTX_LOCAL_SERVER) HRESULT=0x{ex.HResult:X8}", ex);
                 }
                 finally
@@ -324,66 +318,12 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         var pixelWidth = ToCoveringPixelSize(ActualWidth, scaleX);
         var pixelHeight = ToCoveringPixelSize(ActualHeight, scaleY);
 
-        if (_isMonacoDedicated)
-        {
-            LogDiag($"BuildWindowCore (DedicatedThread) start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, size={pixelWidth}x{pixelHeight}");
-
-            var threadHost = new MonacoPreviewThreadHost();
-            if (!threadHost.Start())
-            {
-                threadHost.Dispose();
-                throw new NotSupportedException("Failed to start dedicated STA thread for Monaco Preview Handler.");
-            }
-
-            _monacoThreadHost = threadHost;
-            _childHwnd = threadHost.HostHwnd;
-
-            SetParent(_childHwnd, hwndParent.Handle);
-            const int styleVal = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-            SetWindowLongPtr(_childHwnd, GWL_STYLE, new IntPtr(styleVal));
-            ShowWindow(_childHwnd, SW_SHOW);
-
-            _monacoThreadHost.Resize(pixelWidth, pixelHeight);
-            _monacoThreadHost.Open(_filePath);
-
-            LogDiag($"BuildWindowCore (DedicatedThread) returns HWND=0x{_childHwnd.ToInt64():X}");
-
-            var hostVisual = this;
-            _ = Task.Run(async () =>
-            {
-                var limitTime = DateTime.Now.AddSeconds(1.5);
-                while (DateTime.Now < limitTime)
-                {
-                    if (threadHost.IsActivated()) break;
-                    await Task.Delay(100);
-                }
-
-                if (!threadHost.IsActivated())
-                {
-                    LogDiag("Monaco dedicated thread activation failed or timed out. Triggering fallback event.");
-                    _ = hostVisual.Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        hostVisual.MonacoDedicatedActivationFailed?.Invoke(hostVisual, EventArgs.Empty);
-                    }));
-                }
-                else
-                {
-                    await Task.Delay(100);
-                    LogChildWindowState("dedicated-T=100ms");
-                    await Task.Delay(400);
-                    LogChildWindowState("dedicated-T=500ms");
-                }
-            });
-
-            return new HandleRef(this, _childHwnd);
-        }
-
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
         LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
 
         if (_isDeferredHandler)
         {
-            string profile = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ? "PowerToysMonaco" : "PowerToysMarkdown";
+            string profile = IsPowerToysMonaco(_clsid) ? "PowerToysMonaco" : "PowerToysMarkdown";
             LogDiag($"Handler profile: {profile} clsid=\"{_clsid:B}\"");
         }
 
@@ -423,7 +363,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         {
             if (_isDeferredHandler && pixelWidth == 0 && pixelHeight == 0)
             {
-                string profile = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ? "PowerToys Monaco" : "PowerToys Markdown";
+                string profile = IsPowerToysMonaco(_clsid) ? "PowerToys Monaco" : "PowerToys Markdown";
                 LogDiag($"Deferring DoPreview until non-zero size for {profile}.");
                 _pendingDoPreviewUntilNonZeroSize = true;
             }
@@ -472,18 +412,6 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         LogDiag($"DestroyWindowCore start: HWND=0x{hwnd.Handle.ToInt64():X}");
 
-        if (_isMonacoDedicated)
-        {
-            LogDiag("DestroyWindowCore (DedicatedThread) triggering shutdown...");
-            if (_monacoThreadHost != null)
-            {
-                _monacoThreadHost.Dispose();
-                _monacoThreadHost = null;
-            }
-            _childHwnd = IntPtr.Zero;
-            return;
-        }
-
         DisposePreviewHandler();
         _childHwnd = IntPtr.Zero;
         if (hwnd.Handle != IntPtr.Zero)
@@ -515,17 +443,6 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
         var pixelWidth = ToCoveringPixelSize(width, scaleX);
         var pixelHeight = ToCoveringPixelSize(height, scaleY);
-
-        if (_isMonacoDedicated)
-        {
-            LogDiag($"ResizePreviewHost (DedicatedThread): size={pixelWidth}x{pixelHeight}");
-            if (_childHwnd != IntPtr.Zero && _monacoThreadHost != null)
-            {
-                MoveWindow(_childHwnd, 0, 0, pixelWidth, pixelHeight, true);
-                _monacoThreadHost.Resize(pixelWidth, pixelHeight);
-            }
-            return;
-        }
 
         LogDiag($"ResizePreviewHost: width={width} height={height} scale={scaleX}x{scaleY} -> pixels={pixelWidth}x{pixelHeight}");
 
@@ -727,16 +644,6 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     private void DisposePreviewHandler()
     {
-        if (_isMonacoDedicated)
-        {
-            if (_monacoThreadHost != null)
-            {
-                LogDiag("DisposePreviewHandler (DedicatedThread) disposing thread host...");
-                _monacoThreadHost.Dispose();
-                _monacoThreadHost = null;
-            }
-        }
-
         if (_previewHandler is not null)
         {
             LogDiag("DisposePreviewHandler starting...");

@@ -35,6 +35,7 @@ public partial class MainWindow
     private string? _currentWebViewUri;
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
+    private bool _hasRetriedCurrentMhtml;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -732,7 +733,7 @@ public partial class MainWindow
         ClearWebView();
     }
 
-    private void ClearPreviewContent()
+    private void ClearPreviewContent(bool keepWebView = false)
     {
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
@@ -746,7 +747,10 @@ public partial class MainWindow
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
         ClearShellPreviewHost();
-        ClearWebView();
+        if (!keepWebView)
+        {
+            ClearWebView();
+        }
     }
 
     private void ShowPreviewMessage(string message)
@@ -788,11 +792,12 @@ public partial class MainWindow
     private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation)
     {
         PerfLog.Write($"[WebViewPreview] Begin path=\"{path}\" generation={generation}");
-        ClearPreviewContent();
+        ClearPreviewContent(keepWebView: true);
 
         try
         {
             PerfLog.Write($"[WebViewPreview] InitializeWebViewAsync begin generation={generation}");
+            bool wasInitialized = _isWebViewInitialized;
             await InitializeWebViewAsync();
             PerfLog.Write($"[WebViewPreview] InitializeWebViewAsync completed generation={generation}");
 
@@ -809,7 +814,28 @@ public partial class MainWindow
 
             _webViewNavigationGeneration = generation;
             _currentWebViewFileInfo = fileInfo;
+            _hasRetriedCurrentMhtml = false;
+
+            bool justInitialized = !wasInitialized;
+            if (justInitialized)
+            {
+                var ext = Path.GetExtension(path);
+                if (string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase))
+                {
+                    PerfLog.Write($"[WebViewPreview] MHTML first-load candidate path=\"{path}\" generation={generation}");
+                    PerfLog.Write($"[WebViewPreview] Delaying navigation for MHTML after WebView2 initialization generation={generation}");
+                    await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+                    if (generation != _previewGeneration)
+                    {
+                        PerfLog.Write($"[WebViewPreview] Navigate skipped after delay reason=generation-mismatch current={_previewGeneration} requested={generation}");
+                        return;
+                    }
+                }
+            }
+
             PerfLog.Write($"[WebViewPreview] Hide WebView before navigation generation={generation}");
+            PerfLog.Write($"[WebViewPreview] WebView visibility changed Hidden reason=\"Hiding before navigation\" generation={generation}");
             PreviewWebView.Visibility = Visibility.Hidden;
 
             var absoluteUri = new Uri(path).AbsoluteUri;
@@ -884,14 +910,34 @@ public partial class MainWindow
             return;
         }
 
-        if (!string.IsNullOrEmpty(_currentWebViewUri) && uri == _currentWebViewUri)
+        bool allowed = false;
+        try
+        {
+            if (!string.IsNullOrEmpty(_currentWebViewUri))
+            {
+                var targetUriObj = new Uri(_currentWebViewUri);
+                var currentUriObj = new Uri(uri);
+                if (targetUriObj.AbsoluteUri == currentUriObj.AbsoluteUri)
+                {
+                    allowed = true;
+                }
+            }
+        }
+        catch
+        {
+            allowed = (uri == _currentWebViewUri);
+        }
+
+        PerfLog.Write($"[WebViewPreview] NavigationStarting uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri ?? ""}\" allowed={allowed} generation={_previewGeneration}");
+
+        if (allowed)
         {
             return;
         }
 
         // Block all document redirections, link clicks or page jumps
-        e.Cancel = true;
-        PerfLog.Write($"[WebViewPreview] Navigation blocked uri='{uri}'");
+        e.Cancel = e.Cancel || true;
+        PerfLog.Write($"[WebViewPreview] NavigationStarting blocked reason=\"Blocked external navigation or redirection\" uri=\"{uri}\"");
     }
 
     private void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
@@ -926,16 +972,33 @@ public partial class MainWindow
         {
             PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success=True generation={completedGen}");
             PerfLog.Write($"[WebViewPreview] Show WebView after navigation generation={completedGen}");
+            PerfLog.Write($"[WebViewPreview] WebView visibility changed Visible reason=\"Navigation completed successfully\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
         }
         else
         {
-            PerfLog.Write($"[WebViewPreview] Navigation failed uri=\"{currentUri}\" error={e.WebErrorStatus}");
-            PreviewWebView.Visibility = Visibility.Collapsed;
+            PerfLog.Write($"[WebViewPreview] NavigationCompleted uri=\"{currentUri}\" success=False webErrorStatus={e.WebErrorStatus} generation={completedGen}");
 
-            if (_currentWebViewFileInfo is not null)
+            var ext = Path.GetExtension(currentUri);
+            bool isMhtml = string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase);
+
+            if (isMhtml && !_hasRetriedCurrentMhtml && completedGen == _previewGeneration)
             {
-                ReplacePreviewWithUnsupportedInfo(_currentWebViewFileInfo);
+                _hasRetriedCurrentMhtml = true;
+                PerfLog.Write($"[WebViewPreview] MHTML navigation failed; retrying once uri=\"{currentUri}\" generation={completedGen}");
+                PreviewWebView.CoreWebView2.Navigate(currentUri);
+            }
+            else
+            {
+                PerfLog.Write($"[WebViewPreview] Navigation failed uri=\"{currentUri}\" error={e.WebErrorStatus}");
+                PerfLog.Write($"[WebViewPreview] WebView visibility changed Collapsed reason=\"Navigation failed error={e.WebErrorStatus}\" generation={completedGen}");
+                PreviewWebView.Visibility = Visibility.Collapsed;
+
+                if (_currentWebViewFileInfo is not null)
+                {
+                    ReplacePreviewWithUnsupportedInfo(_currentWebViewFileInfo);
+                }
             }
         }
     }
@@ -956,6 +1019,7 @@ public partial class MainWindow
                 PerfLog.Write($"[MainWindow.Preview] ClearWebView navigate exception: {ex.Message}");
             }
         }
+        PerfLog.Write($"[WebViewPreview] WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
         PreviewWebView.Visibility = Visibility.Collapsed;
     }
 

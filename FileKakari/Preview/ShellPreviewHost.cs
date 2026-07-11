@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Windows;
 using System.Windows.Interop;
 
 namespace FileKakari;
@@ -15,6 +16,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private ManagedIStream? _managedIStream;
     private IShellItem? _shellItem;
     private bool _isDisposed;
+    private IntPtr _childHwnd = IntPtr.Zero;
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -155,7 +157,19 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
     {
-        LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, size={ActualWidth}x{ActualHeight}");
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is not null)
+        {
+            scaleX = source.CompositionTarget.TransformToDevice.M11;
+            scaleY = source.CompositionTarget.TransformToDevice.M22;
+        }
+
+        var pixelWidth = Math.Max(0, (int)Math.Round(ActualWidth * scaleX));
+        var pixelHeight = Math.Max(0, (int)Math.Round(ActualHeight * scaleY));
+
+        LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
 
         var hwndChild = CreateWindowEx(
             0,
@@ -164,8 +178,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
             0,
             0,
-            (int)ActualWidth,
-            (int)ActualHeight,
+            pixelWidth,
+            pixelHeight,
             hwndParent.Handle,
             IntPtr.Zero,
             IntPtr.Zero,
@@ -178,12 +192,13 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             throw new System.ComponentModel.Win32Exception(err);
         }
         LogDiag($"CreateWindowEx success: child HWND=0x{hwndChild.ToInt64():X}");
+        _childHwnd = hwndChild;
 
         if (_previewHandler is not null)
         {
             try
             {
-                var rect = new RECT(0, 0, (int)ActualWidth, (int)ActualHeight);
+                var rect = new RECT(0, 0, pixelWidth, pixelHeight);
                 LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                 _previewHandler.SetWindow(hwndChild, ref rect);
                 LogDiag("IPreviewHandler.SetWindow success.");
@@ -199,6 +214,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 if (hwndChild != IntPtr.Zero)
                 {
                     DestroyWindow(hwndChild);
+                    _childHwnd = IntPtr.Zero;
                     hwndChild = IntPtr.Zero;
                 }
                 throw;
@@ -216,6 +232,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         LogDiag($"DestroyWindowCore start: HWND=0x{hwnd.Handle.ToInt64():X}");
         DisposePreviewHandler();
+        _childHwnd = IntPtr.Zero;
         if (hwnd.Handle != IntPtr.Zero)
         {
             var success = DestroyWindow(hwnd.Handle);
@@ -226,18 +243,45 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     protected override void OnRenderSizeChanged(System.Windows.SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        if (_previewHandler is not null && !_isDisposed)
+        if (!_isDisposed)
         {
-            var rect = new RECT(0, 0, (int)ActualWidth, (int)ActualHeight);
-            LogDiag($"OnRenderSizeChanged: New size={ActualWidth}x{ActualHeight}, invoking SetRect...");
+            ResizePreviewHost(ActualWidth, ActualHeight);
+        }
+    }
+
+    private void ResizePreviewHost(double width, double height)
+    {
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is not null)
+        {
+            scaleX = source.CompositionTarget.TransformToDevice.M11;
+            scaleY = source.CompositionTarget.TransformToDevice.M22;
+        }
+
+        var pixelWidth = Math.Max(0, (int)Math.Round(width * scaleX));
+        var pixelHeight = Math.Max(0, (int)Math.Round(height * scaleY));
+
+        LogDiag($"ResizePreviewHost: width={width} height={height} scale={scaleX}x{scaleY} -> pixels={pixelWidth}x{pixelHeight}");
+
+        if (_childHwnd != IntPtr.Zero)
+        {
+            var success = MoveWindow(_childHwnd, 0, 0, pixelWidth, pixelHeight, true);
+            LogDiag($"MoveWindow child HWND=0x{_childHwnd.ToInt64():X} size={pixelWidth}x{pixelHeight} success={success}");
+        }
+
+        if (_previewHandler is not null)
+        {
+            var rect = new RECT(0, 0, pixelWidth, pixelHeight);
             try
             {
                 _previewHandler.SetRect(ref rect);
-                LogDiag("IPreviewHandler.SetRect success.");
+                LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) success");
             }
             catch (Exception ex)
             {
-                LogDiag($"IPreviewHandler.SetRect exception (ignored): Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
+                LogDiag($"SetRect exception: {ex.Message}");
             }
         }
     }
@@ -505,6 +549,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool MoveWindow(
+        IntPtr hWnd,
+        int X,
+        int Y,
+        int nWidth,
+        int nHeight,
+        bool bRepaint);
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
     private static extern int SHCreateItemFromParsingName(

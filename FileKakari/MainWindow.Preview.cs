@@ -740,15 +740,18 @@ public partial class MainWindow
 
     private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation)
     {
-        PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithWebView: path='{path}'");
+        PerfLog.Write($"[WebViewPreview] Begin path=\"{path}\" generation={generation}");
         ClearPreviewContent();
 
         try
         {
+            PerfLog.Write($"[WebViewPreview] InitializeWebViewAsync begin generation={generation}");
             await InitializeWebViewAsync();
+            PerfLog.Write($"[WebViewPreview] InitializeWebViewAsync completed generation={generation}");
+
             if (generation != _previewGeneration)
             {
-                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithWebView: Selection changed during WebView initialization. Aborting.");
+                PerfLog.Write($"[WebViewPreview] Navigate skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
                 return;
             }
 
@@ -759,29 +762,30 @@ public partial class MainWindow
 
             var absoluteUri = new Uri(path).AbsoluteUri;
             _currentWebViewUri = absoluteUri; // Track target URI before navigating
-            PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithWebView: Navigating WebView to '{absoluteUri}'");
+            PerfLog.Write($"[WebViewPreview] Navigate requested uri=\"{absoluteUri}\" generation={generation}");
             PreviewWebView.CoreWebView2.Navigate(absoluteUri);
             PreviewWebView.Visibility = Visibility.Visible;
         }
         catch (Exception ex)
         {
-            PerfLog.Write($"[MainWindow.Preview] WebView2 initialization/navigation failed: Type={ex.GetType().FullName}, Msg='{ex.Message}'. Falling back to Shell/Unsupported.");
+            PerfLog.Write($"[MainWindow.Preview] WebView2 initialization/navigation failed: Type={ex.GetType().FullName}, Msg='{ex.Message}'.");
 
             ClearWebView();
 
             if (generation != _previewGeneration)
             {
+                PerfLog.Write($"[WebViewPreview] Fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
                 return;
             }
 
             if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
-                PerfLog.Write($"[MainWindow.Preview] WebView fallback: Found Shell Preview Handler CLSID={clsid:B}. Routing to Shell.");
+                PerfLog.Write($"[WebViewPreview] Fallback to Shell reason=\"{ex.Message}\" path=\"{path}\"");
                 ReplacePreviewWithShell(path, clsid, fileInfo);
             }
             else
             {
-                PerfLog.Write("[MainWindow.Preview] WebView fallback: No Shell Preview Handler. Showing unsupported card.");
+                PerfLog.Write($"[WebViewPreview] Fallback to metadata reason=\"{ex.Message}\" path=\"{path}\"");
                 ReplacePreviewWithUnsupportedInfo(fileInfo);
             }
         }

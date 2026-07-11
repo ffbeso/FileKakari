@@ -14,7 +14,17 @@ public sealed class MonacoPreviewThreadHost : IDisposable
 {
     private static void LogDiag(string message)
     {
-        PerfLog.Write($"[MonacoPreviewThreadHost] {message}");
+        PreviewDiagnostics.Verbose("PreviewMonaco", message);
+    }
+
+    private static void LogInfo(string message)
+    {
+        PreviewDiagnostics.Info("PreviewMonaco", message);
+    }
+
+    private static void LogError(string message)
+    {
+        PreviewDiagnostics.Error("PreviewMonaco", message);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -235,6 +245,7 @@ public sealed class MonacoPreviewThreadHost : IDisposable
 
     public bool Start(int timeoutMs = 2000)
     {
+        LogInfo("Monaco host start");
         _dedicatedThread = new Thread(DedicatedThreadProc);
         _dedicatedThread.SetApartmentState(ApartmentState.STA);
         _dedicatedThread.IsBackground = true;
@@ -243,7 +254,7 @@ public sealed class MonacoPreviewThreadHost : IDisposable
         bool ready = _threadReadyEvent.WaitOne(timeoutMs);
         if (!ready)
         {
-            LogDiag("Timeout waiting for dedicated thread startup.");
+            LogError("Monaco host start timeout");
             return false;
         }
         return _dedicatedHwnd != IntPtr.Zero;
@@ -266,7 +277,7 @@ public sealed class MonacoPreviewThreadHost : IDisposable
             if (_dedicatedHwnd == IntPtr.Zero)
             {
                 int err = Marshal.GetLastWin32Error();
-                LogDiag($"CreateWindowEx failed: {err}");
+                LogError($"Monaco host window creation failed win32Error={err}");
                 _threadReadyEvent.Set();
                 return;
             }
@@ -286,14 +297,14 @@ public sealed class MonacoPreviewThreadHost : IDisposable
         }
         catch (Exception ex)
         {
-            LogDiag($"Thread exception: {ex.Message}");
+            LogError($"Monaco host thread failed reason=\"{ex.Message}\"");
             _threadReadyEvent.Set();
         }
         finally
         {
             RemoveWindowProperty();
             _dedicatedHwnd = IntPtr.Zero;
-            LogDiag("Thread stopped.");
+            LogInfo("Monaco host stopped");
         }
     }
 
@@ -423,12 +434,12 @@ public sealed class MonacoPreviewThreadHost : IDisposable
             LogDiag($"IPreviewHandler.DoPreview HRESULT=0x{hr:X8}");
             if (hr < 0) Marshal.ThrowExceptionForHR(hr);
 
-            LogDiag("Monaco DoPreview successful.");
+            LogInfo("Monaco activated");
             _activationSuccess = true;
         }
         catch (Exception ex)
         {
-            LogDiag($"Monaco activation failed: {ex.Message}");
+            LogError($"Monaco activation failed reason=\"{ex.Message}\"");
             CloseMonaco();
         }
     }
@@ -510,7 +521,7 @@ public sealed class MonacoPreviewThreadHost : IDisposable
         {
             if (!_dedicatedThread.Join(500))
             {
-                LogDiag("Warning: Dedicated thread did not exit within timeout. Abandoning.");
+                LogError("Monaco shutdown timeout");
             }
         }
         _dedicatedThread = null;

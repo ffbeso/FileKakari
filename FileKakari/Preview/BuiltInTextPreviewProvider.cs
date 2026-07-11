@@ -155,16 +155,15 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
 
     private static TextDecodeResult? DecodeTextContent(byte[] content, string path, string extension)
     {
-        var firstBytes = FormatLeadingBytes(content, 16);
-        PerfLog.Write($"[BuiltInTextPreviewProvider] Encoding probe path=\"{path}\" ext=\"{extension}\" bytes={content.Length} head=\"{firstBytes}\"");
+        PreviewDiagnostics.Verbose("PreviewText", $"Encoding probe path=\"{path}\" ext=\"{extension}\" bytes={content.Length}");
 
         if (TryGetBomEncoding(content, out var bomEncoding, out var bomEncodingName))
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] BOM detected path=\"{path}\" ext=\"{extension}\" encoding=\"{bomEncodingName}\"");
+            PreviewDiagnostics.Verbose("PreviewText", $"BOM detected path=\"{path}\" ext=\"{extension}\" encoding=\"{bomEncodingName}\"");
             return DecodeCandidate(content, bomEncoding, bomEncodingName, path, extension, allowNulText: true, fallback: false);
         }
 
-        PerfLog.Write($"[BuiltInTextPreviewProvider] BOM detected path=\"{path}\" ext=\"{extension}\" encoding=\"none\"");
+        PreviewDiagnostics.Verbose("PreviewText", $"BOM detected path=\"{path}\" ext=\"{extension}\" encoding=\"none\"");
 
         var utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
         try
@@ -172,20 +171,20 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
             var utf8Result = DecodeCandidate(content, utf8Strict, "utf-8", path, extension, allowNulText: false, fallback: false);
             if (utf8Result is not null)
             {
-                PerfLog.Write($"[BuiltInTextPreviewProvider] Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"success\"");
+                PreviewDiagnostics.Verbose("PreviewText", $"Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"success\"");
                 return utf8Result;
             }
 
-            PerfLog.Write($"[BuiltInTextPreviewProvider] Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"rejected-nul-heavy\"");
+            PreviewDiagnostics.Verbose("PreviewText", $"Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"rejected-nul-heavy\"");
         }
         catch (DecoderFallbackException ex)
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"failed\" reason=\"{ex.Message}\"");
+            PreviewDiagnostics.Verbose("PreviewText", $"Strict UTF-8 result path=\"{path}\" ext=\"{extension}\" status=\"failed\" reason=\"{ex.Message}\"");
         }
 
         if (TryGetBomlessUtf16Encoding(content, out var utf16Encoding, out var utf16EncodingName, out var oddNuls, out var evenNuls, out var totalPairs))
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] UTF-16 heuristic path=\"{path}\" ext=\"{extension}\" status=\"matched\" encoding=\"{utf16EncodingName}\" oddNuls={oddNuls} evenNuls={evenNuls} pairs={totalPairs}");
+            PreviewDiagnostics.Verbose("PreviewText", $"UTF-16 heuristic path=\"{path}\" ext=\"{extension}\" status=\"matched\" encoding=\"{utf16EncodingName}\" oddNuls={oddNuls} evenNuls={evenNuls} pairs={totalPairs}");
             var utf16Result = DecodeCandidate(content, utf16Encoding, utf16EncodingName, path, extension, allowNulText: true, fallback: false);
             if (utf16Result is not null)
             {
@@ -194,7 +193,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         }
         else
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] UTF-16 heuristic path=\"{path}\" ext=\"{extension}\" status=\"not-matched\" oddNuls={oddNuls} evenNuls={evenNuls} pairs={totalPairs}");
+            PreviewDiagnostics.Verbose("PreviewText", $"UTF-16 heuristic path=\"{path}\" ext=\"{extension}\" status=\"not-matched\" oddNuls={oddNuls} evenNuls={evenNuls} pairs={totalPairs}");
         }
 
         try
@@ -206,11 +205,11 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
                 return cp932Result;
             }
 
-            PerfLog.Write($"[BuiltInTextPreviewProvider] CP932 result path=\"{path}\" ext=\"{extension}\" status=\"rejected-nul-heavy\"");
+            PreviewDiagnostics.Verbose("PreviewText", $"CP932 result path=\"{path}\" ext=\"{extension}\" status=\"rejected-nul-heavy\"");
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] CP932 result path=\"{path}\" ext=\"{extension}\" status=\"failed\" reason=\"{ex.Message}\"");
+            PreviewDiagnostics.Error("PreviewText", $"CP932 result path=\"{path}\" ext=\"{extension}\" status=\"failed\" reason=\"{ex.Message}\"");
         }
 
         var utf8Loose = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
@@ -220,7 +219,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
             return looseResult;
         }
 
-        PerfLog.Write($"[BuiltInTextPreviewProvider] Text preview rejected path=\"{path}\" ext=\"{extension}\" reason=\"binary-or-nul-heavy\"");
+        PreviewDiagnostics.Info("PreviewText", $"Unsupported path=\"{path}\" ext=\"{extension}\" reason=\"binary-or-nul-heavy\"");
         return null;
     }
 
@@ -238,12 +237,12 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         var nulChars = CountChar(text, '\0');
         if (!allowNulText && IsNulHeavy(text.Length, nulChars))
         {
-            PerfLog.Write($"[BuiltInTextPreviewProvider] Encoding candidate rejected path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" reason=\"nul-heavy\" replacementChars={replacementChars} nulChars={nulChars}");
+            PreviewDiagnostics.Verbose("PreviewText", $"Encoding candidate rejected path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" reason=\"nul-heavy\" replacementChars={replacementChars} nulChars={nulChars}");
             return null;
         }
 
         var logKind = fallback ? "Encoding fallback" : "Encoding detected";
-        PerfLog.Write($"[BuiltInTextPreviewProvider] {logKind} path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" replacementChars={replacementChars} nulChars={nulChars}");
+        PreviewDiagnostics.Info("PreviewText", $"{logKind} path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" replacementChars={replacementChars} nulChars={nulChars}");
         return new TextDecodeResult(text, encodingName, replacementChars, nulChars);
     }
 
@@ -352,28 +351,6 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         }
 
         return count;
-    }
-
-    private static string FormatLeadingBytes(byte[] content, int count)
-    {
-        var length = Math.Min(content.Length, count);
-        if (length == 0)
-        {
-            return "";
-        }
-
-        var builder = new StringBuilder(length * 3);
-        for (var i = 0; i < length; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append(' ');
-            }
-
-            builder.Append(content[i].ToString("X2"));
-        }
-
-        return builder.ToString();
     }
 
     private sealed record TextDecodeResult(string Text, string EncodingName, int ReplacementChars, int NulChars);

@@ -33,6 +33,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private bool _isDoPreviewCalled;
     private bool _pendingDoPreviewUntilNonZeroSize;
     private bool _isMarkdownZoomScheduled;
+    private string _activationContext = "";
+    private string _initializationMethod = "";
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
     private static readonly Guid MonacoPreviewHandlerClsid = new("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
     private const uint CLSCTX_LOCAL_SERVER = 4;
@@ -45,7 +47,17 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private const int ENoInterface = unchecked((int)0x80004002);
     private static void LogDiag(string message)
     {
-        PerfLog.Write($"[ShellPreviewHost] {message}");
+        PreviewDiagnostics.Verbose("PreviewShell", message);
+    }
+
+    private static void LogInfo(string message)
+    {
+        PreviewDiagnostics.Info("PreviewShell", message);
+    }
+
+    private static void LogError(string message)
+    {
+        PreviewDiagnostics.Error("PreviewShell", message);
     }
 
     private static bool IsPowerToysMonaco(Guid clsid)
@@ -75,6 +87,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             if (IsPowerToysMonaco(_clsid))
             {
                 var activationContext = "LocalServer";
+                _activationContext = activationContext;
                 LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"PowerToysMonaco\" activationContext=\"{activationContext}\"");
 
                 IntPtr pUnkMonaco = IntPtr.Zero;
@@ -90,7 +103,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    LogDiag($"CoCreateInstance failed for Monaco with CLSCTX_LOCAL_SERVER. HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" fallbackReason=\"monaco-local-server-activation-failed\"");
+                    LogError($"Activation failed clsid=\"{_clsid:B}\" description=\"{description}\" activation=\"LocalServer\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" fallbackReason=\"monaco-local-server-activation-failed\"");
                     throw new NotSupportedException($"Failed to activate Monaco Preview Handler out-of-process (CLSCTX_LOCAL_SERVER) HRESULT=0x{ex.HResult:X8}", ex);
                 }
                 finally
@@ -104,6 +117,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             else
             {
                 var activationContext = "InProc";
+                _activationContext = activationContext;
                 LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"Default\" activationContext=\"{activationContext}\"");
 
                 var comType = Type.GetTypeFromCLSID(_clsid, true);
@@ -207,6 +221,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     if (hr == 0)
                     {
                         initialized = true;
+                        _initializationMethod = "Stream";
                         LogDiag("[ShellPreviewHost] Initialization selected method=Stream");
                     }
                     else
@@ -257,6 +272,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                         if (hr == 0)
                         {
                             initialized = true;
+                            _initializationMethod = "Item";
                             LogDiag("[ShellPreviewHost] Initialization selected method=Item");
                         }
                         else
@@ -290,15 +306,17 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     && itemInterfaceHr == ENoInterface)
                 {
                     exception.Data[AllInitializersENoInterfaceDataKey] = true;
-                    LogDiag("Initialization failed reason=all-initializers-e-nointerface");
+                    LogError($"Initialization failed clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" reason=\"all-initializers-e-nointerface\"");
                 }
 
                 throw exception;
             }
+
+            LogInfo($"Ready handler=\"{description}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" initialize=\"{_initializationMethod}\"");
         }
         catch (Exception ex)
         {
-            LogDiag($"Constructor exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
+            LogError($"Initialization failed clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
             DisposePreviewHandler();
             throw;
         }
@@ -375,11 +393,19 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                     var setWindowHr = _previewHandler.SetWindow(hwndChild, ref rect);
                     LogDiag($"IPreviewHandler.SetWindow HRESULT=0x{setWindowHr:X8}");
+                    if (setWindowHr < 0)
+                    {
+                        LogError($"SetWindow failed clsid=\"{_clsid:B}\" HRESULT=0x{setWindowHr:X8}");
+                    }
                     ThrowIfFailed(setWindowHr);
 
                     LogDiag("Invoking IPreviewHandler.DoPreview...");
                     var doPreviewHr = _previewHandler.DoPreview();
                     LogDiag($"IPreviewHandler.DoPreview HRESULT=0x{doPreviewHr:X8}");
+                    if (doPreviewHr < 0)
+                    {
+                        LogError($"DoPreview failed clsid=\"{_clsid:B}\" HRESULT=0x{doPreviewHr:X8}");
+                    }
                     ThrowIfFailed(doPreviewHr);
                     _isDoPreviewCalled = true;
                     ScheduleMarkdownDefaultZoom();
@@ -388,7 +414,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    LogDiag($"BuildWindowCore/DoPreview exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
+                    LogError($"DoPreview failed clsid=\"{_clsid:B}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
                     DisposePreviewHandler();
                     if (hwndChild != IntPtr.Zero)
                     {
@@ -483,6 +509,10 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     LogDiag($"Deferred SetWindow child HWND=0x{_childHwnd.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                     var setWindowHr = _previewHandler.SetWindow(_childHwnd, ref rect);
                     LogDiag($"Deferred SetWindow HRESULT=0x{setWindowHr:X8}");
+                    if (setWindowHr < 0)
+                    {
+                        LogError($"SetWindow failed clsid=\"{_clsid:B}\" HRESULT=0x{setWindowHr:X8} deferred=true");
+                    }
                     ThrowIfFailed(setWindowHr);
 
                     if (_isDeferredHandler)
@@ -494,6 +524,10 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     LogDiag("Invoking deferred DoPreview...");
                     var doPreviewHr = _previewHandler.DoPreview();
                     LogDiag($"Deferred DoPreview HRESULT=0x{doPreviewHr:X8}");
+                    if (doPreviewHr < 0)
+                    {
+                        LogError($"DoPreview failed clsid=\"{_clsid:B}\" HRESULT=0x{doPreviewHr:X8} deferred=true");
+                    }
                     ThrowIfFailed(doPreviewHr);
                     _isDoPreviewCalled = true;
                     _pendingDoPreviewUntilNonZeroSize = false;
@@ -509,7 +543,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    LogDiag($"Deferred DoPreview failed HRESULT=0x{ex.HResult:X8} exception: {ex.Message}");
+                    LogError($"DoPreview failed clsid=\"{_clsid:B}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" deferred=true");
                     DisposePreviewHandler();
                 }
             }
@@ -523,7 +557,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 catch (Exception ex)
                 {
-                    LogDiag($"SetRect exception: {ex.Message}");
+                    LogError($"SetRect failed clsid=\"{_clsid:B}\" reason=\"{ex.Message}\"");
                 }
             }
         }
@@ -536,6 +570,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
         if (hr == 0)
         {
+            _initializationMethod = "File";
             LogDiag("[ShellPreviewHost] Initialization selected method=File");
             return true;
         }
@@ -652,10 +687,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 LogDiag("Invoking IPreviewHandler.Unload...");
                 var unloadHr = _previewHandler.Unload();
                 LogDiag($"IPreviewHandler.Unload HRESULT=0x{unloadHr:X8}");
+                if (unloadHr < 0)
+                {
+                    LogError($"Unload failed clsid=\"{_clsid:B}\" HRESULT=0x{unloadHr:X8}");
+                }
             }
             catch (Exception ex)
             {
-                LogDiag($"IPreviewHandler.Unload exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
+                LogError($"Unload failed clsid=\"{_clsid:B}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
             }
             finally
             {

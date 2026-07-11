@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,9 +18,11 @@ public sealed class FilePreviewController
 
     public async Task<FilePreviewResult> LoadAsync(string path, CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
         var extension = Path.GetExtension(path);
         var request = new PreviewRequest(path);
         bool forceBuiltInText = false;
+        PreviewDiagnostics.Info("Preview", $"Preview request path=\"{path}\" ext=\"{extension}\"");
 
         if (string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase))
@@ -60,23 +63,23 @@ public sealed class FilePreviewController
                         string.Equals(encodingName, "utf-8-loose", StringComparison.OrdinalIgnoreCase))
                     {
                         forceBuiltInText = true;
-                        PerfLog.Write($"[PreviewRouting] Monaco skipped{Environment.NewLine}path=\"{path}\"{Environment.NewLine}ext=\"{extension}\"{Environment.NewLine}encoding=\"{encodingName}\"{Environment.NewLine}reason=\"unsupported-by-monaco\"{Environment.NewLine}provider=\"BuiltInTextPreviewProvider\"");
+                        PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"BuiltInTextPreviewProvider\" reason=\"unsupported-by-monaco\"");
                     }
                     else
                     {
-                        PerfLog.Write($"[PreviewRouting] Monaco selected{Environment.NewLine}path=\"{path}\"{Environment.NewLine}ext=\"{extension}\"{Environment.NewLine}encoding=\"{encodingName}\"{Environment.NewLine}provider=\"ShellPreviewHandlerProvider\"");
+                        PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"ShellPreviewHandlerProvider\"");
                     }
                 }
             }
             catch (Exception ex)
             {
-                PerfLog.Write($"[FilePreviewController] Bat encoding detection failed: {ex.Message}");
+                PreviewDiagnostics.Error("PreviewRouting", $"BAT/CMD encoding detection failed path=\"{path}\" ext=\"{extension}\" reason=\"{ex.Message}\"");
             }
         }
 
         if (!forceBuiltInText && ShouldTryShellFirst(path))
         {
-            var shellResult = await TryLoadShellPreviewAsync(request, cancellationToken).ConfigureAwait(false);
+            var shellResult = await TryLoadShellPreviewAsync(request, cancellationToken, stopwatch).ConfigureAwait(false);
             if (shellResult is not null)
             {
                 return shellResult;
@@ -95,17 +98,19 @@ public sealed class FilePreviewController
                 var result = await provider.CreatePreviewAsync(request, cancellationToken);
                 if (IsMarkdown(path))
                 {
-                    PerfLog.Write($"[MarkdownPreview] selected provider=\"{provider.GetType().Name}\"");
+                    PreviewDiagnostics.Info("PreviewRouting", $"Markdown provider selected provider=\"{provider.GetType().Name}\"");
                 }
 
-                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{path}\" ext=\"{extension}\" kind={result.Kind} status={result.Status} fallback=false");
+                stopwatch.Stop();
+                PreviewDiagnostics.Info("Preview", $"Provider selected path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
                 return result;
             }
         }
 
         // Fallback for unsupported formats (matches existing behavior of returning basic FileInfo)
         var fallbackResult = await CreateFallbackPreviewAsync(path);
-        PerfLog.Write($"[FilePreviewController] Fallback selected path=\"{path}\" ext=\"{extension}\" kind={fallbackResult.Kind} status={fallbackResult.Status} fallback=true");
+        stopwatch.Stop();
+        PreviewDiagnostics.Info("Preview", $"Unsupported path=\"{path}\" ext=\"{extension}\" kind={fallbackResult.Kind} status={fallbackResult.Status} fallback=true elapsedMs={stopwatch.ElapsedMilliseconds}");
         return fallbackResult;
     }
 
@@ -114,36 +119,40 @@ public sealed class FilePreviewController
         foreach (var provider in _providers)
         {
             var canPreview = provider.CanPreview(path);
-            PerfLog.Write($"[FilePreviewController] Candidate provider path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" canPreview={canPreview}");
+            PreviewDiagnostics.Verbose("Preview", $"Candidate provider path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" canPreview={canPreview}");
         }
     }
 
-    private async Task<FilePreviewResult?> TryLoadShellPreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
+    private async Task<FilePreviewResult?> TryLoadShellPreviewAsync(
+        PreviewRequest request,
+        CancellationToken cancellationToken,
+        Stopwatch stopwatch)
     {
         var ext = Path.GetExtension(request.FilePath);
         if (IsMarkdown(request.FilePath))
         {
-            PerfLog.Write("[MarkdownPreview] ext=\".md\" checking shell preview handler");
+            PreviewDiagnostics.Info("PreviewRouting", "Markdown checking shell preview handler ext=\".md\"");
         }
 
-        PerfLog.Write($"[FilePreviewController] Shell-first lookup path=\"{request.FilePath}\" ext=\"{ext}\"");
+        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first lookup path=\"{request.FilePath}\" ext=\"{ext}\"");
         if (!ShellPreviewHandlerRegistry.TryGetPreviewHandler(request.FilePath, out var registration))
         {
             if (IsMarkdown(request.FilePath))
             {
-                PerfLog.Write("[MarkdownPreview] shell handler not found; fallback to built-in text");
+                PreviewDiagnostics.Info("PreviewRouting", "Markdown shell handler not found; fallback=\"BuiltInTextPreviewProvider\"");
             }
-            PerfLog.Write($"[FilePreviewController] Shell-first handler not found path=\"{request.FilePath}\" ext=\"{ext}\"");
+            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first handler not found path=\"{request.FilePath}\" ext=\"{ext}\"");
             return null;
         }
 
         if (IsMarkdown(request.FilePath))
         {
-            PerfLog.Write($"[MarkdownPreview] shell handler found clsid=\"{registration.Clsid:B}\"");
+            PreviewDiagnostics.Info("PreviewRouting", $"Markdown shell handler found clsid=\"{registration.Clsid:B}\"");
         }
 
-        PerfLog.Write(
-            $"[FilePreviewController] Shell-first handler found path=\"{request.FilePath}\" ext=\"{ext}\" progId=\"{registration.ProgId ?? ""}\" perceivedType=\"{registration.PerceivedType ?? ""}\" contentType=\"{registration.ContentType ?? ""}\" clsid=\"{registration.Clsid:B}\" source=\"{registration.Hive}\\{registration.RegistryPath}\" sourceKind=\"{registration.SourceKind}\" description=\"{registration.ClsidDescription ?? ""}\"");
+        PreviewDiagnostics.Info(
+            "PreviewRouting",
+            $"Shell-first handler found path=\"{request.FilePath}\" ext=\"{ext}\" clsid=\"{registration.Clsid:B}\" description=\"{registration.ClsidDescription ?? ""}\" sourceKind=\"{registration.SourceKind}\"");
         foreach (var provider in _providers)
         {
             if (provider is not ShellPreviewHandlerProvider)
@@ -156,25 +165,26 @@ public sealed class FilePreviewController
             {
                 if (IsMarkdown(request.FilePath))
                 {
-                    PerfLog.Write("[MarkdownPreview] selected provider=\"ShellPreviewHandlerProvider\"");
+                    PreviewDiagnostics.Info("PreviewRouting", "Markdown selected provider=\"ShellPreviewHandlerProvider\"");
                 }
-                PerfLog.Write($"[FilePreviewController] Provider selected: {provider.GetType().Name} path=\"{request.FilePath}\" ext=\"{ext}\" kind={result.Kind} status={result.Status} fallback=false");
+                stopwatch.Stop();
+                PreviewDiagnostics.Info("Preview", $"Provider selected path=\"{request.FilePath}\" ext=\"{ext}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
                 return result;
             }
 
             if (IsMarkdown(request.FilePath))
             {
-                PerfLog.Write($"[MarkdownPreview] shell provider returned status={result.Status} kind={result.Kind}; fallback to built-in text");
+                PreviewDiagnostics.Info("PreviewRouting", $"Markdown shell provider returned status={result.Status} kind={result.Kind}; fallback=\"BuiltInTextPreviewProvider\"");
             }
-            PerfLog.Write($"[FilePreviewController] Shell-first provider returned status={result.Status} kind={result.Kind}; fallback to normal provider order path=\"{request.FilePath}\"");
+            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider returned status={result.Status} kind={result.Kind}; fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
             return null;
         }
 
         if (IsMarkdown(request.FilePath))
         {
-            PerfLog.Write("[MarkdownPreview] shell provider unavailable; fallback to built-in text");
+            PreviewDiagnostics.Info("PreviewRouting", "Markdown shell provider unavailable; fallback=\"BuiltInTextPreviewProvider\"");
         }
-        PerfLog.Write($"[FilePreviewController] Shell-first provider unavailable; fallback to normal provider order path=\"{request.FilePath}\"");
+        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider unavailable; fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
         return null;
     }
 

@@ -16,7 +16,7 @@ public static class ShellPreviewHandlerRegistry
 
     private static void LogDiag(string message)
     {
-        PerfLog.Write($"[ShellPreviewHandlerRegistry] {message}");
+        PreviewDiagnostics.Verbose("PreviewShell", message);
     }
 
     public static bool TryGetPreviewHandlerClsid(string filePath, out Guid clsid)

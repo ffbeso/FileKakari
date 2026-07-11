@@ -61,12 +61,12 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
             {
                 if (fileInfo.Length > MaxHtmlPreviewBytes)
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: html size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
+                    PreviewDiagnostics.Info("PreviewWebView", $"Rejected reason=\"html-size-exceeds-limit\" path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
                     return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxHtmlPreviewBytes, FileInfo: fileInfoResult));
                 }
                 else
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: html size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
+                    PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted html path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxHtmlPreviewBytes}");
                 }
             }
             else if (string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
@@ -74,40 +74,40 @@ public sealed class WebViewPreviewProvider : IFilePreviewProvider
             {
                 if (fileInfo.Length > MaxMhtmlPreviewBytes)
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: mhtml size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
+                    PreviewDiagnostics.Info("PreviewWebView", $"Rejected reason=\"mhtml-size-exceeds-limit\" path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
                     return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxMhtmlPreviewBytes, FileInfo: fileInfoResult));
                 }
                 else
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: mhtml size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
+                    PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted mhtml path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxMhtmlPreviewBytes}");
                 }
             }
             else if (string.Equals(ext, ".svg", StringComparison.OrdinalIgnoreCase))
             {
                 if (fileInfo.Length > MaxSvgPreviewBytes)
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Rejected: svg size exceeds limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxSvgPreviewBytes}");
+                    PreviewDiagnostics.Info("PreviewWebView", $"Rejected reason=\"svg-size-exceeds-limit\" path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxSvgPreviewBytes}");
                     return Task.FromResult(new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.WebView, SizeLimit: MaxSvgPreviewBytes, FileInfo: fileInfoResult));
                 }
                 else
                 {
-                    PerfLog.Write($"[WebViewPreviewProvider] Accepted: svg size within limit path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxSvgPreviewBytes}");
+                    PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted svg path=\"{request.FilePath}\" size={fileInfo.Length} limit={MaxSvgPreviewBytes}");
                 }
             }
             else if (string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(ext, ".webm", StringComparison.OrdinalIgnoreCase))
             {
-                PerfLog.Write($"[WebViewPreviewProvider] Accepted: media path=\"{request.FilePath}\" ext=\"{ext}\"");
+                PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted media path=\"{request.FilePath}\" ext=\"{ext}\"");
             }
             else if (string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase) ||
                      string.Equals(ext, ".m4a", StringComparison.OrdinalIgnoreCase))
             {
-                PerfLog.Write($"[WebViewPreviewProvider] Accepted: audio path=\"{request.FilePath}\" ext=\"{ext}\"");
+                PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted audio path=\"{request.FilePath}\" ext=\"{ext}\"");
             }
             else if (string.Equals(ext, ".pdf", StringComparison.OrdinalIgnoreCase))
             {
-                PerfLog.Write($"[WebViewPreviewProvider] Accepted: pdf path=\"{request.FilePath}\"");
+                PreviewDiagnostics.Verbose("PreviewWebView", $"Accepted pdf path=\"{request.FilePath}\"");
             }
 
             var result = new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.WebView, FileInfo: fileInfoResult);

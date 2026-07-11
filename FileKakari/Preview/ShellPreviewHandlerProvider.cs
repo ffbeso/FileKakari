@@ -31,8 +31,12 @@ public sealed class ShellPreviewHandlerProvider : IFilePreviewProvider
 
             if (ShellPreviewHandlerRegistry.TryGetPreviewHandler(request.FilePath, out var registration))
             {
-                PerfLog.Write(
-                    $"[ShellPreviewHandlerProvider] Handler resolved path=\"{request.FilePath}\" ext=\"{fileInfoResult.Extension}\" progId=\"{registration.ProgId ?? ""}\" perceivedType=\"{registration.PerceivedType ?? ""}\" contentType=\"{registration.ContentType ?? ""}\" clsid=\"{registration.Clsid:B}\" source=\"{registration.Hive}\\{registration.RegistryPath}\" sourceKind=\"{registration.SourceKind}\" description=\"{registration.ClsidDescription ?? ""}\"");
+                PreviewDiagnostics.Info(
+                    "PreviewShell",
+                    $"Handler resolved path=\"{request.FilePath}\" ext=\"{fileInfoResult.Extension}\" clsid=\"{registration.Clsid:B}\" sourceKind=\"{registration.SourceKind}\" description=\"{registration.ClsidDescription ?? ""}\"");
+                PreviewDiagnostics.Verbose(
+                    "PreviewShell",
+                    $"Handler registry details path=\"{request.FilePath}\" progId=\"{registration.ProgId ?? ""}\" perceivedType=\"{registration.PerceivedType ?? ""}\" contentType=\"{registration.ContentType ?? ""}\" source=\"{registration.Hive}\\{registration.RegistryPath}\"");
                 return Task.FromResult(new FilePreviewResult(
                     FilePreviewStatus.Success,
                     FilePreviewKind.Shell,

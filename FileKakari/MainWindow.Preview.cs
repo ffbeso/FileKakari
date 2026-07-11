@@ -46,6 +46,8 @@ public partial class MainWindow
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _hasRetriedCurrentMhtml;
+    private bool _isPreviewTemporarilyHiddenForSettings;
+    private bool _previewWasVisibleBeforeSettings;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -202,6 +204,64 @@ public partial class MainWindow
         PreviewGridSplitter.Visibility = Visibility.Visible;
         ApplyPreviewPanePlacement(isVisible: true);
         RefreshPreviewForActiveSelection();
+    }
+
+    private void HidePreviewPaneForSettingsPage()
+    {
+        if (_isPreviewTemporarilyHiddenForSettings)
+        {
+            return;
+        }
+
+        _previewWasVisibleBeforeSettings = IsPreviewVisible;
+        _isPreviewTemporarilyHiddenForSettings = true;
+        if (!_previewWasVisibleBeforeSettings)
+        {
+            PerfLog.Write("[MainWindow.Preview] Settings page opened with preview pane already hidden");
+            return;
+        }
+
+        RememberPreviewPaneSize();
+        PreviewPane.Visibility = Visibility.Collapsed;
+        PreviewGridSplitter.Visibility = Visibility.Collapsed;
+        if (!_isPreviewMaximized)
+        {
+            ApplyPreviewPanePlacement(isVisible: false);
+        }
+
+        PreviewShellHostContainer.UpdateLayout();
+        PreviewWebView.UpdateLayout();
+        PerfLog.Write("[MainWindow.Preview] Preview pane temporarily hidden for settings page");
+    }
+
+    private void RestorePreviewPaneAfterSettingsPage()
+    {
+        if (!_isPreviewTemporarilyHiddenForSettings)
+        {
+            return;
+        }
+
+        var shouldRestore = _previewWasVisibleBeforeSettings;
+        _previewWasVisibleBeforeSettings = false;
+        _isPreviewTemporarilyHiddenForSettings = false;
+        if (!shouldRestore)
+        {
+            PerfLog.Write("[MainWindow.Preview] Settings page closed with no preview pane restore needed");
+            return;
+        }
+
+        PreviewPane.Visibility = Visibility.Visible;
+        PreviewGridSplitter.Visibility = _isPreviewMaximized
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (!_isPreviewMaximized)
+        {
+            ApplyPreviewPanePlacement(isVisible: true);
+        }
+
+        PreviewShellHostContainer.UpdateLayout();
+        PreviewWebView.UpdateLayout();
+        PerfLog.Write("[MainWindow.Preview] Preview pane restored after settings page");
     }
 
     private void ApplyPreviewPanePlacement(bool? isVisible = null)

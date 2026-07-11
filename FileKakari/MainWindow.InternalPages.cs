@@ -123,6 +123,16 @@ public partial class MainWindow
     private void UpdateMainTabContent(MainTabItem? tab)
     {
         var isInternalPage = tab?.IsInternalPage == true;
+        var isSettingsPage = tab?.InternalPageKind == InternalPageKind.Settings;
+        if (isSettingsPage)
+        {
+            HidePreviewPaneForSettingsPage();
+        }
+        else
+        {
+            RestorePreviewPaneAfterSettingsPage();
+        }
+
         InternalPageHost.Content = isInternalPage ? tab!.Content : null;
         InternalPageHost.Visibility = isInternalPage ? Visibility.Visible : Visibility.Collapsed;
         NormalPanePreviewButton.IsEnabled = !isInternalPage;
@@ -152,6 +162,11 @@ public partial class MainWindow
         }
 
         var wasSelected = ReferenceEquals(TabsControl.SelectedItem, tab);
+        if (wasSelected && tab.InternalPageKind == InternalPageKind.Settings)
+        {
+            RestorePreviewPaneAfterSettingsPage();
+        }
+
         _mainTabs.RemoveAt(index);
         tab.Dispose();
         if (wasSelected && _mainTabs.Count > 0)

@@ -11,6 +11,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 {
     private readonly string _filePath;
     private readonly Guid _clsid;
+    private readonly bool _isMonaco;
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
@@ -34,6 +35,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         _filePath = filePath;
         _clsid = clsid;
+        _isMonaco = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
 
         LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}'");
 
@@ -235,8 +237,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         LogDiag($"BuildWindowCore start: parent HWND=0x{hwndParent.Handle.ToInt64():X}, scale={scaleX}x{scaleY}, size={ActualWidth}x{ActualHeight} -> pixels={pixelWidth}x{pixelHeight}");
         LogDiag($"BuildWindowCore initial size={pixelWidth}x{pixelHeight}");
 
-        bool isMonaco = _clsid.ToString().Equals("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA", StringComparison.OrdinalIgnoreCase);
-        if (isMonaco)
+        if (_isMonaco)
         {
             LogDiag($"Handler profile: PowerToysMonaco clsid=\"{_clsid:B}\"");
         }
@@ -264,9 +265,18 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         LogDiag($"CreateWindowEx success: child HWND=0x{hwndChild.ToInt64():X}");
         _childHwnd = hwndChild;
 
+        if (_isMonaco)
+        {
+            var showRes = ShowWindow(hwndChild, SW_SHOW);
+            LogDiag($"ShowWindow child HWND=0x{hwndChild.ToInt64():X} result={showRes}");
+        }
+
+        LogChildWindowState("after-create");
+        LogParentContainerState();
+
         if (_previewHandler is not null)
         {
-            if (isMonaco && pixelWidth == 0 && pixelHeight == 0)
+            if (_isMonaco && pixelWidth == 0 && pixelHeight == 0)
             {
                 LogDiag("Deferring DoPreview until non-zero size for PowerToys Monaco.");
                 _pendingDoPreviewUntilNonZeroSize = true;
@@ -284,6 +294,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _previewHandler.DoPreview();
                     LogDiag("IPreviewHandler.DoPreview success.");
                     _isDoPreviewCalled = true;
+
+                    LogChildWindowState("after-do-preview");
                 }
                 catch (Exception ex)
                 {
@@ -348,6 +360,25 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         {
             var success = MoveWindow(_childHwnd, 0, 0, pixelWidth, pixelHeight, true);
             LogDiag($"MoveWindow child HWND=0x{_childHwnd.ToInt64():X} size={pixelWidth}x{pixelHeight} success={success}");
+
+            if (_isMonaco)
+            {
+                var showRes = ShowWindow(_childHwnd, SW_SHOW);
+                LogDiag($"ShowWindow (after-move) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
+
+                var swpRes = SetWindowPos(
+                    _childHwnd,
+                    HWND_TOP,
+                    0,
+                    0,
+                    pixelWidth,
+                    pixelHeight,
+                    SWP_SHOWWINDOW);
+                LogDiag($"SetWindowPos child HWND=0x{_childHwnd.ToInt64():X} result={swpRes}");
+            }
+
+            LogChildWindowState("after-move");
+            LogParentContainerState();
         }
 
         if (_previewHandler is not null)
@@ -363,11 +394,25 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _previewHandler.SetWindow(_childHwnd, ref rect);
                     LogDiag("Deferred SetWindow success.");
 
+                    if (_isMonaco)
+                    {
+                        var showRes = ShowWindow(_childHwnd, SW_SHOW);
+                        LogDiag($"ShowWindow (before-deferred-do-preview) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
+                    }
+
                     LogDiag("Invoking deferred DoPreview...");
                     _previewHandler.DoPreview();
                     LogDiag("Deferred DoPreview success.");
                     _isDoPreviewCalled = true;
                     _pendingDoPreviewUntilNonZeroSize = false;
+
+                    if (_isMonaco)
+                    {
+                        var showRes = ShowWindow(_childHwnd, SW_SHOW);
+                        LogDiag($"ShowWindow (after-deferred-do-preview) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
+                    }
+
+                    LogChildWindowState("after-deferred-do-preview");
                 }
                 catch (Exception ex)
                 {
@@ -673,4 +718,95 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         IntPtr pbc,
         ref Guid riid,
         out IShellItem ppv);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLong", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    private static IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex)
+    {
+        if (IntPtr.Size == 8)
+        {
+            return GetWindowLongPtr64(hWnd, nIndex);
+        }
+        else
+        {
+            return new IntPtr(GetWindowLong32(hWnd, nIndex));
+        }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int X,
+        int Y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const int SW_SHOW = 5;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private static readonly IntPtr HWND_TOP = new IntPtr(0);
+
+    private void LogChildWindowState(string stage)
+    {
+        if (_childHwnd == IntPtr.Zero)
+        {
+            LogDiag($"ChildWindowState stage=\"{stage}\" child HWND is Zero");
+            return;
+        }
+
+        bool visible = IsWindowVisible(_childHwnd);
+        RECT rect = default;
+        RECT client = default;
+        GetWindowRect(_childHwnd, out rect);
+        GetClientRect(_childHwnd, out client);
+        IntPtr style = GetWindowLongPtr(_childHwnd, GWL_STYLE);
+        IntPtr exStyle = GetWindowLongPtr(_childHwnd, GWL_EXSTYLE);
+
+        LogDiag($"ChildWindowState stage=\"{stage}\" visible={visible} rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom}) client=({client.Left},{client.Top},{client.Right},{client.Bottom}) style=0x{style.ToInt64():X8} exStyle=0x{exStyle.ToInt64():X8}");
+    }
+
+    private void LogParentContainerState()
+    {
+        try
+        {
+            var parent = this.Parent as FrameworkElement;
+            if (parent is not null)
+            {
+                LogDiag($"ParentContainer name=\"{parent.Name}\" type=\"{parent.GetType().FullName}\" visibility={parent.Visibility} size={parent.ActualWidth}x{parent.ActualHeight} opacity={parent.Opacity} isVisible={parent.IsVisible}");
+            }
+            else
+            {
+                LogDiag("ParentContainer is null or not FrameworkElement");
+            }
+            LogDiag($"ShellPreviewHost visibility={this.Visibility} size={this.ActualWidth}x{this.ActualHeight} opacity={this.Opacity} isVisible={this.IsVisible}");
+        }
+        catch (Exception ex)
+        {
+            LogDiag($"LogParentContainerState exception: {ex.Message}");
+        }
+    }
 }

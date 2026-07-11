@@ -17,11 +17,64 @@ public sealed class FilePreviewController
 
     public async Task<FilePreviewResult> LoadAsync(string path, CancellationToken cancellationToken)
     {
-        var request = new PreviewRequest(path);
         var extension = Path.GetExtension(path);
-        LogProviderCandidates(path, extension);
+        var request = new PreviewRequest(path);
+        bool forceBuiltInText = false;
 
-        if (ShouldTryShellFirst(path))
+        if (string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var fileInfo = new FileInfo(path);
+                if (fileInfo.Exists)
+                {
+                    byte[] preloaded;
+                    int readLen = (int)Math.Min(fileInfo.Length, 8192);
+
+                    if (readLen == fileInfo.Length)
+                    {
+                        preloaded = new byte[readLen];
+                        await using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, true))
+                        {
+                            await fs.ReadExactlyAsync(preloaded, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        preloaded = new byte[readLen];
+                        await using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, true))
+                        {
+                            await fs.ReadExactlyAsync(preloaded, 0, readLen, cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+
+                    var encodingName = BuiltInTextPreviewProvider.DetectEncodingName(preloaded, path, extension);
+                    request = new PreviewRequest(path)
+                    {
+                        PreloadedContent = readLen == fileInfo.Length ? preloaded : null,
+                        PreloadedEncoding = encodingName
+                    };
+
+                    if (string.Equals(encodingName, "cp932", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(encodingName, "utf-8-loose", StringComparison.OrdinalIgnoreCase))
+                    {
+                        forceBuiltInText = true;
+                        PerfLog.Write($"[PreviewRouting] Monaco skipped{Environment.NewLine}path=\"{path}\"{Environment.NewLine}ext=\"{extension}\"{Environment.NewLine}encoding=\"{encodingName}\"{Environment.NewLine}reason=\"unsupported-by-monaco\"{Environment.NewLine}provider=\"BuiltInTextPreviewProvider\"");
+                    }
+                    else
+                    {
+                        PerfLog.Write($"[PreviewRouting] Monaco selected{Environment.NewLine}path=\"{path}\"{Environment.NewLine}ext=\"{extension}\"{Environment.NewLine}encoding=\"{encodingName}\"{Environment.NewLine}provider=\"ShellPreviewHandlerProvider\"");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                PerfLog.Write($"[FilePreviewController] Bat encoding detection failed: {ex.Message}");
+            }
+        }
+
+        if (!forceBuiltInText && ShouldTryShellFirst(path))
         {
             var shellResult = await TryLoadShellPreviewAsync(request, cancellationToken).ConfigureAwait(false);
             if (shellResult is not null)
@@ -32,6 +85,11 @@ public sealed class FilePreviewController
 
         foreach (var provider in _providers)
         {
+            if (forceBuiltInText && provider is not BuiltInTextPreviewProvider)
+            {
+                continue;
+            }
+
             if (provider.CanPreview(path))
             {
                 var result = await provider.CreatePreviewAsync(request, cancellationToken);

@@ -13,6 +13,7 @@ New-Item -ItemType Directory -Path $testDir | Out-Null
 
 # ダミーファイル作成
 [System.IO.File]::WriteAllText("$testDir\01_vpn_on.bat", "@echo off`r`necho VPN接続中...`r`npause", [System.Text.Encoding]::GetEncoding(932))
+[System.IO.File]::WriteAllText("$testDir\01b_ascii_on.bat", "@echo off`r`necho VPN CONNECTING...`r`npause", [System.Text.Encoding]::ASCII)
 [System.IO.File]::WriteAllText("$testDir\02_test.md", "# Test Markdown`nThis is a test.")
 [System.IO.File]::WriteAllText("$testDir\03_test.txt", "Plain text content.")
 [System.IO.File]::WriteAllBytes("$testDir\04_test.pdf", @(0..10)) # ダミーPDF
@@ -108,18 +109,18 @@ if (Test-Path $logPath) {
     $lines = Get-Content $logPath
     Write-Output "`n=== REGRESSION TEST LOG RESULTS ==="
     
-    Write-Output "`n--- 1. Dedicated Monaco Thread Actions ---"
+    Write-Output "`n--- 1. Preview Routing Decisions (Monaco vs BuiltInText) ---"
+    $lines | Where-Object { $_ -like "*PreviewRouting*" }
+
+    Write-Output "`n--- 2. Dedicated Monaco Thread Actions ---"
     $lines | Where-Object { $_ -like "*MonacoPreviewThreadHost*" -or $_ -like "*BuildWindowCore (DedicatedThread)*" }
     
-    Write-Output "`n--- 2. PDF Preview Actions ---"
+    Write-Output "`n--- 3. PDF Preview Actions ---"
     $lines | Where-Object { $_ -like "*Pdf*" }
     
-    Write-Output "`n--- 3. MP4 Preview Actions ---"
+    Write-Output "`n--- 4. MP4 Preview Actions ---"
     $lines | Where-Object { $_ -like "*Mp4*" -or $_ -like "*Video*" -or $_ -like "*Media*" }
 
-    Write-Output "`n--- 4. Markdown Preview Actions ---"
-    $lines | Where-Object { $_ -like "*Markdown*" }
-    
     Write-Output "`n--- 5. General Fallbacks or Errors ---"
     $lines | Where-Object { $_ -like "*fallback*" -or $_ -like "*exception*" -or $_ -like "*fail*" }
 

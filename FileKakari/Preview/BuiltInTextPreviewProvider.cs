@@ -49,23 +49,82 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
                 return new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.Text, SizeLimit: MaxTextBytes, FileInfo: fileInfoResult);
             }
 
-            await using var stream = new FileStream(
-                request.FilePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 81920,
-                options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            byte[] content;
+            if (request.PreloadedContent != null)
+            {
+                content = request.PreloadedContent;
+            }
+            else
+            {
+                await using var stream = new FileStream(
+                    request.FilePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite | FileShare.Delete,
+                    bufferSize: 81920,
+                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-            var content = new byte[checked((int)stream.Length)];
-            await stream.ReadExactlyAsync(content, cancellationToken).ConfigureAwait(false);
+                content = new byte[checked((int)stream.Length)];
+                await stream.ReadExactlyAsync(content, cancellationToken).ConfigureAwait(false);
+            }
 
             if (content.Length == 0)
             {
                 return new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Text, Text: "", FileInfo: fileInfoResult);
             }
 
-            var decodeResult = DecodeTextContent(content, request.FilePath, fileInfo.Extension);
+            TextDecodeResult? decodeResult = null;
+            if (request.PreloadedEncoding != null)
+            {
+                Encoding targetEncoding;
+                if (string.Equals(request.PreloadedEncoding, "utf-8-bom", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "utf-16le-bom", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UnicodeEncoding(bigEndian: false, byteOrderMark: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "utf-16be-bom", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UnicodeEncoding(bigEndian: true, byteOrderMark: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "utf-32le-bom", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "utf-32be-bom", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "utf-8", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                }
+                else if (string.Equals(request.PreloadedEncoding, "cp932", StringComparison.OrdinalIgnoreCase))
+                {
+                    targetEncoding = Encoding.GetEncoding(932);
+                }
+                else
+                {
+                    targetEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
+                }
+
+                try
+                {
+                    var text = targetEncoding.GetString(content);
+                    decodeResult = new TextDecodeResult(text, request.PreloadedEncoding, CountChar(text, '\uFFFD'), CountChar(text, '\0'));
+                }
+                catch
+                {
+                }
+            }
+
+            if (decodeResult == null)
+            {
+                decodeResult = DecodeTextContent(content, request.FilePath, fileInfo.Extension);
+            }
+
             if (decodeResult is null)
             {
                 var loc = new LocalizationService();
@@ -319,4 +378,48 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
 
     private sealed record TextDecodeResult(string Text, string EncodingName, int ReplacementChars, int NulChars);
 
+    public static string DetectEncodingName(byte[] content, string path, string extension)
+    {
+        if (TryGetBomEncoding(content, out _, out var bomEncodingName))
+        {
+            return bomEncodingName;
+        }
+
+        var utf8Strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        try
+        {
+            var text = utf8Strict.GetString(content);
+            var replacementChars = CountChar(text, '\uFFFD');
+            var nulChars = CountChar(text, '\0');
+            if (replacementChars == 0 && !IsNulHeavy(text.Length, nulChars))
+            {
+                return "utf-8";
+            }
+        }
+        catch (DecoderFallbackException)
+        {
+        }
+
+        if (TryGetBomlessUtf16Encoding(content, out _, out var utf16EncodingName, out _, out _, out _))
+        {
+            return utf16EncodingName;
+        }
+
+        try
+        {
+            var cp932 = Encoding.GetEncoding(932);
+            var text = cp932.GetString(content);
+            var replacementChars = CountChar(text, '\uFFFD');
+            var nulChars = CountChar(text, '\0');
+            if (replacementChars == 0 && !IsNulHeavy(text.Length, nulChars))
+            {
+                return "cp932";
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return "utf-8-loose";
+    }
 }

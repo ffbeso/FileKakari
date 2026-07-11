@@ -1266,67 +1266,13 @@ public partial class MainWindow
                 var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
                 var muteVideoSetting = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
                 var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview == true;
-                var autoPlay = isVideo ? autoPlayVideoSetting : autoPlayAudioSetting;
-                var muted = isVideo && autoPlay && muteVideoSetting;
-                var mediaType = isVideo ? "video" : isAudio ? "audio" : "media";
-
-                var autoplayAttr = autoPlay ? "autoplay" : "";
-                var mutedAttr = muted ? "muted" : "";
-
-                var mediaFileUri = System.Net.WebUtility.HtmlEncode(new Uri(Path.GetFullPath(path)).AbsoluteUri);
-                var mediaTag = isVideo
-                    ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></video>"
-                    : $"<audio id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></audio>";
-
-                var autoplayJs = autoPlay ? "true" : "false";
-                var mutedJs = muted ? "true" : "false";
-
-                var html = $@"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset=""utf-8"">
-    <style>
-        body {{
-            margin: 0;
-            padding: 0;
-            background: #000;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            width: 100vw;
-        }}
-        video, audio {{
-            max-width: 100%;
-            max-height: 100%;
-            outline: none;
-        }}
-        audio {{
-            width: 80%;
-        }}
-    </style>
-</head>
-<body>
-    {mediaTag}
-    <script>
-        window.playError = '';
-        window.addEventListener('DOMContentLoaded', () => {{
-            var media = document.getElementById('media');
-            if (media) {{
-                media.muted = {mutedJs};
-                if ({autoplayJs}) {{
-                    media.play().catch(err => {{
-                        window.playError = err ? (err.name || err.message || 'UnknownError') : 'UnknownError';
-                        console.log('Autoplay blocked or failed:', err);
-                        media.pause();
-                    }});
-                }}
-            }}
-        }});
-    </script>
-</body>
-</html>";
+                var document = MediaPreviewHtmlBuilder.Build(
+                    path,
+                    isVideo,
+                    isAudio,
+                    autoPlayVideoSetting,
+                    muteVideoSetting,
+                    autoPlayAudioSetting);
 
                 try
                 {
@@ -1341,7 +1287,7 @@ public partial class MainWindow
                 {
                     var tempFileName = $"FileKakari_media_preview_{Environment.ProcessId}_{generation}_{Guid.NewGuid():N}.html";
                     var tempHtmlPath = Path.Combine(Path.GetTempPath(), tempFileName);
-                    await File.WriteAllTextAsync(tempHtmlPath, html, System.Text.Encoding.UTF8);
+                    await File.WriteAllTextAsync(tempHtmlPath, document.Html, System.Text.Encoding.UTF8);
                     if (generation != _previewGeneration)
                     {
                         TryDeleteTempMediaHtml(tempHtmlPath, generation, "generation-mismatch-after-write");
@@ -1351,14 +1297,14 @@ public partial class MainWindow
                     _currentTempMediaHtmlPath = tempHtmlPath;
                     _currentTempMediaHtmlGeneration = generation;
                     _currentWebViewMediaGeneration = generation;
-                    _currentWebViewMediaType = mediaType;
+                    _currentWebViewMediaType = document.MediaType;
                     _currentWebViewMediaAutoPlayVideoSetting = autoPlayVideoSetting;
                     _currentWebViewMediaMuteVideoSetting = muteVideoSetting;
                     _currentWebViewMediaAutoPlayAudioSetting = autoPlayAudioSetting;
-                    _currentWebViewMediaEffectiveAutoPlay = autoPlay;
-                    _currentWebViewMediaEffectiveMuted = muted;
+                    _currentWebViewMediaEffectiveAutoPlay = document.EffectiveAutoPlay;
+                    _currentWebViewMediaEffectiveMuted = document.EffectiveMuted;
                     path = tempHtmlPath;
-                    PreviewDiagnostics.Verbose("PreviewMedia", $"Temporary media HTML created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" mediaType=\"{mediaType}\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={autoPlay} effectiveMuted={muted}");
+                    PreviewDiagnostics.Verbose("PreviewMedia", $"Temporary media HTML created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" mediaType=\"{document.MediaType}\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={document.EffectiveAutoPlay} effectiveMuted={document.EffectiveMuted}");
                 }
                 catch (Exception ex)
                 {

@@ -9,6 +9,10 @@ namespace FileKakari;
 public static class ShellPreviewHandlerRegistry
 {
     private const string PreviewHandlerGuid = "{8895b1c6-b41f-4c1c-a562-0d564250836f}";
+    private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
+    private static readonly Guid MonacoPreviewHandlerClsid = new("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
+    private static readonly Guid PreviewHandlerIid = new("8895b1c6-b41f-4c1c-a562-0d564250836f");
+    private static readonly Guid InitializeWithFileIid = new("B7D14566-0509-4CCE-A71F-0A554233BD9B");
 
     private static void LogDiag(string message)
     {
@@ -48,7 +52,7 @@ public static class ShellPreviewHandlerRegistry
         if (TryGetPreviewHandlerFromAssociationApi(extension, out registration))
         {
             LogDiag($"Success: Found CLSID {registration.Clsid} using AssocQueryString for extension '{extension}'");
-            return true;
+            return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
         }
 
         // Scan Registry64 and Registry32 explicitly.
@@ -80,7 +84,7 @@ public static class ShellPreviewHandlerRegistry
                     {
                         registration = CreateRegistration(clsid, extension, null, null, null, loc.Hive, view, directPath, "extension-direct");
                         LogDiag($"Success: Found CLSID {clsid} using direct association path: '{loc.Hive}\\{directPath}' ({view} view)");
-                        return true;
+                        return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                     }
 
                     // Rule 2: {prefix}\<ProgId>\shellex\{8895b1c6-b41f-4c1c-a562-0d564250836f}
@@ -95,7 +99,7 @@ public static class ShellPreviewHandlerRegistry
                         {
                             registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, progIdPath, "progid");
                             LogDiag($"Success: Found CLSID {clsid} using ProgId '{progId}' path: '{loc.Hive}\\{progIdPath}' ({view} view)");
-                            return true;
+                            return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                         }
                     }
 
@@ -105,7 +109,7 @@ public static class ShellPreviewHandlerRegistry
                     {
                         registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, systemPath, "system-extension");
                         LogDiag($"Success: Found CLSID {clsid} using SystemFileAssociations path: '{loc.Hive}\\{systemPath}' ({view} view)");
-                        return true;
+                        return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                     }
 
                     if (!string.IsNullOrEmpty(perceivedType))
@@ -115,7 +119,7 @@ public static class ShellPreviewHandlerRegistry
                         {
                             registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, perceivedPath, "system-perceived-type");
                             LogDiag($"Success: Found CLSID {clsid} using PerceivedType '{perceivedType}' path: '{loc.Hive}\\{perceivedPath}' ({view} view)");
-                            return true;
+                            return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                         }
                     }
 
@@ -125,7 +129,7 @@ public static class ShellPreviewHandlerRegistry
                     {
                         registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, textPath, "system-text");
                         LogDiag($"Success: Found CLSID {clsid} using SystemFileAssociations text path: '{loc.Hive}\\{textPath}' ({view} view)");
-                        return true;
+                        return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                     }
 
                     var wildcardPath = prefixPath + $@"*\shellex\{PreviewHandlerGuid}";
@@ -133,7 +137,7 @@ public static class ShellPreviewHandlerRegistry
                     {
                         registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, wildcardPath, "wildcard");
                         LogDiag($"Success: Found CLSID {clsid} using wildcard path: '{loc.Hive}\\{wildcardPath}' ({view} view)");
-                        return true;
+                        return TryApplyCmdBatMonacoCompatibility(extension, registration, out registration);
                     }
                 }
                 catch (Exception ex)
@@ -225,6 +229,141 @@ public static class ShellPreviewHandlerRegistry
             "assoc-query",
             description);
         return true;
+    }
+
+    private static bool TryApplyCmdBatMonacoCompatibility(
+        string extension,
+        ShellPreviewHandlerRegistration resolved,
+        out ShellPreviewHandlerRegistration effective)
+    {
+        effective = resolved;
+        if (!IsCmdOrBat(extension) || resolved.Clsid != WindowsTxtPreviewerClsid)
+        {
+            return true;
+        }
+
+        LogDiag(
+            $"CmdBat Monaco compatibility: original ext=\"{extension}\" clsid=\"{resolved.Clsid:B}\" description=\"{resolved.ClsidDescription ?? ""}\" sourceKind=\"{resolved.SourceKind}\" source=\"{resolved.Hive}\\{resolved.RegistryPath}\"");
+
+        if (!IsMonacoPreviewHandlerUsable(out var reason))
+        {
+            LogDiag($"CmdBat Monaco compatibility: Monaco unavailable; suppressing Windows TXT Previewer shell candidate ext=\"{extension}\" reason=\"{reason}\" fallback=\"BuiltInTextPreviewProvider\"");
+            effective = ShellPreviewHandlerRegistration.Empty;
+            return false;
+        }
+
+        var monacoDescription = GetClsidDescription(MonacoPreviewHandlerClsid, RegistryView.Registry64)
+            ?? GetClsidDescription(MonacoPreviewHandlerClsid, RegistryView.Registry32)
+            ?? "MonacoPreviewHandler";
+        effective = resolved with
+        {
+            Clsid = MonacoPreviewHandlerClsid,
+            RegistryPath = $"cmd-bat-monaco-compat:{resolved.RegistryPath}",
+            SourceKind = "cmd-bat-monaco-compat",
+            ClsidDescription = monacoDescription
+        };
+
+        LogDiag(
+            $"CmdBat Monaco compatibility: substituted ext=\"{extension}\" originalClsid=\"{resolved.Clsid:B}\" finalClsid=\"{effective.Clsid:B}\" description=\"{effective.ClsidDescription}\" reason=\"Windows TXT Previewer has no supported initialization interface\"");
+        return true;
+    }
+
+    private static bool IsCmdOrBat(string extension)
+    {
+        return string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsMonacoPreviewHandlerUsable(out string reason)
+    {
+        reason = "";
+        Type? comType;
+        try
+        {
+            comType = Type.GetTypeFromCLSID(MonacoPreviewHandlerClsid, throwOnError: false);
+        }
+        catch (Exception ex)
+        {
+            reason = $"Type.GetTypeFromCLSID failed: {ex.Message}";
+            LogDiag($"CmdBat Monaco compatibility: COM registration check clsid=\"{MonacoPreviewHandlerClsid:B}\" result=\"exception\" reason=\"{reason}\"");
+            return false;
+        }
+
+        if (comType is null)
+        {
+            reason = "Monaco CLSID is not registered";
+            LogDiag($"CmdBat Monaco compatibility: COM registration check clsid=\"{MonacoPreviewHandlerClsid:B}\" result=\"missing\"");
+            return false;
+        }
+
+        LogDiag($"CmdBat Monaco compatibility: COM registration check clsid=\"{MonacoPreviewHandlerClsid:B}\" result=\"registered\" type=\"{comType.FullName}\"");
+
+        object? instance = null;
+        IntPtr pUnk = IntPtr.Zero;
+        try
+        {
+            instance = Activator.CreateInstance(comType);
+            if (instance is null)
+            {
+                reason = "Activator.CreateInstance returned null";
+                LogDiag($"CmdBat Monaco compatibility: COM create clsid=\"{MonacoPreviewHandlerClsid:B}\" result=\"null\"");
+                return false;
+            }
+
+            pUnk = Marshal.GetIUnknownForObject(instance);
+            var previewHr = Marshal.QueryInterface(pUnk, in PreviewHandlerIid, out var previewPtr);
+            LogDiag($"CmdBat Monaco compatibility: QueryInterface IPreviewHandler clsid=\"{MonacoPreviewHandlerClsid:B}\" HRESULT=0x{previewHr:X8}");
+            if (previewPtr != IntPtr.Zero)
+            {
+                Marshal.Release(previewPtr);
+            }
+
+            var fileHr = Marshal.QueryInterface(pUnk, in InitializeWithFileIid, out var filePtr);
+            LogDiag($"CmdBat Monaco compatibility: QueryInterface IInitializeWithFile clsid=\"{MonacoPreviewHandlerClsid:B}\" HRESULT=0x{fileHr:X8}");
+            if (filePtr != IntPtr.Zero)
+            {
+                Marshal.Release(filePtr);
+            }
+
+            if (previewHr != 0)
+            {
+                reason = $"Monaco does not expose IPreviewHandler HRESULT=0x{previewHr:X8}";
+                return false;
+            }
+
+            if (fileHr != 0)
+            {
+                reason = $"Monaco does not expose IInitializeWithFile HRESULT=0x{fileHr:X8}";
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            reason = $"Monaco COM activation or QueryInterface failed: HRESULT=0x{ex.HResult:X8} {ex.Message}";
+            LogDiag($"CmdBat Monaco compatibility: COM usability check exception clsid=\"{MonacoPreviewHandlerClsid:B}\" reason=\"{reason}\"");
+            return false;
+        }
+        finally
+        {
+            if (pUnk != IntPtr.Zero)
+            {
+                Marshal.Release(pUnk);
+            }
+
+            if (instance is not null && Marshal.IsComObject(instance))
+            {
+                try
+                {
+                    Marshal.ReleaseComObject(instance);
+                }
+                catch (Exception ex)
+                {
+                    LogDiag($"CmdBat Monaco compatibility: ReleaseComObject exception clsid=\"{MonacoPreviewHandlerClsid:B}\" reason=\"{ex.Message}\"");
+                }
+            }
+        }
     }
 
     private static string? GetProgIdFromBase(RegistryKey baseKey, string extensionPath, RegistryHive hive, RegistryView view)

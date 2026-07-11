@@ -20,72 +20,102 @@ public sealed class FilePreviewController
     {
         var stopwatch = Stopwatch.StartNew();
         var extension = Path.GetExtension(path);
-        var request = new PreviewRequest(path);
-        bool forceBuiltInText = false;
         PreviewDiagnostics.Info("Preview", $"Preview request path=\"{path}\" ext=\"{extension}\"");
 
-        if (string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase))
+        var routing = await CreateRoutingContextAsync(path, extension, cancellationToken).ConfigureAwait(false);
+
+        if (!routing.ForceBuiltInText && ShouldTryShellFirst(path))
         {
-            try
-            {
-                var fileInfo = new FileInfo(path);
-                if (fileInfo.Exists)
-                {
-                    byte[] preloaded;
-                    int readLen = (int)Math.Min(fileInfo.Length, 8192);
-
-                    if (readLen == fileInfo.Length)
-                    {
-                        preloaded = new byte[readLen];
-                        await using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, true))
-                        {
-                            await fs.ReadExactlyAsync(preloaded, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
-                    else
-                    {
-                        preloaded = new byte[readLen];
-                        await using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, true))
-                        {
-                            await fs.ReadExactlyAsync(preloaded, 0, readLen, cancellationToken).ConfigureAwait(false);
-                        }
-                    }
-
-                    var encodingName = BuiltInTextPreviewProvider.DetectEncodingName(preloaded, path, extension);
-                    request = new PreviewRequest(path)
-                    {
-                        PreloadedContent = readLen == fileInfo.Length ? preloaded : null,
-                        PreloadedEncoding = encodingName
-                    };
-
-                    if (string.Equals(encodingName, "cp932", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(encodingName, "utf-8-loose", StringComparison.OrdinalIgnoreCase))
-                    {
-                        forceBuiltInText = true;
-                        PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"BuiltInTextPreviewProvider\" reason=\"unsupported-by-monaco\"");
-                    }
-                    else
-                    {
-                        PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"ShellPreviewHandlerProvider\"");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                PreviewDiagnostics.Error("PreviewRouting", $"BAT/CMD encoding detection failed path=\"{path}\" ext=\"{extension}\" reason=\"{ex.Message}\"");
-            }
-        }
-
-        if (!forceBuiltInText && ShouldTryShellFirst(path))
-        {
-            var shellResult = await TryLoadShellPreviewAsync(request, cancellationToken, stopwatch).ConfigureAwait(false);
+            var shellResult = await TryLoadShellPreviewAsync(routing.Request, cancellationToken, stopwatch).ConfigureAwait(false);
             if (shellResult is not null)
             {
                 return shellResult;
             }
         }
 
+        var providerResult = await TryLoadFromProviderOrderAsync(
+            path,
+            extension,
+            routing.Request,
+            routing.ForceBuiltInText,
+            cancellationToken,
+            stopwatch).ConfigureAwait(false);
+        if (providerResult is not null)
+        {
+            return providerResult;
+        }
+
+        return await CreateUnsupportedFallbackAsync(path, extension, stopwatch).ConfigureAwait(false);
+    }
+
+    private async Task<PreviewRoutingContext> CreateRoutingContextAsync(
+        string path,
+        string extension,
+        CancellationToken cancellationToken)
+    {
+        var request = new PreviewRequest(path);
+        var forceBuiltInText = false;
+        if (!IsCmdBatExtension(extension))
+        {
+            return new PreviewRoutingContext(request, forceBuiltInText);
+        }
+
+        try
+        {
+            var fileInfo = new FileInfo(path);
+            if (!fileInfo.Exists)
+            {
+                return new PreviewRoutingContext(request, forceBuiltInText);
+            }
+
+            var readLen = (int)Math.Min(fileInfo.Length, 8192);
+            var preloaded = await ReadEncodingProbeBytesAsync(path, readLen, fileInfo.Length, cancellationToken).ConfigureAwait(false);
+            var encodingName = BuiltInTextPreviewProvider.DetectEncodingName(preloaded, path, extension);
+            request = new PreviewRequest(path)
+            {
+                PreloadedContent = readLen == fileInfo.Length ? preloaded : null,
+                PreloadedEncoding = encodingName
+            };
+
+            forceBuiltInText = ShouldForceBuiltInTextForCmdBat(encodingName);
+            LogCmdBatRouting(path, extension, encodingName, forceBuiltInText);
+        }
+        catch (Exception ex)
+        {
+            PreviewDiagnostics.Error("PreviewRouting", $"BAT/CMD encoding detection failed path=\"{path}\" ext=\"{extension}\" reason=\"{ex.Message}\"");
+        }
+
+        return new PreviewRoutingContext(request, forceBuiltInText);
+    }
+
+    private static async Task<byte[]> ReadEncodingProbeBytesAsync(
+        string path,
+        int readLen,
+        long fileLength,
+        CancellationToken cancellationToken)
+    {
+        var preloaded = new byte[readLen];
+        await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, true);
+        if (readLen == fileLength)
+        {
+            await fs.ReadExactlyAsync(preloaded, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await fs.ReadExactlyAsync(preloaded, 0, readLen, cancellationToken).ConfigureAwait(false);
+        }
+
+        return preloaded;
+    }
+
+    private async Task<FilePreviewResult?> TryLoadFromProviderOrderAsync(
+        string path,
+        string extension,
+        PreviewRequest request,
+        bool forceBuiltInText,
+        CancellationToken cancellationToken,
+        Stopwatch stopwatch)
+    {
         foreach (var provider in _providers)
         {
             if (forceBuiltInText && provider is not BuiltInTextPreviewProvider)
@@ -107,11 +137,34 @@ public sealed class FilePreviewController
             }
         }
 
+        return null;
+    }
+
+    private async Task<FilePreviewResult> CreateUnsupportedFallbackAsync(
+        string path,
+        string extension,
+        Stopwatch stopwatch)
+    {
         // Fallback for unsupported formats (matches existing behavior of returning basic FileInfo)
         var fallbackResult = await CreateFallbackPreviewAsync(path);
         stopwatch.Stop();
         PreviewDiagnostics.Info("Preview", $"Unsupported path=\"{path}\" ext=\"{extension}\" kind={fallbackResult.Kind} status={fallbackResult.Status} fallback=true elapsedMs={stopwatch.ElapsedMilliseconds}");
         return fallbackResult;
+    }
+
+    private static void LogCmdBatRouting(
+        string path,
+        string extension,
+        string encodingName,
+        bool forceBuiltInText)
+    {
+        if (forceBuiltInText)
+        {
+            PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"BuiltInTextPreviewProvider\" reason=\"unsupported-by-monaco\"");
+            return;
+        }
+
+        PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"ShellPreviewHandlerProvider\"");
     }
 
     private void LogProviderCandidates(string path, string extension)
@@ -214,6 +267,18 @@ public sealed class FilePreviewController
             || string.Equals(extension, ".tsv", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsCmdBatExtension(string extension)
+    {
+        return string.Equals(extension, ".bat", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".cmd", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldForceBuiltInTextForCmdBat(string encodingName)
+    {
+        return string.Equals(encodingName, "cp932", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(encodingName, "utf-8-loose", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsMarkdown(string path)
     {
         return string.Equals(Path.GetExtension(path), ".md", StringComparison.OrdinalIgnoreCase);
@@ -243,4 +308,6 @@ public sealed class FilePreviewController
             return Task.FromResult(new FilePreviewResult(FilePreviewStatus.Failed, FilePreviewKind.Unsupported, ErrorMessage: ex.Message));
         }
     }
+
+    private sealed record PreviewRoutingContext(PreviewRequest Request, bool ForceBuiltInText);
 }

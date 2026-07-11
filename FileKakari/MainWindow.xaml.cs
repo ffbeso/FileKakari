@@ -412,6 +412,7 @@ public partial class MainWindow : Window
         _renameFocus = new RenameFocusService(ItemsList);
         ApplyFontSettings();
         ApplyLocalizedText();
+        InitializePreviewPaneSizeFromSettings();
         ApplyPreviewPanePlacement(isVisible: false);
         InitializeColumns();
         _columnLayout = new ColumnLayoutService(
@@ -592,6 +593,8 @@ public partial class MainWindow : Window
         UpdateCrashContextSnapshot("startup");
         Closing += (_, _) =>
         {
+            RememberPreviewPaneSize();
+            SyncPreviewPaneSizeToSettings(_settingsService.Settings);
             CancelPreviewLoad();
             _deviceChangeService.Dispose();
             _folderWatchService.Dispose();
@@ -2628,6 +2631,7 @@ public partial class MainWindow : Window
     {
         SaveColumnWidths();
         RememberPreviewPaneSize();
+        SyncPreviewPaneSizeToSettings(settings);
         var previousTheme = _settingsService.Settings.Theme;
         var previousCustomThemeName = _settingsService.Settings.CustomThemeName;
         var themeError = ThemeManager.Apply(this, settings.Theme, settings.CustomThemeName);

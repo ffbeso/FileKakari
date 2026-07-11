@@ -39,6 +39,11 @@ public partial class MainWindow
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
+    private const double DefaultPreviewPaneWidth = 320;
+    private const double DefaultPreviewPaneHeight = 240;
+    private const double MinPreviewPaneSize = 120;
+    private const double MinFileListPaneSize = 180;
+    private const double PreviewSplitterSize = 5;
 
     private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
 
@@ -212,7 +217,7 @@ public partial class MainWindow
             PreviewSplitterRow.Height = new GridLength(0);
             PreviewSplitterColumn.Width = visible ? new GridLength(5) : new GridLength(0);
             PreviewPaneColumn.Width = visible
-                ? (_previewPaneWidth.Value > 0 ? _previewPaneWidth : new GridLength(320))
+                ? GetPreviewPaneWidthLength()
                 : new GridLength(0);
             PreviewGridSplitter.ResizeDirection = GridResizeDirection.Columns;
             PreviewGridSplitter.ResizeBehavior = GridResizeBehavior.PreviousAndNext;
@@ -228,7 +233,7 @@ public partial class MainWindow
         PreviewPaneColumn.Width = new GridLength(0);
         PreviewSplitterRow.Height = visible ? new GridLength(5) : new GridLength(0);
         PreviewPaneRow.Height = visible
-            ? (_previewPaneHeight.Value > 0 ? _previewPaneHeight : new GridLength(240))
+            ? GetPreviewPaneHeightLength()
             : new GridLength(0);
         PreviewGridSplitter.ResizeDirection = GridResizeDirection.Rows;
         PreviewGridSplitter.ResizeBehavior = GridResizeBehavior.PreviousAndNext;
@@ -241,19 +246,124 @@ public partial class MainWindow
 
     private void RememberPreviewPaneSize()
     {
-        if (_isPreviewMaximized)
+        if (_isPreviewMaximized || !IsPreviewVisible)
         {
             return;
         }
-        if (PreviewPaneRow.Height.Value > 0)
+
+        var placement = AppSettings.NormalizePreviewPanePlacement(_settingsService.Settings.PreviewPanePlacement);
+        if (placement == PreviewPanePlacement.Right)
         {
-            _previewPaneHeight = PreviewPaneRow.Height;
+            RememberPreviewPaneWidth(PreviewPaneColumn.ActualWidth);
+            return;
         }
 
-        if (PreviewPaneColumn.Width.Value > 0)
+        RememberPreviewPaneHeight(PreviewPaneRow.ActualHeight);
+    }
+
+    private void InitializePreviewPaneSizeFromSettings()
+    {
+        _previewPaneWidth = new GridLength(GetValidPreviewPaneSize(
+            _settingsService.Settings.PreviewPaneWidth,
+            DefaultPreviewPaneWidth));
+        _previewPaneHeight = new GridLength(GetValidPreviewPaneSize(
+            _settingsService.Settings.PreviewPaneHeight,
+            DefaultPreviewPaneHeight));
+        SyncPreviewPaneSizeToSettings(_settingsService.Settings);
+    }
+
+    private GridLength GetPreviewPaneWidthLength()
+    {
+        var width = ClampPreviewPaneSize(
+            GetValidPreviewPaneSize(_previewPaneWidth.Value, DefaultPreviewPaneWidth),
+            PreviewPanePlacement.Right);
+        RememberPreviewPaneWidth(width);
+        return new GridLength(width);
+    }
+
+    private GridLength GetPreviewPaneHeightLength()
+    {
+        var height = ClampPreviewPaneSize(
+            GetValidPreviewPaneSize(_previewPaneHeight.Value, DefaultPreviewPaneHeight),
+            PreviewPanePlacement.Bottom);
+        RememberPreviewPaneHeight(height);
+        return new GridLength(height);
+    }
+
+    private void RememberPreviewPaneWidth(double width)
+    {
+        var value = GetValidPreviewPaneSize(width, DefaultPreviewPaneWidth);
+        value = ClampPreviewPaneSize(value, PreviewPanePlacement.Right);
+        if (value <= 0)
         {
-            _previewPaneWidth = PreviewPaneColumn.Width;
+            return;
         }
+
+        _previewPaneWidth = new GridLength(value);
+        _settingsService.Settings.PreviewPaneWidth = value;
+    }
+
+    private void RememberPreviewPaneHeight(double height)
+    {
+        var value = GetValidPreviewPaneSize(height, DefaultPreviewPaneHeight);
+        value = ClampPreviewPaneSize(value, PreviewPanePlacement.Bottom);
+        if (value <= 0)
+        {
+            return;
+        }
+
+        _previewPaneHeight = new GridLength(value);
+        _settingsService.Settings.PreviewPaneHeight = value;
+    }
+
+    private void SyncPreviewPaneSizeToSettings(AppSettings settings)
+    {
+        settings.PreviewPaneWidth = GetValidPreviewPaneSize(_previewPaneWidth.Value, DefaultPreviewPaneWidth);
+        settings.PreviewPaneHeight = GetValidPreviewPaneSize(_previewPaneHeight.Value, DefaultPreviewPaneHeight);
+    }
+
+    private double ClampPreviewPaneSize(double value, PreviewPanePlacement placement)
+    {
+        var available = GetPreviewLayoutAvailableSize(placement);
+        if (available <= 0)
+        {
+            return Math.Max(MinPreviewPaneSize, value);
+        }
+
+        var max = available - PreviewSplitterSize - MinFileListPaneSize;
+        if (max <= 0)
+        {
+            return 0;
+        }
+
+        if (max < MinPreviewPaneSize)
+        {
+            return max;
+        }
+
+        return Math.Clamp(value, MinPreviewPaneSize, max);
+    }
+
+    private double GetPreviewLayoutAvailableSize(PreviewPanePlacement placement)
+    {
+        var parent = ItemsListHost.Parent as FrameworkElement;
+        var available = placement == PreviewPanePlacement.Right
+            ? parent?.ActualWidth ?? ActualWidth
+            : parent?.ActualHeight ?? ActualHeight;
+        return double.IsNaN(available) || double.IsInfinity(available) ? 0 : available;
+    }
+
+    private static double GetValidPreviewPaneSize(double? value, double fallback)
+    {
+        if (value is { } actual
+            && !double.IsNaN(actual)
+            && !double.IsInfinity(actual)
+            && actual > 0)
+        {
+            return Math.Max(MinPreviewPaneSize, actual);
+        }
+
+        return fallback;
     }
 
     private void RefreshPreviewForActiveSelection()

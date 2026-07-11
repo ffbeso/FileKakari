@@ -47,6 +47,10 @@ public sealed class AppSettings
 
     public PreviewPanePlacement PreviewPanePlacement { get; set; } = PreviewPanePlacement.Right;
 
+    public double? PreviewPaneWidth { get; set; }
+
+    public double? PreviewPaneHeight { get; set; }
+
     public FileDisplayMode DisplayMode { get; set; } = FileDisplayMode.Details;
 
     public string FontFamily { get; set; } = DefaultFontFamily;
@@ -78,6 +82,8 @@ public sealed class AppSettings
             SortFoldersFirst = SortFoldersFirst,
             AutoPlayVideoPreview = AutoPlayVideoPreview,
             PreviewPanePlacement = PreviewPanePlacement,
+            PreviewPaneWidth = PreviewPaneWidth,
+            PreviewPaneHeight = PreviewPaneHeight,
             DisplayMode = DisplayMode,
             FontFamily = FontFamily,
             FontSize = FontSize,
@@ -94,6 +100,8 @@ public sealed class AppSettings
         RowHeight = IsFiniteInRange(RowHeight, MinRowHeight, MaxRowHeight) ? RowHeight : DefaultRowHeight;
         DisplayMode = NormalizeDisplayMode(DisplayMode);
         PreviewPanePlacement = NormalizePreviewPanePlacement(PreviewPanePlacement);
+        PreviewPaneWidth = IsPositiveFinite(PreviewPaneWidth) ? PreviewPaneWidth : null;
+        PreviewPaneHeight = IsPositiveFinite(PreviewPaneHeight) ? PreviewPaneHeight : null;
 
         // Migrate visible columns
         if (VisibleColumns is not null)
@@ -166,6 +174,14 @@ public sealed class AppSettings
     private static bool IsFiniteInRange(double value, double min, double max)
     {
         return !double.IsNaN(value) && !double.IsInfinity(value) && value >= min && value <= max;
+    }
+
+    private static bool IsPositiveFinite(double? value)
+    {
+        return value is { } actual
+            && !double.IsNaN(actual)
+            && !double.IsInfinity(actual)
+            && actual > 0;
     }
 
     public static FileDisplayMode NormalizeDisplayMode(FileDisplayMode mode)

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 
@@ -12,6 +13,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private readonly string _filePath;
     private readonly Guid _clsid;
     private readonly bool _isDeferredHandler;
+    private readonly bool _isMarkdownPreview;
     private IPreviewHandler? _previewHandler;
     private FileStream? _fileStream;
     private ManagedIStream? _managedIStream;
@@ -20,6 +22,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private IntPtr _childHwnd = IntPtr.Zero;
     private bool _isDoPreviewCalled;
     private bool _pendingDoPreviewUntilNonZeroSize;
+    private bool _isMarkdownZoomScheduled;
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -35,6 +38,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         _filePath = filePath;
         _clsid = clsid;
+        _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA") ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
@@ -297,6 +301,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _previewHandler.DoPreview();
                     LogDiag("IPreviewHandler.DoPreview success.");
                     _isDoPreviewCalled = true;
+                    ScheduleMarkdownDefaultZoom();
 
                     LogChildWindowState("after-do-preview");
                 }
@@ -408,6 +413,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     LogDiag("Deferred DoPreview success.");
                     _isDoPreviewCalled = true;
                     _pendingDoPreviewUntilNonZeroSize = false;
+                    ScheduleMarkdownDefaultZoom();
 
                     if (_isDeferredHandler)
                     {
@@ -437,6 +443,104 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
             }
         }
+    }
+
+    private void ScheduleMarkdownDefaultZoom()
+    {
+        if (!_isMarkdownPreview || _isMarkdownZoomScheduled)
+        {
+            return;
+        }
+
+        _isMarkdownZoomScheduled = true;
+        _ = ApplyMarkdownDefaultZoomAsync();
+    }
+
+    private async Task ApplyMarkdownDefaultZoomAsync()
+    {
+        try
+        {
+            await Task.Delay(350);
+            if (_isDisposed || _previewHandler is null || _childHwnd == IntPtr.Zero)
+            {
+                LogDiag("Markdown default zoom skipped: host disposed or handler unavailable.");
+                return;
+            }
+
+            LogDiag("Markdown default zoom applying shortcuts: Ctrl+0, Ctrl+Minus, Ctrl+Minus.");
+            SendMarkdownZoomShortcut(VirtualKey0);
+            SendMarkdownZoomShortcut(VirtualKeyOemMinus);
+            SendMarkdownZoomShortcut(VirtualKeyOemMinus);
+        }
+        catch (Exception ex)
+        {
+            LogDiag($"Markdown default zoom failed: {ex.Message}");
+        }
+    }
+
+    private void SendMarkdownZoomShortcut(int key)
+    {
+        var handled = SendShortcutViaTranslateAccelerator(key);
+        if (handled)
+        {
+            LogDiag($"Markdown default zoom shortcut key=0x{key:X2} handled by TranslateAccelerator.");
+            return;
+        }
+
+        LogDiag($"Markdown default zoom shortcut key=0x{key:X2} not handled by TranslateAccelerator; posting to child HWND.");
+        PostShortcutMessages(_childHwnd, key);
+    }
+
+    private bool SendShortcutViaTranslateAccelerator(int key)
+    {
+        if (_previewHandler is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            TranslateKeyMessage(WmKeyDown, VirtualKeyControl, KeyDownLParam);
+            var keyHandled = TranslateKeyMessage(WmKeyDown, key, KeyDownLParam);
+            keyHandled |= TranslateKeyMessage(WmKeyUp, key, KeyUpLParam);
+            TranslateKeyMessage(WmKeyUp, VirtualKeyControl, KeyUpLParam);
+            return keyHandled;
+        }
+        catch (Exception ex)
+        {
+            LogDiag($"TranslateAccelerator shortcut key=0x{key:X2} failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private bool TranslateKeyMessage(uint message, int key, IntPtr lParam)
+    {
+        if (_previewHandler is null)
+        {
+            return false;
+        }
+
+        var msg = new MSG
+        {
+            hwnd = _childHwnd,
+            message = message,
+            wParam = new IntPtr(key),
+            lParam = lParam,
+            time = 0,
+            pt = default
+        };
+
+        var hr = _previewHandler.TranslateAccelerator(ref msg);
+        LogDiag($"TranslateAccelerator message=0x{message:X4} key=0x{key:X2} HRESULT=0x{hr:X8}");
+        return hr == 0;
+    }
+
+    private static void PostShortcutMessages(IntPtr hwnd, int key)
+    {
+        PostMessage(hwnd, WmKeyDown, new IntPtr(VirtualKeyControl), KeyDownLParam);
+        PostMessage(hwnd, WmKeyDown, new IntPtr(key), KeyDownLParam);
+        PostMessage(hwnd, WmKeyUp, new IntPtr(key), KeyUpLParam);
+        PostMessage(hwnd, WmKeyUp, new IntPtr(VirtualKeyControl), KeyUpLParam);
     }
 
     private void DisposePreviewHandler()
@@ -777,10 +881,25 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         int cy,
         uint uFlags);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(
+        IntPtr hWnd,
+        uint Msg,
+        IntPtr wParam,
+        IntPtr lParam);
+
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;
     private const int SW_SHOW = 5;
+    private const int VirtualKeyControl = 0x11;
+    private const int VirtualKey0 = 0x30;
+    private const int VirtualKeyOemMinus = 0xBD;
+    private const uint WmKeyDown = 0x0100;
+    private const uint WmKeyUp = 0x0101;
     private const uint SWP_SHOWWINDOW = 0x0040;
+    private static readonly IntPtr KeyDownLParam = new IntPtr(0x00000001);
+    private static readonly IntPtr KeyUpLParam = unchecked(new IntPtr((int)0xC0000001));
     private static readonly IntPtr HWND_TOP = new IntPtr(0);
 
     private void LogChildWindowState(string stage)

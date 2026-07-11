@@ -453,7 +453,7 @@ public partial class MainWindow
         ShowPreviewMessage(message);
     }
 
-    private void ReplacePreviewWithUnsupportedInfo(FilePreviewInfo fileInfo)
+    private void ReplacePreviewWithUnsupportedInfo(FilePreviewInfo fileInfo, string? customTitle = null, string? customHint = null)
     {
         ClearPreviewContent();
         PreviewInfoNameText.Text = fileInfo.FileName;
@@ -463,6 +463,10 @@ public partial class MainWindow
         PreviewInfoSizeText.Text = FormatPreviewFileSize(fileInfo.Size);
         PreviewInfoModifiedText.Text = fileInfo.LastWriteTime.ToString("g");
         PreviewInfoPathText.Text = fileInfo.FullPath;
+
+        PreviewUnsupportedTitleText.Text = customTitle ?? _text.Get("PreviewUnsupportedTitle");
+        PreviewUnsupportedHintText.Text = customHint ?? _text.Get("PreviewUnsupportedHint");
+
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
     }
 
@@ -482,15 +486,48 @@ public partial class MainWindow
         {
             PerfLog.Write($"[MainWindow.Preview] ReplacePreviewWithShell exception: Type={ex.GetType().FullName}, HRESULT=0x{ex.HResult:X8}, Msg='{ex.Message}'");
             ClearShellPreviewHost();
+
+            var ext = Path.GetExtension(path);
+            var isOffice = string.Equals(ext, ".doc", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".docx", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".xls", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".xlsx", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".ppt", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ext, ".pptx", StringComparison.OrdinalIgnoreCase);
+
+            if (isOffice)
+            {
+                PerfLog.Write($"[MainWindow.Preview] Office preview failed; possible Protected View or Mark-of-the-Web block path=\"{path}\"");
+            }
+
             if (fileInfo is not null)
             {
-                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing unsupported metadata card.");
-                ReplacePreviewWithUnsupportedInfo(fileInfo);
+                if (isOffice)
+                {
+                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing Office Protected View message.");
+                    ReplacePreviewWithUnsupportedInfo(
+                        fileInfo,
+                        _text.Get("PreviewOfficeFailedTitle"),
+                        _text.Get("PreviewOfficeFailedHint"));
+                }
+                else
+                {
+                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing unsupported metadata card.");
+                    ReplacePreviewWithUnsupportedInfo(fileInfo);
+                }
             }
             else
             {
-                PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing generic unsupported message.");
-                ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
+                if (isOffice)
+                {
+                    ReplacePreviewWithMessage(
+                        _text.Get("PreviewOfficeFailedTitle") + "\n\n" + _text.Get("PreviewOfficeFailedHint"));
+                }
+                else
+                {
+                    PerfLog.Write("[MainWindow.Preview] ReplacePreviewWithShell fallback: Showing generic unsupported message.");
+                    ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
+                }
             }
         }
     }

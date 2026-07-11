@@ -287,4 +287,7 @@
   <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (現在のフォルダー)</value></data>
   <data name="PreviewMaximize" xml:space="preserve"><value>最大化 (Ctrl+F3)</value></data>
   <data name="PreviewRestore" xml:space="preserve"><value>元に戻す (Ctrl+F3)</value></data>
+  <data name="PreviewOfficeFailedTitle" xml:space="preserve"><value>このOffice文書はプレビューできませんでした。</value></data>
+  <data name="PreviewOfficeFailedHint" xml:space="preserve"><value>インターネットからダウンロードした文書の場合、Officeの保護ビューによりプレビューできないことがあります。
+Word / Excel / PowerPointで一度開き、「編集を有効にする」またはファイルのブロック解除を行うと、プレビューできる場合があります。</value></data>
 </root>

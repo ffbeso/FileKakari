@@ -287,4 +287,7 @@ Details: {1}</value></data>
   <data name="TargetCurrentDirectoryDesc" xml:space="preserve"><value>CurrentDirectory (Current directory)</value></data>
   <data name="PreviewMaximize" xml:space="preserve"><value>Maximize (Ctrl+F3)</value></data>
   <data name="PreviewRestore" xml:space="preserve"><value>Restore (Ctrl+F3)</value></data>
+  <data name="PreviewOfficeFailedTitle" xml:space="preserve"><value>This Office document could not be previewed.</value></data>
+  <data name="PreviewOfficeFailedHint" xml:space="preserve"><value>If this file was downloaded from the internet, Office Protected View or Windows file blocking may prevent previewing.
+Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the file, then try again.</value></data>
 </root>

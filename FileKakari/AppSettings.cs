@@ -55,6 +55,8 @@ public sealed class AppSettings
 
     public double? PreviewPaneHeight { get; set; }
 
+    public bool? IsPreviewPaneVisible { get; set; }
+
     public FileDisplayMode DisplayMode { get; set; } = FileDisplayMode.Details;
 
     public string FontFamily { get; set; } = DefaultFontFamily;
@@ -90,6 +92,7 @@ public sealed class AppSettings
             PreviewPanePlacement = PreviewPanePlacement,
             PreviewPaneWidth = PreviewPaneWidth,
             PreviewPaneHeight = PreviewPaneHeight,
+            IsPreviewPaneVisible = IsPreviewPaneVisible,
             DisplayMode = DisplayMode,
             FontFamily = FontFamily,
             FontSize = FontSize,

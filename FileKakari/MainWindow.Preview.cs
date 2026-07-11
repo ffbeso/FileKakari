@@ -183,6 +183,7 @@ public partial class MainWindow
 
     private void SetPreviewVisible(bool isVisible)
     {
+        _settingsService.Settings.IsPreviewPaneVisible = isVisible;
         if (!isVisible)
         {
             if (_isPreviewMaximized)
@@ -204,6 +205,19 @@ public partial class MainWindow
         PreviewGridSplitter.Visibility = Visibility.Visible;
         ApplyPreviewPanePlacement(isVisible: true);
         RefreshPreviewForActiveSelection();
+    }
+
+    private void InitializePreviewPaneVisibilityFromSettings()
+    {
+        if (_settingsService.Settings.IsPreviewPaneVisible != true)
+        {
+            ApplyPreviewPanePlacement(isVisible: false);
+            return;
+        }
+
+        PreviewPane.Visibility = Visibility.Visible;
+        PreviewGridSplitter.Visibility = Visibility.Visible;
+        ApplyPreviewPanePlacement(isVisible: true);
     }
 
     private void HidePreviewPaneForSettingsPage()

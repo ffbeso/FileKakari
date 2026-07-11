@@ -413,7 +413,7 @@ public partial class MainWindow : Window
         ApplyFontSettings();
         ApplyLocalizedText();
         InitializePreviewPaneSizeFromSettings();
-        ApplyPreviewPanePlacement(isVisible: false);
+        InitializePreviewPaneVisibilityFromSettings();
         InitializeColumns();
         _columnLayout = new ColumnLayoutService(
             _settingsService.Settings,
@@ -623,6 +623,11 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await RestoreWorkspaceTabAsync(_activeWorkspaceSession);
+            if (IsPreviewVisible)
+            {
+                RefreshPreviewForActiveSelection();
+            }
+
             UpdateNavigationButtons();
             LogMemoryMetrics("startup");
 

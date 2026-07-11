@@ -199,10 +199,12 @@
   <data name="SettingsPreviewPanePlacement" xml:space="preserve"><value>プレビュー位置</value></data>
   <data name="SettingsPreviewPanePlacementRight" xml:space="preserve"><value>右側</value></data>
   <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>下側</value></data>
-  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>動画・音声を自動再生</value></data>
-  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>動画または音声ファイルを選択したときに自動で再生します。</value></data>
-  <data name="SettingsMuteVideoPreviewOnAutoPlay" xml:space="preserve"><value>動画・音声プレビューをミュートで開始</value></data>
-  <data name="SettingsMuteVideoPreviewOnAutoPlayDescription" xml:space="preserve"><value>自動再生のON/OFFにかかわらず、動画・音声プレビューの初期ミュート状態として適用します。</value></data>
+  <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>動画を自動再生する</value></data>
+  <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>動画ファイルを選択したときに自動で再生します。</value></data>
+  <data name="SettingsMuteVideoPreviewOnAutoPlay" xml:space="preserve"><value>動画を自動再生するときはミュートする</value></data>
+  <data name="SettingsMuteVideoPreviewOnAutoPlayDescription" xml:space="preserve"><value>動画プレビューを自動再生するときだけ適用します。</value></data>
+  <data name="SettingsAutoPlayAudioPreview" xml:space="preserve"><value>音声を自動再生する</value></data>
+  <data name="SettingsAutoPlayAudioPreviewDescription" xml:space="preserve"><value>音声ファイルを選択したときに自動で再生します。動画のミュート設定は音声へ適用しません。</value></data>
   <data name="SettingsFontFamily" xml:space="preserve"><value>フォント ファミリー</value></data>
   <data name="SettingsFontSize" xml:space="preserve"><value>フォント サイズ</value></data>
   <data name="SettingsRowHeight" xml:space="preserve"><value>行の高さ</value></data>

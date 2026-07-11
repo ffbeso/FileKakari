@@ -38,6 +38,8 @@ public partial class SettingsView : UserControl
         AutoPlayVideoPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayVideoPreviewDescription");
         MuteVideoPreviewOnAutoPlayCheckBox.Content = _text.Get("SettingsMuteVideoPreviewOnAutoPlay");
         MuteVideoPreviewOnAutoPlayDescriptionText.Text = _text.Get("SettingsMuteVideoPreviewOnAutoPlayDescription");
+        AutoPlayAudioPreviewCheckBox.Content = _text.Get("SettingsAutoPlayAudioPreview");
+        AutoPlayAudioPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayAudioPreviewDescription");
         FontFamilyLabel.Text = _text.Get("SettingsFontFamily");
         FontSizeLabel.Text = _text.Get("SettingsFontSize");
         RowHeightLabel.Text = _text.Get("SettingsRowHeight");
@@ -96,6 +98,7 @@ public partial class SettingsView : UserControl
         PreviewPanePlacementComboBox.SelectedValue = Result.PreviewPanePlacement;
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
         MuteVideoPreviewOnAutoPlayCheckBox.IsChecked = Result.MuteVideoPreviewOnAutoPlay;
+        AutoPlayAudioPreviewCheckBox.IsChecked = Result.AutoPlayAudioPreview ?? Result.AutoPlayVideoPreview;
         UpdateMuteVideoPreviewOnAutoPlayEnabled();
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
             ? Result.FontFamily
@@ -184,6 +187,7 @@ public partial class SettingsView : UserControl
             : PreviewPanePlacement.Right;
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
         Result.MuteVideoPreviewOnAutoPlay = MuteVideoPreviewOnAutoPlayCheckBox.IsChecked == true;
+        Result.AutoPlayAudioPreview = AutoPlayAudioPreviewCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;
         Result.FontFamily = string.IsNullOrWhiteSpace(selectedFontFamily)
             ? AppSettings.DefaultFontFamily
@@ -291,8 +295,9 @@ public partial class SettingsView : UserControl
 
     private void UpdateMuteVideoPreviewOnAutoPlayEnabled()
     {
-        MuteVideoPreviewOnAutoPlayCheckBox.IsEnabled = true;
-        MuteVideoPreviewOnAutoPlayDescriptionText.IsEnabled = true;
+        var enabled = AutoPlayVideoPreviewCheckBox.IsChecked == true;
+        MuteVideoPreviewOnAutoPlayCheckBox.IsEnabled = enabled;
+        MuteVideoPreviewOnAutoPlayDescriptionText.IsEnabled = enabled;
     }
 
     private sealed record SettingsChoice<T>(string Text, T Value);

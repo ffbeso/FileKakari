@@ -47,6 +47,8 @@ public sealed class AppSettings
 
     public bool MuteVideoPreviewOnAutoPlay { get; set; } = true;
 
+    public bool? AutoPlayAudioPreview { get; set; }
+
     public PreviewPanePlacement PreviewPanePlacement { get; set; } = PreviewPanePlacement.Right;
 
     public double? PreviewPaneWidth { get; set; }
@@ -84,6 +86,7 @@ public sealed class AppSettings
             SortFoldersFirst = SortFoldersFirst,
             AutoPlayVideoPreview = AutoPlayVideoPreview,
             MuteVideoPreviewOnAutoPlay = MuteVideoPreviewOnAutoPlay,
+            AutoPlayAudioPreview = AutoPlayAudioPreview ?? AutoPlayVideoPreview,
             PreviewPanePlacement = PreviewPanePlacement,
             PreviewPaneWidth = PreviewPaneWidth,
             PreviewPaneHeight = PreviewPaneHeight,
@@ -102,6 +105,7 @@ public sealed class AppSettings
         FontSize = IsFiniteInRange(FontSize, MinFontSize, MaxFontSize) ? FontSize : DefaultFontSize;
         RowHeight = IsFiniteInRange(RowHeight, MinRowHeight, MaxRowHeight) ? RowHeight : DefaultRowHeight;
         DisplayMode = NormalizeDisplayMode(DisplayMode);
+        AutoPlayAudioPreview ??= AutoPlayVideoPreview;
         PreviewPanePlacement = NormalizePreviewPanePlacement(PreviewPanePlacement);
         PreviewPaneWidth = IsPositiveFinite(PreviewPaneWidth) ? PreviewPaneWidth : null;
         PreviewPaneHeight = IsPositiveFinite(PreviewPaneHeight) ? PreviewPaneHeight : null;

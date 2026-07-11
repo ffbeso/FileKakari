@@ -33,8 +33,12 @@ public partial class MainWindow
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
     private int _currentWebViewMediaGeneration = -1;
-    private bool _currentWebViewMediaAutoPlay;
-    private bool _currentWebViewMediaMuted;
+    private string _currentWebViewMediaType = "";
+    private bool _currentWebViewMediaAutoPlayVideoSetting;
+    private bool _currentWebViewMediaMuteVideoSetting;
+    private bool _currentWebViewMediaAutoPlayAudioSetting;
+    private bool _currentWebViewMediaEffectiveAutoPlay;
+    private bool _currentWebViewMediaEffectiveMuted;
     private GridLength _previewPaneHeight = new(240);
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
@@ -952,7 +956,7 @@ public partial class MainWindow
             return;
         }
 
-        ShowOpenedPreviewMedia(_settingsService.Settings.AutoPlayVideoPreview);
+        ShowOpenedPreviewMedia(ShouldAutoPlayPreviewMedia());
     }
 
     private void PreviewMediaElement_MediaEnded(object sender, RoutedEventArgs e)
@@ -1094,13 +1098,31 @@ public partial class MainWindow
 
     private bool ShouldMutePreviewMedia()
     {
-        return _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+        return _isPreviewMediaVideo
+            && _settingsService.Settings.AutoPlayVideoPreview
+            && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+    }
+
+    private bool ShouldAutoPlayPreviewMedia()
+    {
+        return _isPreviewMediaVideo
+            ? _settingsService.Settings.AutoPlayVideoPreview
+            : _settingsService.Settings.AutoPlayAudioPreview == true;
     }
 
     private static bool IsVideoPreviewPath(string path)
     {
         var extension = Path.GetExtension(path);
-        return string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".webm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAudioPreviewPath(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".m4a", StringComparison.OrdinalIgnoreCase);
     }
 
     private void ClearNonVideoPreviewContent()
@@ -1183,11 +1205,14 @@ public partial class MainWindow
             if (new BuiltInVideoPreviewProvider().CanPreview(path))
             {
                 var originalMediaPath = path;
-                var isVideo = string.Equals(Path.GetExtension(path), ".mp4", StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(Path.GetExtension(path), ".webm", StringComparison.OrdinalIgnoreCase);
-
-                var autoPlay = _settingsService.Settings.AutoPlayVideoPreview;
-                var muted = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+                var isVideo = IsVideoPreviewPath(path);
+                var isAudio = IsAudioPreviewPath(path);
+                var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
+                var muteVideoSetting = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+                var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview == true;
+                var autoPlay = isVideo ? autoPlayVideoSetting : autoPlayAudioSetting;
+                var muted = isVideo && autoPlay && muteVideoSetting;
+                var mediaType = isVideo ? "video" : isAudio ? "audio" : "media";
 
                 var autoplayAttr = autoPlay ? "autoplay" : "";
                 var mutedAttr = muted ? "muted" : "";
@@ -1270,10 +1295,14 @@ public partial class MainWindow
                     _currentTempMediaHtmlPath = tempHtmlPath;
                     _currentTempMediaHtmlGeneration = generation;
                     _currentWebViewMediaGeneration = generation;
-                    _currentWebViewMediaAutoPlay = autoPlay;
-                    _currentWebViewMediaMuted = muted;
+                    _currentWebViewMediaType = mediaType;
+                    _currentWebViewMediaAutoPlayVideoSetting = autoPlayVideoSetting;
+                    _currentWebViewMediaMuteVideoSetting = muteVideoSetting;
+                    _currentWebViewMediaAutoPlayAudioSetting = autoPlayAudioSetting;
+                    _currentWebViewMediaEffectiveAutoPlay = autoPlay;
+                    _currentWebViewMediaEffectiveMuted = muted;
                     path = tempHtmlPath;
-                    PerfLog.Write($"[WebViewPreview] Media temp html created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" autoPlay={autoPlay} muted={muted}");
+                    PerfLog.Write($"[WebViewPreview] Media temp html created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" mediaType=\"{mediaType}\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={autoPlay} effectiveMuted={muted}");
                 }
                 catch (Exception ex)
                 {
@@ -1518,6 +1547,7 @@ public partial class MainWindow
         _currentWebViewUri = null; // Clear tracked target URI
         _currentWebViewFileInfo = null;
         _currentWebViewMediaGeneration = -1;
+        _currentWebViewMediaType = "";
         if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
         {
             try
@@ -1610,8 +1640,13 @@ public partial class MainWindow
 
         try
         {
-            var expectedAutoPlay = generation == _currentWebViewMediaGeneration && _currentWebViewMediaAutoPlay;
-            var expectedMuted = generation == _currentWebViewMediaGeneration && _currentWebViewMediaMuted;
+            var isCurrentMedia = generation == _currentWebViewMediaGeneration;
+            var mediaType = isCurrentMedia ? _currentWebViewMediaType : "";
+            var autoPlayVideoSetting = isCurrentMedia && _currentWebViewMediaAutoPlayVideoSetting;
+            var muteVideoSetting = isCurrentMedia && _currentWebViewMediaMuteVideoSetting;
+            var autoPlayAudioSetting = isCurrentMedia && _currentWebViewMediaAutoPlayAudioSetting;
+            var expectedAutoPlay = isCurrentMedia && _currentWebViewMediaEffectiveAutoPlay;
+            var expectedMuted = isCurrentMedia && _currentWebViewMediaEffectiveMuted;
             var js = @"(() => {
                 var media = document.getElementById('media');
                 if (!media) return JSON.stringify({ error: 'No media element found' });
@@ -1635,7 +1670,18 @@ public partial class MainWindow
                 var jsonResult = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(js);
                 if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null")
                 {
-                    PerfLog.Write($"[MediaPlaybackState] expectedAutoPlay={expectedAutoPlay} expectedMuted={expectedMuted} state={jsonResult} generation={generation}");
+                    if (string.Equals(mediaType, "video", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PerfLog.Write($"[MediaPlaybackState] mediaType=\"video\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} effectiveAutoPlay={expectedAutoPlay} effectiveMuted={expectedMuted} state={jsonResult} generation={generation}");
+                    }
+                    else if (string.Equals(mediaType, "audio", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PerfLog.Write($"[MediaPlaybackState] mediaType=\"audio\" autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={expectedAutoPlay} effectiveMuted=false state={jsonResult} generation={generation}");
+                    }
+                    else
+                    {
+                        PerfLog.Write($"[MediaPlaybackState] mediaType=\"{mediaType}\" effectiveAutoPlay={expectedAutoPlay} effectiveMuted={expectedMuted} state={jsonResult} generation={generation}");
+                    }
                 }
             }
         }

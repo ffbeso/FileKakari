@@ -781,45 +781,48 @@ public partial class MainWindow
             var textProvider = new BuiltInTextPreviewProvider();
             if (!textProvider.CanPreview(path))
             {
-                PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=\"not-built-in-text-target\" path=\"{path}\" ext=\"{ext}\"");
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped (not allowed text type) path=\"{path}\" ext=\"{ext}\"");
+                if (fileInfo is not null)
+                {
+                    ReplacePreviewWithUnsupportedInfo(fileInfo);
+                }
+                return;
             }
-            else
+
+            try
             {
-                try
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
+                var result = await textProvider
+                    .CreatePreviewAsync(new PreviewRequest(path), cancellationToken);
+
+                if (generation != _previewGeneration)
                 {
-                    PerfLog.Write($"[MainWindow.Preview] Shell fallback: trying BuiltInTextPreviewProvider path=\"{path}\" ext=\"{ext}\"");
-                    var result = await textProvider
-                        .CreatePreviewAsync(new PreviewRequest(path), cancellationToken);
-
-                    if (generation != _previewGeneration)
-                    {
-                        PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
-                        return;
-                    }
-
-                    LogTextPreviewPayload(
-                        "Shell fallback text loaded",
-                        path,
-                        result.Text ?? "",
-                        generation,
-                        result.Status,
-                        result.Kind,
-                        "ShellFallbackBuiltInTextPreviewProvider",
-                        result.EncodingName);
-
-                    if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
-                    {
-                        PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
-                        ApplyTextPreview(result, generation, cancellationToken, "ShellFallbackBuiltInTextPreviewProvider");
-                        return;
-                    }
-
-                    PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider status={result.Status} kind={result.Kind} path=\"{path}\"");
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback skipped reason=generation-mismatch current={_previewGeneration} requested={generation}");
+                    return;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+
+                LogTextPreviewPayload(
+                    "Shell fallback text loaded",
+                    path,
+                    result.Text ?? "",
+                    generation,
+                    result.Status,
+                    result.Kind,
+                    "ShellFallbackBuiltInTextPreviewProvider",
+                    result.EncodingName);
+
+                if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
                 {
-                    PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider failed HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" path=\"{path}\"");
+                    PerfLog.Write($"[MainWindow.Preview] Shell fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
+                    ApplyTextPreview(result, generation, cancellationToken, "ShellFallbackBuiltInTextPreviewProvider");
+                    return;
                 }
+
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider status={result.Status} kind={result.Kind} path=\"{path}\"");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                PerfLog.Write($"[MainWindow.Preview] Shell fallback BuiltInTextPreviewProvider failed HRESULT=0x{ex.HResult:X8} message=\"{ex.Message}\" path=\"{path}\"");
             }
         }
 
@@ -1248,14 +1251,17 @@ public partial class MainWindow
                 return;
             }
 
-            if (ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
+            var videoProvider = new BuiltInVideoPreviewProvider();
+            bool isMedia = videoProvider.CanPreview(path);
+
+            if (!isMedia && ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
                 PerfLog.Write($"[WebViewPreview] Fallback to Shell reason=\"{ex.Message}\" path=\"{path}\"");
                 await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation, CancellationToken.None);
             }
             else
             {
-                PerfLog.Write($"[WebViewPreview] Fallback to metadata reason=\"{ex.Message}\" path=\"{path}\"");
+                PerfLog.Write($"[WebViewPreview] Fallback to unsupported (no shell retry) reason=\"{ex.Message}\" path=\"{path}\" isMedia={isMedia}");
                 ReplacePreviewWithUnsupportedInfo(fileInfo);
             }
         }

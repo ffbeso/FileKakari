@@ -13,7 +13,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
 
     private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".txt", ".md", ".json", ".xml", ".xaml", ".cs", ".log", ".csv", ".tsv", ".cmd", ".bat"
+        ".txt", ".md", ".json", ".xml", ".xaml", ".cs", ".log", ".csv", ".tsv", ".cmd", ".bat", ".ini", ".ps1"
     };
 
     static BuiltInTextPreviewProvider()

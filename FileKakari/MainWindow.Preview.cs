@@ -35,7 +35,6 @@ public partial class MainWindow
     private int _currentWebViewMediaGeneration = -1;
     private string _currentWebViewMediaType = "";
     private bool _currentWebViewMediaAutoPlayVideoSetting;
-    private bool _currentWebViewMediaMuteVideoSetting;
     private bool _currentWebViewMediaAutoPlayAudioSetting;
     private bool _currentWebViewMediaEffectiveAutoPlay;
     private bool _currentWebViewMediaEffectiveMuted;
@@ -1160,8 +1159,7 @@ public partial class MainWindow
     private bool ShouldMutePreviewMedia()
     {
         return _isPreviewMediaVideo
-            && _settingsService.Settings.AutoPlayVideoPreview
-            && _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
+            && _settingsService.Settings.AutoPlayVideoPreview;
     }
 
     private bool ShouldAutoPlayPreviewMedia()
@@ -1276,14 +1274,12 @@ public partial class MainWindow
                 var isVideo = IsVideoPreviewPath(path);
                 var isAudio = IsAudioPreviewPath(path);
                 var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
-                var muteVideoSetting = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
                 var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview ?? _settingsService.Settings.AutoPlayVideoPreview;
                 var document = MediaPreviewHtmlBuilder.Build(
                     path,
                     isVideo,
                     isAudio,
                     autoPlayVideoSetting,
-                    muteVideoSetting,
                     autoPlayAudioSetting);
 
                 try
@@ -1313,18 +1309,17 @@ public partial class MainWindow
                     _currentWebViewMediaGeneration = generation;
                     _currentWebViewMediaType = document.MediaType;
                     _currentWebViewMediaAutoPlayVideoSetting = autoPlayVideoSetting;
-                    _currentWebViewMediaMuteVideoSetting = muteVideoSetting;
                     _currentWebViewMediaAutoPlayAudioSetting = autoPlayAudioSetting;
                     _currentWebViewMediaEffectiveAutoPlay = document.EffectiveAutoPlay;
                     _currentWebViewMediaEffectiveMuted = document.EffectiveMuted;
                     path = tempHtmlPath;
                     if (string.Equals(document.MediaType, "video", StringComparison.OrdinalIgnoreCase))
                     {
-                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"video\"\r\nautoPlaySetting={autoPlayVideoSetting.ToString().ToLowerInvariant()}\r\nmuteSetting={muteVideoSetting.ToString().ToLowerInvariant()}\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted={document.EffectiveMuted.ToString().ToLowerInvariant()}\r\ngeneration={generation}");
+                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"video\"\r\nautoPlaySetting={autoPlayVideoSetting.ToString().ToLowerInvariant()}\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted={document.EffectiveMuted.ToString().ToLowerInvariant()}\r\ngeneration={generation}");
                     }
                     else
                     {
-                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"audio\"\r\nautoPlaySetting={autoPlayAudioSetting.ToString().ToLowerInvariant()}\r\nmuteSetting=false\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted=false\r\ngeneration={generation}");
+                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"audio\"\r\nautoPlaySetting={autoPlayAudioSetting.ToString().ToLowerInvariant()}\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted=false\r\ngeneration={generation}");
                     }
                 }
                 catch (Exception ex)
@@ -1755,7 +1750,6 @@ public partial class MainWindow
             var isCurrentMedia = generation == _currentWebViewMediaGeneration;
             var mediaType = isCurrentMedia ? _currentWebViewMediaType : "";
             var autoPlayVideoSetting = isCurrentMedia && _currentWebViewMediaAutoPlayVideoSetting;
-            var muteVideoSetting = isCurrentMedia && _currentWebViewMediaMuteVideoSetting;
             var autoPlayAudioSetting = isCurrentMedia && _currentWebViewMediaAutoPlayAudioSetting;
             var expectedAutoPlay = isCurrentMedia && _currentWebViewMediaEffectiveAutoPlay;
             var expectedMuted = isCurrentMedia && _currentWebViewMediaEffectiveMuted;
@@ -1803,7 +1797,7 @@ public partial class MainWindow
                                     var readyState = root.GetProperty("readyState").GetInt32().ToString();
                                     var playError = root.GetProperty("playError").GetString() ?? "";
 
-                                    PreviewDiagnostics.Verbose("PreviewMedia", $"State\r\nmediaType=\"{mediaType}\"\r\nexpectedAutoPlay={expectedAutoPlay.ToString().ToLowerInvariant()}\r\nexpectedMuted={expectedMuted.ToString().ToLowerInvariant()}\r\npaused={paused}\r\nmuted={mutedVal}\r\nautoplay={autoplay}\r\ncurrentTime={currentTime}\r\nreadyState={readyState}\r\nplayError=\"{playError}\"\r\ngeneration={generation}");
+                                    PreviewDiagnostics.Verbose("PreviewMedia", $"State\r\nmediaType=\"{mediaType}\"\r\nexpectedAutoPlay={expectedAutoPlay.ToString().ToLowerInvariant()}\r\nexpectedMuted={expectedMuted.ToString().ToLowerInvariant()}\r\npaused={paused}\r\nmuted={mutedVal}\r\nplayError=\"{playError}\"\r\ngeneration={generation}");
                                 }
                             }
                         }

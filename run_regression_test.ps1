@@ -78,6 +78,7 @@ if (Test-Path $logPath) { Remove-Item $logPath -Force }
 $exePath = "d:\Works\VScode\FileKakari-public\FileKakari\bin\Debug\net10.0-windows\FileKakari.exe"
 $env:FILEKAKARI_PERF_LOG = $logPath
 $env:FILEKAKARI_AUTO_TEST = "1"
+$env:FILEKAKARI_PREVIEW_VERBOSE_LOG = "1"
 
 Write-Output "Starting FileKakari in automated test mode..."
 $fkProc = Start-Process -FilePath $exePath -PassThru
@@ -85,6 +86,7 @@ $fkProc = Start-Process -FilePath $exePath -PassThru
 # 一時的な環境変数のクリア
 $env:FILEKAKARI_PERF_LOG = $null
 $env:FILEKAKARI_AUTO_TEST = $null
+$env:FILEKAKARI_PREVIEW_VERBOSE_LOG = $null
 
 # 6. アプリの自動終了を待つ (タイムアウト 25 秒)
 Write-Output "Waiting for automated test scenario to complete..."

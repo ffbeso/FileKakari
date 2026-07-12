@@ -46,6 +46,7 @@ public partial class MainWindow
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _hasRetriedCurrentMhtml;
+    private bool _isClearingWebView;
     private bool _isPreviewPaneTemporarilySuppressedForSettings;
     private bool _previewPaneWasVisibleBeforeSettings;
     private bool _isPreviewMaximized;
@@ -196,8 +197,7 @@ public partial class MainWindow
             }
             RememberPreviewPaneSize();
 
-            CancelPreviewLoad();
-            ClearPreviewContent();
+            _ = CancelAndClearPreviewAsync("preview-pane-closed");
             PreviewTitleText.Text = "";
             PreviewPane.Visibility = Visibility.Collapsed;
             PreviewGridSplitter.Visibility = Visibility.Collapsed;
@@ -1195,7 +1195,7 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         ClearShellPreviewHost();
-        ClearWebView();
+        _ = ClearWebViewAsync("clear-non-video-content");
     }
 
     private void ClearPreviewContent(bool keepWebView = false)
@@ -1214,7 +1214,7 @@ public partial class MainWindow
         ClearShellPreviewHost();
         if (!keepWebView)
         {
-            ClearWebView();
+            _ = ClearWebViewAsync("preview-type-changed");
         }
     }
 
@@ -1231,6 +1231,13 @@ public partial class MainWindow
         _previewCancellation?.Dispose();
         _previewCancellation = null;
         StopPreviewMedia(clearSource: true);
+    }
+
+    private async Task CancelAndClearPreviewAsync(string reason)
+    {
+        CancelPreviewLoad();
+        ClearPreviewContent(keepWebView: true);
+        await ClearWebViewAsync(reason);
     }
 
     private static string FormatPreviewSize(long bytes)
@@ -1270,7 +1277,7 @@ public partial class MainWindow
                 var isAudio = IsAudioPreviewPath(path);
                 var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
                 var muteVideoSetting = _settingsService.Settings.MuteVideoPreviewOnAutoPlay;
-                var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview == true;
+                var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview ?? _settingsService.Settings.AutoPlayVideoPreview;
                 var document = MediaPreviewHtmlBuilder.Build(
                     path,
                     isVideo,
@@ -1311,7 +1318,14 @@ public partial class MainWindow
                     _currentWebViewMediaEffectiveAutoPlay = document.EffectiveAutoPlay;
                     _currentWebViewMediaEffectiveMuted = document.EffectiveMuted;
                     path = tempHtmlPath;
-                    PreviewDiagnostics.Verbose("PreviewMedia", $"Temporary media HTML created path=\"{tempHtmlPath}\" generation={generation} sourcePath=\"{originalMediaPath}\" mediaType=\"{document.MediaType}\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={document.EffectiveAutoPlay} effectiveMuted={document.EffectiveMuted}");
+                    if (string.Equals(document.MediaType, "video", StringComparison.OrdinalIgnoreCase))
+                    {
+                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"video\"\r\nautoPlaySetting={autoPlayVideoSetting.ToString().ToLowerInvariant()}\r\nmuteSetting={muteVideoSetting.ToString().ToLowerInvariant()}\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted={document.EffectiveMuted.ToString().ToLowerInvariant()}\r\ngeneration={generation}");
+                    }
+                    else
+                    {
+                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"audio\"\r\nautoPlaySetting={autoPlayAudioSetting.ToString().ToLowerInvariant()}\r\nmuteSetting=false\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted=false\r\ngeneration={generation}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1371,7 +1385,7 @@ public partial class MainWindow
         {
             PreviewDiagnostics.Error("PreviewWebView", $"Navigation failed reason=\"{ex.Message}\"");
 
-            ClearWebView();
+            _ = ClearWebViewAsync("navigation-failed");
             LogPreviewUiState("WebView after initialization failure clear", generation, path);
 
             if (generation != _previewGeneration)
@@ -1433,7 +1447,7 @@ public partial class MainWindow
     private void CoreWebView2_NavigationStarting(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationStartingEventArgs e)
     {
         var uri = e.Uri;
-        if (uri == "about:blank")
+        if (_isClearingWebView && string.Equals(uri, "about:blank", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -1483,8 +1497,9 @@ public partial class MainWindow
     private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
         var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
-        if (currentUri == "about:blank")
+        if (string.Equals(currentUri, "about:blank", StringComparison.OrdinalIgnoreCase))
         {
+            _isClearingWebView = false;
             // Do not show for blank page transitions (like ClearWebView)
             return;
         }
@@ -1541,8 +1556,91 @@ public partial class MainWindow
         }
     }
 
-    private void ClearWebView()
+    private async Task ClearWebViewAsync(string reason)
     {
+        if (!_isWebViewInitialized || PreviewWebView.CoreWebView2 == null)
+        {
+            try
+            {
+                DeleteCurrentTempMediaHtml();
+            }
+            catch (Exception ex)
+            {
+                PreviewDiagnostics.Error("PreviewMedia", $"Temporary media HTML delete failed reason=\"{ex.Message}\"");
+            }
+            _currentWebViewUri = null;
+            _currentWebViewFileInfo = null;
+            _currentWebViewMediaGeneration = -1;
+            _currentWebViewMediaType = "";
+            PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
+            PreviewWebView.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
+        var isMediaHtml = PreviewTemporaryFileManager.IsMediaPreviewHtmlUri(currentUri);
+        var activeGen = _webViewNavigationGeneration;
+
+        if (isMediaHtml)
+        {
+            try
+            {
+                var js = @"(() => {
+                    const media = document.querySelector('video, audio');
+                    if (media) {
+                        media.pause();
+                        media.removeAttribute('src');
+                        media.load();
+                        return 'ok';
+                    }
+                    return 'no-media';
+                })()";
+                var jsTask = PreviewWebView.CoreWebView2.ExecuteScriptAsync(js);
+                var delayTask = Task.Delay(2000);
+                var completedTask = await Task.WhenAny(jsTask, delayTask);
+                if (completedTask == jsTask)
+                {
+                    await jsTask;
+                }
+                else
+                {
+                    PreviewDiagnostics.Error("PreviewWebView", "Media stop JS execution timed out.");
+                }
+            }
+            catch (Exception ex)
+            {
+                PreviewDiagnostics.Error("PreviewWebView", $"Media stop JS failed reason=\"{ex.Message}\"");
+            }
+            finally
+            {
+                try
+                {
+                    PreviewWebView.CoreWebView2.Stop();
+                }
+                catch (Exception ex)
+                {
+                    PreviewDiagnostics.Error("PreviewWebView", $"CoreWebView2.Stop failed reason=\"{ex.Message}\"");
+                }
+            }
+            PreviewDiagnostics.Verbose("PreviewWebView", $"Media stopped\r\nreason=\"{reason}\"\r\ngeneration={activeGen}");
+        }
+
+        _currentWebViewUri = null;
+        _currentWebViewFileInfo = null;
+        _currentWebViewMediaGeneration = -1;
+        _currentWebViewMediaType = "";
+        _isClearingWebView = true;
+
+        try
+        {
+            PreviewDiagnostics.Verbose("PreviewWebView", "ClearWebView navigating to about:blank");
+            PreviewWebView.CoreWebView2.Navigate("about:blank");
+        }
+        catch (Exception ex)
+        {
+            PreviewDiagnostics.Error("PreviewWebView", $"ClearWebView navigate failed reason=\"{ex.Message}\"");
+        }
+
         try
         {
             DeleteCurrentTempMediaHtml();
@@ -1552,24 +1650,30 @@ public partial class MainWindow
             PreviewDiagnostics.Error("PreviewMedia", $"Temporary media HTML delete failed reason=\"{ex.Message}\"");
         }
 
-        _currentWebViewUri = null; // Clear tracked target URI
-        _currentWebViewFileInfo = null;
-        _currentWebViewMediaGeneration = -1;
-        _currentWebViewMediaType = "";
-        if (_isWebViewInitialized && PreviewWebView.CoreWebView2 is not null)
-        {
-            try
-            {
-                PreviewDiagnostics.Verbose("PreviewWebView", "ClearWebView navigating to about:blank");
-                PreviewWebView.CoreWebView2.Navigate("about:blank");
-            }
-            catch (Exception ex)
-            {
-                PreviewDiagnostics.Error("PreviewWebView", $"ClearWebView navigate failed reason=\"{ex.Message}\"");
-            }
-        }
         PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
         PreviewWebView.Visibility = Visibility.Collapsed;
+    }
+
+    private void ClearWebViewForShutdown()
+    {
+        try
+        {
+            PreviewWebView.CoreWebView2?.Stop();
+            PreviewWebView.Source = new Uri("about:blank");
+        }
+        catch (Exception ex)
+        {
+            PreviewDiagnostics.Verbose("PreviewWebView", $"ClearWebViewForShutdown best-effort failed reason=\"{ex.Message}\"");
+        }
+
+        try
+        {
+            DeleteCurrentTempMediaHtml();
+        }
+        catch
+        {
+            // Ignore
+        }
     }
 
     private void TogglePreviewMaximized()
@@ -1678,17 +1782,35 @@ public partial class MainWindow
                 var jsonResult = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(js);
                 if (!string.IsNullOrEmpty(jsonResult) && jsonResult != "null")
                 {
-                    if (string.Equals(mediaType, "video", StringComparison.OrdinalIgnoreCase))
+                    try
                     {
-                        PreviewDiagnostics.Info("PreviewMedia", $"Media state mediaType=\"video\" autoPlayVideoSetting={autoPlayVideoSetting} muteVideoSetting={muteVideoSetting} effectiveAutoPlay={expectedAutoPlay} effectiveMuted={expectedMuted} state={jsonResult} generation={generation}");
+                        var rawJson = System.Text.Json.JsonSerializer.Deserialize<string>(jsonResult);
+                        if (!string.IsNullOrEmpty(rawJson))
+                        {
+                            using (var doc = System.Text.Json.JsonDocument.Parse(rawJson))
+                            {
+                                var root = doc.RootElement;
+                                if (root.TryGetProperty("error", out _))
+                                {
+                                    PreviewDiagnostics.Error("PreviewMedia", $"Media state query reported error: {rawJson}");
+                                }
+                                else
+                                {
+                                    var paused = root.GetProperty("paused").GetBoolean().ToString().ToLowerInvariant();
+                                    var mutedVal = root.GetProperty("muted").GetBoolean().ToString().ToLowerInvariant();
+                                    var autoplay = root.GetProperty("autoplay").GetBoolean().ToString().ToLowerInvariant();
+                                    var currentTime = root.GetProperty("currentTime").GetDouble().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                                    var readyState = root.GetProperty("readyState").GetInt32().ToString();
+                                    var playError = root.GetProperty("playError").GetString() ?? "";
+
+                                    PreviewDiagnostics.Verbose("PreviewMedia", $"State\r\nmediaType=\"{mediaType}\"\r\nexpectedAutoPlay={expectedAutoPlay.ToString().ToLowerInvariant()}\r\nexpectedMuted={expectedMuted.ToString().ToLowerInvariant()}\r\npaused={paused}\r\nmuted={mutedVal}\r\nautoplay={autoplay}\r\ncurrentTime={currentTime}\r\nreadyState={readyState}\r\nplayError=\"{playError}\"\r\ngeneration={generation}");
+                                }
+                            }
+                        }
                     }
-                    else if (string.Equals(mediaType, "audio", StringComparison.OrdinalIgnoreCase))
+                    catch (Exception ex)
                     {
-                        PreviewDiagnostics.Info("PreviewMedia", $"Media state mediaType=\"audio\" autoPlayAudioSetting={autoPlayAudioSetting} effectiveAutoPlay={expectedAutoPlay} effectiveMuted=false state={jsonResult} generation={generation}");
-                    }
-                    else
-                    {
-                        PreviewDiagnostics.Info("PreviewMedia", $"Media state mediaType=\"{mediaType}\" effectiveAutoPlay={expectedAutoPlay} effectiveMuted={expectedMuted} state={jsonResult} generation={generation}");
+                        PreviewDiagnostics.Error("PreviewMedia", $"Failed to parse media state JSON. Raw={jsonResult}. Error={ex.Message}");
                     }
                 }
             }

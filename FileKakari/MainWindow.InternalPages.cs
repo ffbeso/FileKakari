@@ -138,7 +138,7 @@ public partial class MainWindow
         NormalPanePreviewButton.IsEnabled = !isInternalPage;
         if (isInternalPage)
         {
-            CancelPreviewLoad();
+            _ = CancelAndClearPreviewAsync("internal-page-shown");
         }
         else
         {

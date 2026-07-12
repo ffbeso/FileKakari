@@ -28,9 +28,10 @@ public static class MediaPreviewHtmlBuilder
         var mediaFileUri = WebUtility.HtmlEncode(new Uri(Path.GetFullPath(mediaPath)).AbsoluteUri);
         var mediaTag = isVideo
             ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></video>"
-            : $"<audio id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></audio>";
+            : $"<audio id=\"media\" controls {autoplayAttr} src=\"{mediaFileUri}\"></audio>";
         var autoplayJs = autoPlay ? "true" : "false";
         var mutedJs = muted ? "true" : "false";
+        var isVideoJs = isVideo ? "true" : "false";
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -62,16 +63,41 @@ public static class MediaPreviewHtmlBuilder
     {mediaTag}
     <script>
         window.playError = '';
+        let playAttempted = false;
+
+        const tryPlay = async () => {{
+            var media = document.getElementById('media');
+            if (!media || playAttempted) {{
+                return;
+            }}
+            if (!document.contains(media)) {{
+                return;
+            }}
+
+            playAttempted = true;
+
+            try {{
+                await media.play();
+                window.playError = '';
+            }} catch (error) {{
+                window.playError = error ? (error.name || error.message || String(error)) : 'UnknownError';
+                console.log('Autoplay blocked or failed:', error);
+                media.pause();
+            }}
+        }};
+
         window.addEventListener('DOMContentLoaded', () => {{
             var media = document.getElementById('media');
             if (media) {{
-                media.muted = {mutedJs};
+                if ({isVideoJs}) {{
+                    media.muted = {mutedJs};
+                }}
                 if ({autoplayJs}) {{
-                    media.play().catch(err => {{
-                        window.playError = err ? (err.name || err.message || 'UnknownError') : 'UnknownError';
-                        console.log('Autoplay blocked or failed:', err);
-                        media.pause();
-                    }});
+                    if (media.readyState >= 2) {{
+                        void tryPlay();
+                    }} else {{
+                        media.addEventListener('canplay', tryPlay, {{ once: true }});
+                    }}
                 }}
             }}
         }});

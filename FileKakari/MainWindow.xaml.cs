@@ -596,6 +596,7 @@ public partial class MainWindow : Window
             RememberPreviewPaneSize();
             SyncPreviewPaneSizeToSettings(_settingsService.Settings);
             CancelPreviewLoad();
+            ClearWebViewForShutdown();
             _deviceChangeService.Dispose();
             _folderWatchService.Dispose();
             _scrollBehavior.StopAutoScroll();

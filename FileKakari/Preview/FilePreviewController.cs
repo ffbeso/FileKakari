@@ -16,13 +16,28 @@ public sealed class FilePreviewController
         _providers = new List<IFilePreviewProvider>(providers);
     }
 
-    public async Task<FilePreviewResult> LoadAsync(string path, CancellationToken cancellationToken)
+    public async Task<FilePreviewResult> LoadAsync(
+        string path,
+        double targetWidthDip,
+        double targetHeightDip,
+        double dpiScaleX,
+        double dpiScaleY,
+        int generation,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var extension = Path.GetExtension(path);
         PreviewDiagnostics.Info("Preview", $"Preview request path=\"{path}\" ext=\"{extension}\"");
 
-        var routing = await CreateRoutingContextAsync(path, extension, cancellationToken).ConfigureAwait(false);
+        var routing = await CreateRoutingContextAsync(
+            path,
+            extension,
+            targetWidthDip,
+            targetHeightDip,
+            dpiScaleX,
+            dpiScaleY,
+            generation,
+            cancellationToken).ConfigureAwait(false);
 
         if (!routing.ForceBuiltInText && ShouldTryShellFirst(path))
         {
@@ -51,9 +66,21 @@ public sealed class FilePreviewController
     private async Task<PreviewRoutingContext> CreateRoutingContextAsync(
         string path,
         string extension,
+        double targetWidthDip,
+        double targetHeightDip,
+        double dpiScaleX,
+        double dpiScaleY,
+        int generation,
         CancellationToken cancellationToken)
     {
-        var request = new PreviewRequest(path);
+        var request = new PreviewRequest(path)
+        {
+            TargetWidthDip = targetWidthDip,
+            TargetHeightDip = targetHeightDip,
+            DpiScaleX = dpiScaleX,
+            DpiScaleY = dpiScaleY,
+            Generation = generation
+        };
         var forceBuiltInText = false;
         if (!IsCmdBatExtension(extension))
         {
@@ -74,7 +101,12 @@ public sealed class FilePreviewController
             request = new PreviewRequest(path)
             {
                 PreloadedContent = readLen == fileInfo.Length ? preloaded : null,
-                PreloadedEncoding = encodingName
+                PreloadedEncoding = encodingName,
+                TargetWidthDip = targetWidthDip,
+                TargetHeightDip = targetHeightDip,
+                DpiScaleX = dpiScaleX,
+                DpiScaleY = dpiScaleY,
+                Generation = generation
             };
 
             forceBuiltInText = ShouldForceBuiltInTextForCmdBat(encodingName);

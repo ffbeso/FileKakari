@@ -1,4 +1,5 @@
 using System;
+using System.Windows.Media.Imaging;
 
 namespace FileKakari;
 
@@ -15,13 +16,12 @@ public sealed record FilePreviewResult(
     FilePreviewStatus Status,
     FilePreviewKind Kind,
     string? Text = null,
-    byte[]? ImageBytes = null,
+    BitmapSource? ImageSource = null,
     long? SizeLimit = null,
     string? ErrorMessage = null,
     FilePreviewInfo? FileInfo = null,
     Guid? Clsid = null,
     string? EncodingName = null);
-
 public sealed record FilePreviewInfo(
     string FileName,
     string FullPath,

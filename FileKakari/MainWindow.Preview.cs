@@ -534,7 +534,36 @@ public partial class MainWindow
             PreviewLoadingBar.Visibility = Visibility.Visible;
             await Task.Delay(PreviewLoadDelay, cancellationToken);
 
-            var result = await _filePreviewController.LoadAsync(path, cancellationToken);
+            double scaleX = 1.0;
+            double scaleY = 1.0;
+            var source = PresentationSource.FromVisual(this);
+            if (source?.CompositionTarget is not null)
+            {
+                scaleX = source.CompositionTarget.TransformToDevice.M11;
+                scaleY = source.CompositionTarget.TransformToDevice.M22;
+            }
+
+            var targetWidth = PreviewPane.ActualWidth;
+            var targetHeight = PreviewPane.ActualHeight;
+
+            if (targetWidth <= 0 || double.IsNaN(targetWidth))
+            {
+                targetWidth = 1920 / scaleX;
+            }
+            if (targetHeight <= 0 || double.IsNaN(targetHeight))
+            {
+                targetHeight = 1080 / scaleY;
+            }
+
+            var result = await _filePreviewController.LoadAsync(
+                path,
+                targetWidth,
+                targetHeight,
+                scaleX,
+                scaleY,
+                generation,
+                cancellationToken);
+
             cancellationToken.ThrowIfCancellationRequested();
             if (generation != _previewGeneration)
             {
@@ -566,30 +595,13 @@ public partial class MainWindow
                 ApplyTextPreview(result, generation, cancellationToken, "BuiltInTextPreviewProvider");
                 break;
 
-            case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Image && result.ImageBytes is not null:
-                try
+            case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Image && result.ImageSource is not null:
+                if (generation != _previewGeneration)
                 {
-                    var bitmap = await Task.Run(
-                        () => DecodePreviewImage(result.ImageBytes),
-                        cancellationToken);
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (generation != _previewGeneration)
-                    {
-                        return;
-                    }
-
-                    ReplacePreviewWithImage(bitmap);
+                    return;
                 }
-                catch (Exception ex) when (ex is IOException or NotSupportedException or InvalidOperationException)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (generation != _previewGeneration)
-                    {
-                        return;
-                    }
 
-                    ReplacePreviewWithMessage(_text.Format("PreviewLoadFailed", ex.Message));
-                }
+                ReplacePreviewWithImage(result.ImageSource);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
@@ -713,10 +725,10 @@ public partial class MainWindow
             $"Text UI set after source=\"{source}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} control=\"PreviewTextBox\" afterLength={PreviewTextBox.Text.Length} visibility={PreviewTextBox.Visibility} isVisible={PreviewTextBox.IsVisible} opacity={PreviewTextBox.Opacity} fontFamily=\"{PreviewTextBox.FontFamily}\" fontSize={PreviewTextBox.FontSize} foreground=\"{PreviewTextBox.Foreground}\" background=\"{PreviewTextBox.Background}\" textWrapping={PreviewTextBox.TextWrapping} cancellationRequested={cancellationToken.IsCancellationRequested}");
     }
 
-    private void ReplacePreviewWithImage(BitmapImage bitmap)
+    private void ReplacePreviewWithImage(ImageSource imageSource)
     {
         ClearPreviewContent();
-        PreviewImage.Source = bitmap;
+        PreviewImage.Source = imageSource;
         PreviewImageScrollViewer.Visibility = Visibility.Visible;
     }
 
@@ -960,17 +972,6 @@ public partial class MainWindow
         PreviewShellHostContainer.SetResourceReference(Border.BackgroundProperty, "PanelBackgroundBrush");
     }
 
-    private static BitmapImage DecodePreviewImage(byte[] imageBytes)
-    {
-        using var stream = new MemoryStream(imageBytes, writable: false);
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
-        bitmap.Freeze();
-        return bitmap;
-    }
 
     private static void LogTextPreviewPayload(
         string label,

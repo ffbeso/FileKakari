@@ -31,6 +31,28 @@ public static class ShellPreviewHandlerRegistry
         return false;
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _callCounters = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ShellPreviewHandlerRegistration> ResolvedCache = new(StringComparer.OrdinalIgnoreCase);
+
+    internal static void ClearCache()
+    {
+        ResolvedCache.Clear();
+    }
+
+    private static string NormalizeExtension(string filePath)
+    {
+        var extension = Path.GetExtension(filePath);
+
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        return extension.StartsWith('.')
+            ? extension.ToLowerInvariant()
+            : $".{extension.ToLowerInvariant()}";
+    }
+
     public static bool TryGetPreviewHandler(string filePath, out ShellPreviewHandlerRegistration registration)
     {
         registration = ShellPreviewHandlerRegistration.Empty;
@@ -47,6 +69,43 @@ public static class ShellPreviewHandlerRegistry
             return false;
         }
 
+        var normalizedExt = NormalizeExtension(filePath);
+
+        if (ResolvedCache.TryGetValue(normalizedExt, out var cached))
+        {
+            if (PreviewDiagnostics.IsVerboseEnabled)
+            {
+                var calls = _callCounters.AddOrUpdate(normalizedExt, 1, (_, count) => count + 1);
+                PreviewDiagnostics.Verbose("PreviewShell", $"Handler cache hit\r\next=\"{normalizedExt}\"\r\nclsid=\"{cached.Clsid:B}\"\r\ncallsForExtension={calls}");
+            }
+            registration = cached;
+            return true;
+        }
+
+        var callsCount = _callCounters.AddOrUpdate(normalizedExt, 1, (_, count) => count + 1);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var resolved = TryResolvePreviewHandlerInternal(filePath, normalizedExt, out registration);
+        stopwatch.Stop();
+
+        if (PreviewDiagnostics.IsVerboseEnabled)
+        {
+            var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+            var clsidStr = resolved ? registration.Clsid.ToString("B") : "null";
+            PreviewDiagnostics.Verbose("PreviewShell", $"Registry resolve\r\next=\"{normalizedExt}\"\r\ncache=\"miss\"\r\nresolved={resolved.ToString().ToLowerInvariant()}\r\nclsid=\"{clsidStr}\"\r\nelapsedMs={elapsedMs:F1}\r\ncallsForExtension={callsCount}");
+        }
+
+        if (resolved)
+        {
+            ResolvedCache.TryAdd(normalizedExt, registration);
+        }
+
+        return resolved;
+    }
+
+    private static bool TryResolvePreviewHandlerInternal(string filePath, string extension, out ShellPreviewHandlerRegistration registration)
+    {
+        registration = ShellPreviewHandlerRegistration.Empty;
         LogDiag($"TryGetPreviewHandlerClsid starting lookup for extension '{extension}' (file: '{filePath}')");
 
         if (TryGetPreviewHandlerFromAssociationApi(extension, out registration))
@@ -125,7 +184,7 @@ public static class ShellPreviewHandlerRegistry
 
                     var textPath = prefixPath + $@"SystemFileAssociations\text\shellex\{PreviewHandlerGuid}";
                     if (IsTextAssociation(perceivedType, contentType)
-                        && TryGetClsidFromKeyWithDiag(baseKey, textPath, loc.Hive, view, out clsid))
+                         && TryGetClsidFromKeyWithDiag(baseKey, textPath, loc.Hive, view, out clsid))
                     {
                         registration = CreateRegistration(clsid, extension, progId, perceivedType, contentType, loc.Hive, view, textPath, "system-text");
                         LogDiag($"Success: Found CLSID {clsid} using SystemFileAssociations text path: '{loc.Hive}\\{textPath}' ({view} view)");

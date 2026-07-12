@@ -10,6 +10,7 @@ public partial class MainWindow
 {
     private void RunPreviewIntegrationTestIfNeeded()
     {
+#if DEBUG
         if (Environment.GetEnvironmentVariable("FILEKAKARI_AUTO_TEST") != "1")
         {
             return;
@@ -108,5 +109,6 @@ public partial class MainWindow
                 Application.Current.Shutdown();
             });
         });
+#endif
     }
 }

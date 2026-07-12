@@ -14,6 +14,8 @@ LICENSE.html
 filekakari-perf.log
 .ai-rules.local.json
 temp/
+scratch/
+TestFiles/
 *_wpftmp.csproj
 /AGENTS.html
 /docs/interaction-stability.html

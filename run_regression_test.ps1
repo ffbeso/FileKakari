@@ -1,4 +1,4 @@
-# FileKakari Monaco Dedicated Thread & Regression Auto Test Script
+# FileKakari Preview Regression Auto Test Script
 
 $ErrorActionPreference = "Stop"
 
@@ -7,7 +7,7 @@ Get-Process -Name *Monaco*, *prevhost*, FileKakari -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
 # 2. テスト用ディレクトリとファイルを作成
-$testDir = "d:\Works\VScode\FileKakari-public\TestFiles"
+$testDir = Join-Path $env:TEMP "FileKakariRegressionTestFiles"
 if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Path $testDir | Out-Null
 
@@ -113,8 +113,8 @@ if (Test-Path $logPath) {
     Write-Output "`n--- 1. Preview Routing Decisions (Monaco vs BuiltInText) ---"
     $lines | Where-Object { $_ -like "*PreviewRouting*" }
 
-    Write-Output "`n--- 2. Dedicated Monaco Thread Actions ---"
-    $lines | Where-Object { $_ -like "*MonacoPreviewThreadHost*" -or $_ -like "*BuildWindowCore (DedicatedThread)*" }
+    Write-Output "`n--- 2. Monaco Shell Preview Actions ---"
+    $lines | Where-Object { $_ -like "*MonacoPreviewHandler*" -or $_ -like "*PowerToysMonaco*" -or $_ -like "*activation=`"LocalServer`"*" }
     
     Write-Output "`n--- 3. PDF Preview Actions ---"
     $lines | Where-Object { $_ -like "*Pdf*" }

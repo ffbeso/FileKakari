@@ -623,7 +623,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await RestoreWorkspaceTabAsync(_activeWorkspaceSession);
-            if (IsPreviewVisible)
+            if (IsPreviewPaneActuallyVisible)
             {
                 RefreshPreviewForActiveSelection();
             }
@@ -1467,11 +1467,11 @@ public partial class MainWindow : Window
                 SetPreviewMaximized(false);
                 FocusActiveFileList();
             }
-            else if (IsPreviewVisible
+            else if (IsPreviewPaneActuallyVisible
                 && (focusedTextBox is null || ReferenceEquals(focusedTextBox, PreviewTextBox)))
             {
                 e.Handled = true;
-                SetPreviewVisible(false);
+                SetPreviewPaneVisibleByUser(false);
                 FocusActiveFileList();
             }
 
@@ -1568,7 +1568,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                TogglePreview();
+                TogglePreviewPaneByUser();
             }
             return;
         }

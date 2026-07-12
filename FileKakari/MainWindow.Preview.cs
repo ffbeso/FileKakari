@@ -46,8 +46,8 @@ public partial class MainWindow
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _hasRetriedCurrentMhtml;
-    private bool _isPreviewTemporarilyHiddenForSettings;
-    private bool _previewWasVisibleBeforeSettings;
+    private bool _isPreviewPaneTemporarilySuppressedForSettings;
+    private bool _previewPaneWasVisibleBeforeSettings;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -58,11 +58,15 @@ public partial class MainWindow
     private const double PreviewSplitterSize = 5;
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
 
-    private bool IsPreviewVisible => PreviewPane.Visibility == Visibility.Visible;
+    private bool IsPreviewPaneEnabledByUser => _settingsService.Settings.IsPreviewPaneVisible == true;
+
+    private bool IsPreviewPaneTemporarilySuppressed => _isPreviewPaneTemporarilySuppressedForSettings;
+
+    private bool IsPreviewPaneActuallyVisible => PreviewPane.Visibility == Visibility.Visible;
 
     private void PreviewToggleButton_Click(object sender, RoutedEventArgs e)
     {
-        TogglePreview();
+        TogglePreviewPaneByUser();
         FocusActiveFileList();
     }
 
@@ -77,14 +81,14 @@ public partial class MainWindow
         button.SetResourceReference(ForegroundProperty, "TextBrush");
     }
 
-    private void TogglePreview()
+    private void TogglePreviewPaneByUser()
     {
-        SetPreviewVisible(!IsPreviewVisible);
+        SetPreviewPaneVisibleByUser(!IsPreviewPaneActuallyVisible);
     }
 
     private void PreviewCloseButton_Click(object sender, RoutedEventArgs e)
     {
-        SetPreviewVisible(false);
+        SetPreviewPaneVisibleByUser(false);
         FocusActiveFileList();
     }
 
@@ -103,7 +107,7 @@ public partial class MainWindow
 
     private bool MoveActivePreviewSelection(int delta)
     {
-        if (!IsPreviewVisible || delta == 0 || GetActivePreviewListView() is not { } listView || listView.Items.Count == 0)
+        if (!IsPreviewPaneActuallyVisible || delta == 0 || GetActivePreviewListView() is not { } listView || listView.Items.Count == 0)
         {
             return false;
         }
@@ -164,7 +168,7 @@ public partial class MainWindow
 
     private bool HandlePreviewNavigationKey(Key key)
     {
-        if (!IsPreviewVisible
+        if (!IsPreviewPaneActuallyVisible
             || Keyboard.FocusedElement is TextBox
             || Keyboard.Modifiers != ModifierKeys.None)
         {
@@ -181,7 +185,7 @@ public partial class MainWindow
         };
     }
 
-    private void SetPreviewVisible(bool isVisible)
+    private void SetPreviewPaneVisibleByUser(bool isVisible)
     {
         _settingsService.Settings.IsPreviewPaneVisible = isVisible;
         if (!isVisible)
@@ -209,7 +213,7 @@ public partial class MainWindow
 
     private void InitializePreviewPaneVisibilityFromSettings()
     {
-        if (_settingsService.Settings.IsPreviewPaneVisible != true)
+        if (!IsPreviewPaneEnabledByUser)
         {
             ApplyPreviewPanePlacement(isVisible: false);
             return;
@@ -222,14 +226,14 @@ public partial class MainWindow
 
     private void HidePreviewPaneForSettingsPage()
     {
-        if (_isPreviewTemporarilyHiddenForSettings)
+        if (IsPreviewPaneTemporarilySuppressed)
         {
             return;
         }
 
-        _previewWasVisibleBeforeSettings = IsPreviewVisible;
-        _isPreviewTemporarilyHiddenForSettings = true;
-        if (!_previewWasVisibleBeforeSettings)
+        _previewPaneWasVisibleBeforeSettings = IsPreviewPaneActuallyVisible;
+        _isPreviewPaneTemporarilySuppressedForSettings = true;
+        if (!_previewPaneWasVisibleBeforeSettings)
         {
             PerfLog.Write("[MainWindow.Preview] Settings page opened with preview pane already hidden");
             return;
@@ -250,14 +254,14 @@ public partial class MainWindow
 
     private void RestorePreviewPaneAfterSettingsPage()
     {
-        if (!_isPreviewTemporarilyHiddenForSettings)
+        if (!IsPreviewPaneTemporarilySuppressed)
         {
             return;
         }
 
-        var shouldRestore = _previewWasVisibleBeforeSettings;
-        _previewWasVisibleBeforeSettings = false;
-        _isPreviewTemporarilyHiddenForSettings = false;
+        var shouldRestore = _previewPaneWasVisibleBeforeSettings;
+        _previewPaneWasVisibleBeforeSettings = false;
+        _isPreviewPaneTemporarilySuppressedForSettings = false;
         if (!shouldRestore)
         {
             PerfLog.Write("[MainWindow.Preview] Settings page closed with no preview pane restore needed");
@@ -280,7 +284,7 @@ public partial class MainWindow
 
     private void ApplyPreviewPanePlacement(bool? isVisible = null)
     {
-        var visible = isVisible ?? IsPreviewVisible;
+        var visible = isVisible ?? IsPreviewPaneActuallyVisible;
         if (_isPreviewMaximized && visible)
         {
             return;
@@ -331,7 +335,7 @@ public partial class MainWindow
 
     private void RememberPreviewPaneSize()
     {
-        if (_isPreviewMaximized || !IsPreviewVisible)
+        if (_isPreviewMaximized || !IsPreviewPaneActuallyVisible)
         {
             return;
         }
@@ -453,7 +457,7 @@ public partial class MainWindow
 
     private void RefreshPreviewForActiveSelection()
     {
-        if (!IsPreviewVisible || InternalPageHost.Visibility == Visibility.Visible)
+        if (!IsPreviewPaneActuallyVisible || InternalPageHost.Visibility == Visibility.Visible)
         {
             return;
         }
@@ -463,7 +467,7 @@ public partial class MainWindow
 
     private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries)
     {
-        if (!IsPreviewVisible)
+        if (!IsPreviewPaneActuallyVisible)
         {
             return;
         }
@@ -506,7 +510,7 @@ public partial class MainWindow
         await Task.Delay(PreviewLoadDelay);
 
         if (generation != _previewGeneration
-            || !IsPreviewVisible
+            || !IsPreviewPaneActuallyVisible
             || InternalPageHost.Visibility == Visibility.Visible)
         {
             return;

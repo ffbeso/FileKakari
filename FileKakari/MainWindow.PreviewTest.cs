@@ -39,7 +39,7 @@ public partial class MainWindow
             await Dispatcher.InvokeAsync(() =>
             {
                 PerfLog.Write("[AutoTest] Showing preview pane...");
-                SetPreviewVisible(true);
+                SetPreviewPaneVisibleByUser(true);
             });
             await Task.Delay(1000);
 

@@ -113,7 +113,8 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
                 try
                 {
                     var text = targetEncoding.GetString(content);
-                    decodeResult = new TextDecodeResult(text, request.PreloadedEncoding, CountChar(text, '\uFFFD'), CountChar(text, '\0'));
+                    var (replacementCount, nulCount) = CountDecodeIndicators(text);
+                    decodeResult = new TextDecodeResult(text, request.PreloadedEncoding, replacementCount, nulCount);
                 }
                 catch
                 {
@@ -233,8 +234,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         bool fallback)
     {
         var text = encoding.GetString(content);
-        var replacementChars = CountChar(text, '\uFFFD');
-        var nulChars = CountChar(text, '\0');
+        var (replacementChars, nulChars) = CountDecodeIndicators(text);
         if (!allowNulText && IsNulHeavy(text.Length, nulChars))
         {
             PreviewDiagnostics.Verbose("PreviewText", $"Encoding candidate rejected path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" reason=\"nul-heavy\" replacementChars={replacementChars} nulChars={nulChars}");
@@ -339,18 +339,24 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         return nulChars > 0 && (nulChars > 16 || nulChars >= textLength * 0.1);
     }
 
-    private static int CountChar(string text, char target)
+    private static (int ReplacementCount, int NulCount) CountDecodeIndicators(string text)
     {
-        var count = 0;
+        var replacementCount = 0;
+        var nulCount = 0;
+
         foreach (var ch in text)
         {
-            if (ch == target)
+            if (ch == '\uFFFD')
             {
-                count++;
+                replacementCount++;
+            }
+            else if (ch == '\0')
+            {
+                nulCount++;
             }
         }
 
-        return count;
+        return (replacementCount, nulCount);
     }
 
     private sealed record TextDecodeResult(string Text, string EncodingName, int ReplacementChars, int NulChars);
@@ -366,8 +372,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         try
         {
             var text = utf8Strict.GetString(content);
-            var replacementChars = CountChar(text, '\uFFFD');
-            var nulChars = CountChar(text, '\0');
+            var (replacementChars, nulChars) = CountDecodeIndicators(text);
             if (replacementChars == 0 && !IsNulHeavy(text.Length, nulChars))
             {
                 return "utf-8";
@@ -386,8 +391,7 @@ public sealed class BuiltInTextPreviewProvider : IFilePreviewProvider
         {
             var cp932 = Encoding.GetEncoding(932);
             var text = cp932.GetString(content);
-            var replacementChars = CountChar(text, '\uFFFD');
-            var nulChars = CountChar(text, '\0');
+            var (replacementChars, nulChars) = CountDecodeIndicators(text);
             if (replacementChars == 0 && !IsNulHeavy(text.Length, nulChars))
             {
                 return "cp932";

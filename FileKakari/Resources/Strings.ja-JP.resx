@@ -245,9 +245,6 @@
   <data name="UserCommandErrorTitle" xml:space="preserve"><value>コマンド実行エラー</value></data>
   <data name="PreviewTitle" xml:space="preserve"><value>プレビュー</value></data>
   <data name="PreviewCloseButton" xml:space="preserve"><value>プレビューを閉じる</value></data>
-  <data name="PreviewMediaPlay" xml:space="preserve"><value>再生</value></data>
-  <data name="PreviewMediaPause" xml:space="preserve"><value>一時停止</value></data>
-  <data name="PreviewMediaStop" xml:space="preserve"><value>停止</value></data>
   <data name="PreviewSelectFile" xml:space="preserve"><value>プレビューするファイルを選択してください。</value></data>
   <data name="PreviewSingleFileOnly" xml:space="preserve"><value>プレビューするファイルを1つ選択してください。</value></data>
   <data name="PreviewFoldersUnsupported" xml:space="preserve"><value>フォルダのプレビューには対応していません。</value></data>

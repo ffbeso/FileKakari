@@ -245,9 +245,6 @@ Details: {1}</value></data>
   <data name="UserCommandErrorTitle" xml:space="preserve"><value>Command Execution Error</value></data>
   <data name="PreviewTitle" xml:space="preserve"><value>Preview</value></data>
   <data name="PreviewCloseButton" xml:space="preserve"><value>Close preview</value></data>
-  <data name="PreviewMediaPlay" xml:space="preserve"><value>Play</value></data>
-  <data name="PreviewMediaPause" xml:space="preserve"><value>Pause</value></data>
-  <data name="PreviewMediaStop" xml:space="preserve"><value>Stop</value></data>
   <data name="PreviewSelectFile" xml:space="preserve"><value>Select a file to preview.</value></data>
   <data name="PreviewSingleFileOnly" xml:space="preserve"><value>Select one file to preview.</value></data>
   <data name="PreviewFoldersUnsupported" xml:space="preserve"><value>Folder preview is not supported.</value></data>

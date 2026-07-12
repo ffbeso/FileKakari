@@ -1653,49 +1653,7 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center" />
                         </Grid>
-                        <Grid x:Name="PreviewVideoHost"
-                              Margin="8"
-                              ClipToBounds="True"
-                              Opacity="0"
-                              IsHitTestVisible="False"
-                              Visibility="Collapsed">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="*" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <MediaElement x:Name="PreviewMediaElement"
-                                          LoadedBehavior="Manual"
-                                          UnloadedBehavior="Manual"
-                                          IsMuted="False"
-                                          Stretch="Uniform"
-                                          HorizontalAlignment="Stretch"
-                                          VerticalAlignment="Stretch"
-                                          MediaOpened="PreviewMediaElement_MediaOpened"
-                                          MediaEnded="PreviewMediaElement_MediaEnded"
-                                          MediaFailed="PreviewMediaElement_MediaFailed" />
-                            <StackPanel Grid.Row="1"
-                                        Margin="0,8,0,0"
-                                        HorizontalAlignment="Center"
-                                        Orientation="Horizontal">
-                                <Button x:Name="PreviewMediaPlayPauseButton"
-                                        Width="36"
-                                        Height="28"
-                                        Padding="0"
-                                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                        Content="&#xE768;"
-                                        IsEnabled="False"
-                                        Click="PreviewMediaPlayPauseButton_Click" />
-                                <Button x:Name="PreviewMediaStopButton"
-                                        Width="36"
-                                        Height="28"
-                                        Padding="0"
-                                        Margin="6,0,0,0"
-                                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                        Content="&#xE71A;"
-                                        IsEnabled="False"
-                                        Click="PreviewMediaStopButton_Click" />
-                            </StackPanel>
-                        </Grid>
+
                     </Grid>
                 </Grid>
             </Border>

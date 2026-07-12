@@ -283,7 +283,7 @@ public sealed class FilePreviewController
 
         foreach (var provider in _providers)
         {
-            if (provider is BuiltInImagePreviewProvider or BuiltInVideoPreviewProvider or WebViewPreviewProvider
+            if (provider is BuiltInImagePreviewProvider or WebViewPreviewProvider
                 && provider.CanPreview(path))
             {
                 return false;

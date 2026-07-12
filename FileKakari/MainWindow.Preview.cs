@@ -15,7 +15,6 @@ public partial class MainWindow
         new BuiltInTextPreviewProvider(),
         new BuiltInImagePreviewProvider(),
         new WebViewPreviewProvider(),
-        new BuiltInVideoPreviewProvider(),
         new ShellPreviewHandlerProvider()
     });
     private static readonly System.Collections.Generic.HashSet<string> OfficeExtensions = new(System.StringComparer.OrdinalIgnoreCase)
@@ -26,10 +25,6 @@ public partial class MainWindow
     };
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
-    private int _previewMediaGeneration = -1;
-    private Uri? _previewMediaUri;
-    private bool _isPreviewMediaPlaying;
-    private bool _isPreviewMediaVideo;
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
     private int _currentWebViewMediaGeneration = -1;
@@ -475,8 +470,6 @@ public partial class MainWindow
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
-        PreservePreviewMediaFrame();
-        ReleasePreviewMediaForSelectionChange();
 
         if (selectedEntries.Count == 0)
         {
@@ -614,11 +607,7 @@ public partial class MainWindow
                 ReplacePreviewWithWebView(result.FileInfo.FullPath, result.FileInfo, generation);
                 break;
 
-            case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Video && result.FileInfo is not null:
-                PreviewDiagnostics.Info("Preview", $"Provider result kind=\"Video\" path=\"{result.FileInfo.FullPath}\" generation={generation}");
-                LogPreviewUiState("Before Video preview", generation, result.FileInfo.FullPath);
-                ReplacePreviewWithVideo(result.FileInfo.FullPath, generation);
-                break;
+
 
             case FilePreviewStatus.Unsupported when result.FileInfo is not null:
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
@@ -660,7 +649,7 @@ public partial class MainWindow
     {
         PreviewDiagnostics.Verbose(
             "Preview",
-            $"{label} path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} webViewVisibility={PreviewWebView.Visibility} shellHostVisibility={PreviewShellHostContainer.Visibility} textVisibility={PreviewTextBox.Visibility} imageVisibility={PreviewImageScrollViewer.Visibility} videoVisibility={PreviewVideoHost.Visibility} unsupportedVisibility={PreviewUnsupportedCard.Visibility} messageVisibility={PreviewMessageText.Visibility}");
+            $"{label} path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} webViewVisibility={PreviewWebView.Visibility} shellHostVisibility={PreviewShellHostContainer.Visibility} textVisibility={PreviewTextBox.Visibility} imageVisibility={PreviewImageScrollViewer.Visibility} unsupportedVisibility={PreviewUnsupportedCard.Visibility} messageVisibility={PreviewMessageText.Visibility}");
     }
 
     private void ApplyTextPreview(
@@ -731,20 +720,7 @@ public partial class MainWindow
         PreviewImageScrollViewer.Visibility = Visibility.Visible;
     }
 
-    private void ReplacePreviewWithVideo(string path, int generation)
-    {
-        _previewMediaGeneration = generation;
-        _previewMediaUri = new Uri(path, UriKind.Absolute);
-        _isPreviewMediaVideo = IsVideoPreviewPath(path);
-        PreviewVideoHost.Visibility = Visibility.Visible;
-        PreviewVideoHost.Opacity = 0;
-        PreviewVideoHost.IsHitTestVisible = false;
-        PreviewMediaPlayPauseButton.IsEnabled = false;
-        PreviewMediaStopButton.IsEnabled = false;
-        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia();
-        UpdatePreviewMediaPlayState(false);
-        PreviewMediaElement.Source = _previewMediaUri;
-    }
+
 
     private void ReplacePreviewWithMessage(string message)
     {
@@ -1007,167 +983,7 @@ public partial class MainWindow
         return count;
     }
 
-    private void PreviewMediaElement_MediaOpened(object sender, RoutedEventArgs e)
-    {
-        var generation = _previewMediaGeneration;
-        var mediaUri = _previewMediaUri;
-        if (!IsCurrentPreviewMedia(generation, mediaUri))
-        {
-            return;
-        }
 
-        ShowOpenedPreviewMedia(ShouldAutoPlayPreviewMedia());
-    }
-
-    private void PreviewMediaElement_MediaEnded(object sender, RoutedEventArgs e)
-    {
-        var generation = _previewMediaGeneration;
-        var mediaUri = _previewMediaUri;
-        if (!IsCurrentPreviewMedia(generation, mediaUri))
-        {
-            return;
-        }
-
-        PreviewMediaElement.Stop();
-        PreviewMediaElement.Position = TimeSpan.Zero;
-        UpdatePreviewMediaPlayState(false);
-    }
-
-    private void PreviewMediaElement_MediaFailed(object sender, ExceptionRoutedEventArgs e)
-    {
-        var generation = _previewMediaGeneration;
-        var mediaUri = _previewMediaUri;
-
-        PreviewDiagnostics.Error("PreviewMedia", $"Media failed uri=\"{mediaUri}\" reason=\"{e.ErrorException?.Message}\"");
-
-        if (!IsCurrentPreviewMedia(generation, mediaUri))
-        {
-            return;
-        }
-
-        ReplacePreviewWithMessage(_text.Format(
-            "PreviewLoadFailed",
-            e.ErrorException?.Message ?? _text.Get("PreviewUnknownError")));
-    }
-
-    private void PreviewMediaPlayPauseButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_isPreviewMediaPlaying)
-        {
-            PreviewMediaElement.Pause();
-            UpdatePreviewMediaPlayState(false);
-        }
-        else
-        {
-            PreviewMediaElement.IsMuted = false;
-            PreviewMediaElement.Play();
-            UpdatePreviewMediaPlayState(true);
-        }
-
-        FocusActiveFileList();
-    }
-
-    private void PreviewMediaStopButton_Click(object sender, RoutedEventArgs e)
-    {
-        PreviewMediaElement.Stop();
-        PreviewMediaElement.Position = TimeSpan.Zero;
-        UpdatePreviewMediaPlayState(false);
-        FocusActiveFileList();
-    }
-
-    private void ShowOpenedPreviewMedia(bool autoPlay)
-    {
-        PreviewMediaElement.IsMuted = ShouldMutePreviewMedia();
-        if (autoPlay)
-        {
-            PreviewMediaElement.Play();
-        }
-
-        ClearNonVideoPreviewContent();
-        PreviewVideoHost.Opacity = 1;
-        PreviewVideoHost.IsHitTestVisible = true;
-        PreviewMediaPlayPauseButton.IsEnabled = true;
-        PreviewMediaStopButton.IsEnabled = true;
-        UpdatePreviewMediaPlayState(autoPlay);
-    }
-
-    private bool IsCurrentPreviewMedia(int generation, Uri? mediaUri)
-    {
-        return generation == _previewGeneration
-            && generation == _previewMediaGeneration
-            && mediaUri is not null
-            && Equals(mediaUri, _previewMediaUri)
-            && Equals(mediaUri, PreviewMediaElement.Source)
-            && PreviewVideoHost.Visibility == Visibility.Visible;
-    }
-
-    private void UpdatePreviewMediaPlayState(bool isPlaying)
-    {
-        _isPreviewMediaPlaying = isPlaying;
-        PreviewMediaPlayPauseButton.Content = isPlaying ? "\uE769" : "\uE768";
-        PreviewMediaPlayPauseButton.ToolTip = _text.Get(isPlaying ? "PreviewMediaPause" : "PreviewMediaPlay");
-    }
-
-    private void PreservePreviewMediaFrame()
-    {
-        if (PreviewVideoHost.Visibility != Visibility.Visible
-            || PreviewVideoHost.Opacity < 1
-            || PreviewMediaElement.ActualWidth <= 0
-            || PreviewMediaElement.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        var width = Math.Max(1, (int)Math.Ceiling(PreviewMediaElement.ActualWidth));
-        var height = Math.Max(1, (int)Math.Ceiling(PreviewMediaElement.ActualHeight));
-        var frame = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-        frame.Render(PreviewMediaElement);
-        frame.Freeze();
-        PreviewImage.Source = frame;
-        PreviewImageScrollViewer.Visibility = Visibility.Visible;
-    }
-
-    private void ReleasePreviewMediaForSelectionChange()
-    {
-        StopPreviewMedia(clearSource: true);
-        PreviewVideoHost.Visibility = Visibility.Collapsed;
-        PreviewVideoHost.Opacity = 0;
-        PreviewVideoHost.IsHitTestVisible = false;
-    }
-
-    private void StopPreviewMedia(bool clearSource)
-    {
-        if (PreviewMediaElement.Source is not null)
-        {
-            PreviewMediaElement.Stop();
-        }
-
-        if (clearSource)
-        {
-            PreviewMediaElement.Source = null;
-            _previewMediaGeneration = -1;
-            _previewMediaUri = null;
-            _isPreviewMediaVideo = false;
-        }
-
-        PreviewMediaElement.IsMuted = false;
-        PreviewMediaPlayPauseButton.IsEnabled = false;
-        PreviewMediaStopButton.IsEnabled = false;
-        UpdatePreviewMediaPlayState(false);
-    }
-
-    private bool ShouldMutePreviewMedia()
-    {
-        return _isPreviewMediaVideo
-            && _settingsService.Settings.AutoPlayVideoPreview;
-    }
-
-    private bool ShouldAutoPlayPreviewMedia()
-    {
-        return _isPreviewMediaVideo
-            ? _settingsService.Settings.AutoPlayVideoPreview
-            : _settingsService.Settings.AutoPlayAudioPreview == true;
-    }
 
     private static bool IsVideoPreviewPath(string path)
     {
@@ -1180,6 +996,15 @@ public partial class MainWindow
     {
         var extension = Path.GetExtension(path);
         return string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".m4a", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool RequiresCustomMediaHtml(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return string.Equals(extension, ".mp4", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase)
             || string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase)
             || string.Equals(extension, ".m4a", StringComparison.OrdinalIgnoreCase);
     }
@@ -1202,10 +1027,6 @@ public partial class MainWindow
         PreviewTextBox.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;
         PreviewImageScrollViewer.Visibility = Visibility.Collapsed;
-        StopPreviewMedia(clearSource: true);
-        PreviewVideoHost.Visibility = Visibility.Collapsed;
-        PreviewVideoHost.Opacity = 0;
-        PreviewVideoHost.IsHitTestVisible = false;
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
@@ -1228,7 +1049,6 @@ public partial class MainWindow
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
-        StopPreviewMedia(clearSource: true);
     }
 
     private async Task CancelAndClearPreviewAsync(string reason)
@@ -1268,7 +1088,7 @@ public partial class MainWindow
 
         try
         {
-            if (new BuiltInVideoPreviewProvider().CanPreview(path))
+            if (RequiresCustomMediaHtml(path))
             {
                 var originalMediaPath = path;
                 var isVideo = IsVideoPreviewPath(path);
@@ -1389,8 +1209,7 @@ public partial class MainWindow
                 return;
             }
 
-            var videoProvider = new BuiltInVideoPreviewProvider();
-            bool isMedia = videoProvider.CanPreview(path);
+            bool isMedia = RequiresCustomMediaHtml(path);
 
             if (!isMedia && ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {

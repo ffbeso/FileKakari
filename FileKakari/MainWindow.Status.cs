@@ -74,7 +74,7 @@ public partial class MainWindow
         SyncPaneSelectionFromListView(pane, listView);
         if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
         {
-            SchedulePreview(listView.SelectedItems.OfType<FileEntry>().ToList());
+            SchedulePreview(listView.SelectedItems.OfType<FileEntry>().ToList(), "workspace-pane-selection-changed");
         }
     }
 
@@ -164,7 +164,7 @@ public partial class MainWindow
         if (WorkspaceSplitGrid.Visibility != Visibility.Visible
             && InternalPageHost.Visibility != Visibility.Visible)
         {
-            SchedulePreview(ItemsList.SelectedItems.OfType<FileEntry>().ToList());
+            SchedulePreview(ItemsList.SelectedItems.OfType<FileEntry>().ToList(), "normal-pane-selection-changed");
         }
     }
 

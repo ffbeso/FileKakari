@@ -626,7 +626,7 @@ public partial class MainWindow : Window
             await RestoreWorkspaceTabAsync(_activeWorkspaceSession);
             if (IsPreviewPaneActuallyVisible)
             {
-                RefreshPreviewForActiveSelection();
+                RefreshPreviewForActiveSelection("window-activated");
             }
 
             UpdateNavigationButtons();
@@ -4017,7 +4017,7 @@ public partial class MainWindow : Window
                 Math.Max(0, paneGroup.Tabs.Count));
             ApplyWorkspaceSessionToFolderTabs();
             paneGroup.RefreshDisplay();
-            RefreshPreviewForActiveSelection();
+            RefreshPreviewForActiveSelection("active-workspace-pane-changed");
             ScheduleSessionSave("active-pane");
         }
 

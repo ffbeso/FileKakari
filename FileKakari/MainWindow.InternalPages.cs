@@ -142,7 +142,7 @@ public partial class MainWindow
         }
         else
         {
-            RefreshPreviewForActiveSelection();
+            RefreshPreviewForActiveSelection("internal-page-hidden");
         }
     }
 

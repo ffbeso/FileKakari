@@ -2,6 +2,8 @@ namespace FileKakari;
 
 public sealed record PreviewRequest(string FilePath)
 {
+    public string RequestId { get; init; } = "";
+    public string Source { get; init; } = "";
     public byte[]? PreloadedContent { get; init; }
     public string? PreloadedEncoding { get; init; }
     public double TargetWidthDip { get; init; }

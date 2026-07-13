@@ -25,6 +25,8 @@ public partial class MainWindow
     };
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
+    private int _previewRequestSequence;
+    private string _activePreviewRequestId = "";
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
     private int _currentWebViewMediaGeneration = -1;
@@ -37,6 +39,8 @@ public partial class MainWindow
     private GridLength _previewPaneWidth = new(320);
     private bool _isWebViewInitialized;
     private string? _currentWebViewUri;
+    private string _currentWebViewRequestId = "";
+    private string _clearingWebViewRequestId = "";
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _hasRetriedCurrentMhtml;
@@ -202,7 +206,7 @@ public partial class MainWindow
         PreviewPane.Visibility = Visibility.Visible;
         PreviewGridSplitter.Visibility = Visibility.Visible;
         ApplyPreviewPanePlacement(isVisible: true);
-        RefreshPreviewForActiveSelection();
+        RefreshPreviewForActiveSelection("preview-pane-opened");
     }
 
     private void InitializePreviewPaneVisibilityFromSettings()
@@ -449,24 +453,34 @@ public partial class MainWindow
         return fallback;
     }
 
-    private void RefreshPreviewForActiveSelection()
+    private void RefreshPreviewForActiveSelection(string source = "refresh-active-selection")
     {
         if (!IsPreviewPaneActuallyVisible || InternalPageHost.Visibility == Visibility.Visible)
         {
+            PreviewDiagnostics.Info(
+                "Preview",
+                $"RefreshPreviewForActiveSelection skipped source=\"{source}\" visible={IsPreviewPaneActuallyVisible} internalPageVisible={InternalPageHost.Visibility == Visibility.Visible} generation={_previewGeneration}");
             return;
         }
 
-        SchedulePreview(GetSelectedEntries());
+        SchedulePreview(GetSelectedEntries(), source);
     }
 
-    private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries)
+    private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
     {
         if (!IsPreviewPaneActuallyVisible)
         {
+            PreviewDiagnostics.Info("Preview", $"SchedulePreview skipped source=\"{source}\" reason=\"preview-pane-hidden\" generation={_previewGeneration}");
             return;
         }
 
         var generation = Interlocked.Increment(ref _previewGeneration);
+        var requestId = CreatePreviewRequestId(generation);
+        _activePreviewRequestId = requestId;
+        var selectedPath = selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "";
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"SchedulePreview requestId=\"{requestId}\" source=\"{source}\" selectedCount={selectedEntries.Count} path=\"{selectedPath}\" generation={generation} previousGeneration={generation - 1}");
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
@@ -474,12 +488,13 @@ public partial class MainWindow
         if (selectedEntries.Count == 0)
         {
             PreviewLoadingBar.Visibility = Visibility.Collapsed;
-            _ = ShowNoSelectionDelayedAsync(generation);
+            _ = ShowNoSelectionDelayedAsync(generation, requestId, source);
             return;
         }
 
         if (selectedEntries.Count != 1)
         {
+            PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"multi-selection\" selectedCount={selectedEntries.Count} generation={generation}");
             PreviewTitleText.Text = "";
             ReplacePreviewWithMessage(_text.Get("PreviewSingleFileOnly"));
             return;
@@ -489,15 +504,16 @@ public partial class MainWindow
         PreviewTitleText.Text = entry.Name;
         if (entry.IsDirectory)
         {
+            PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"directory\" path=\"{entry.FullPath}\" generation={generation}");
             ReplacePreviewWithMessage(_text.Get("PreviewFoldersUnsupported"));
             return;
         }
 
         _previewCancellation = new CancellationTokenSource();
-        _ = LoadPreviewAsync(entry.FullPath, generation, _previewCancellation.Token);
+        _ = LoadPreviewAsync(entry.FullPath, generation, requestId, source, _previewCancellation.Token);
     }
 
-    private async Task ShowNoSelectionDelayedAsync(int generation)
+    private async Task ShowNoSelectionDelayedAsync(int generation, string requestId, string source)
     {
         await Task.Delay(PreviewLoadDelay);
 
@@ -505,13 +521,16 @@ public partial class MainWindow
             || !IsPreviewPaneActuallyVisible
             || InternalPageHost.Visibility == Visibility.Visible)
         {
+            PreviewDiagnostics.Info(
+                "Preview",
+                $"ShowNoSelectionDelayedAsync skipped requestId=\"{requestId}\" source=\"{source}\" reason=\"state-changed\" requested={generation} current={_previewGeneration} visible={IsPreviewPaneActuallyVisible} internalPageVisible={InternalPageHost.Visibility == Visibility.Visible}");
             return;
         }
 
         var selectedEntries = GetSelectedEntries();
         if (selectedEntries.Count > 0)
         {
-            SchedulePreview(selectedEntries);
+            SchedulePreview(selectedEntries, "show-no-selection-delayed-selection-restored");
             return;
         }
 
@@ -519,10 +538,11 @@ public partial class MainWindow
         ReplacePreviewWithMessage(_text.Get("PreviewSelectFile"));
     }
 
-    private async Task LoadPreviewAsync(string path, int generation, CancellationToken cancellationToken)
+    private async Task LoadPreviewAsync(string path, int generation, string requestId, string requestSource, CancellationToken cancellationToken)
     {
         try
         {
+            PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync start requestId=\"{requestId}\" source=\"{requestSource}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration}");
             PreviewLoadingBar.Visibility = Visibility.Visible;
             await Task.Delay(PreviewLoadDelay, cancellationToken);
 
@@ -554,18 +574,23 @@ public partial class MainWindow
                 scaleX,
                 scaleY,
                 generation,
+                requestId,
+                requestSource,
                 cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
             if (generation != _previewGeneration)
             {
+                PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync skipped result requestId=\"{requestId}\" reason=\"generation-mismatch\" path=\"{path}\" requested={generation} current={_previewGeneration}");
                 return;
             }
 
-            await ShowPreviewResultAsync(result, generation, cancellationToken);
+            await ShowPreviewResultAsync(result, generation, requestId, requestSource, cancellationToken);
+            PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync end requestId=\"{requestId}\" source=\"{requestSource}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
         }
         catch (OperationCanceledException)
         {
+            PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync canceled requestId=\"{requestId}\" source=\"{requestSource}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration}");
         }
         finally
         {
@@ -579,8 +604,13 @@ public partial class MainWindow
     private async Task ShowPreviewResultAsync(
         FilePreviewResult result,
         int generation,
+        string requestId,
+        string source,
         CancellationToken cancellationToken)
     {
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"ShowPreviewResultAsync start requestId=\"{requestId}\" source=\"{source}\" path=\"{result.FileInfo?.FullPath ?? ""}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
         switch (result.Status)
         {
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Text:
@@ -590,6 +620,7 @@ public partial class MainWindow
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Image && result.ImageSource is not null:
                 if (generation != _previewGeneration)
                 {
+                    PreviewDiagnostics.Info("Preview", $"ShowPreviewResultAsync skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" requested={generation} current={_previewGeneration} kind=Image");
                     return;
                 }
 
@@ -597,14 +628,14 @@ public partial class MainWindow
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
-                PreviewDiagnostics.Info("Preview", $"Provider result kind=\"Shell\" path=\"{result.FileInfo?.FullPath ?? ""}\" clsid=\"{result.Clsid.Value:B}\" generation={generation}");
-                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, cancellationToken);
+                PreviewDiagnostics.Info("Preview", $"Provider result requestId=\"{requestId}\" kind=\"Shell\" path=\"{result.FileInfo?.FullPath ?? ""}\" clsid=\"{result.Clsid.Value:B}\" generation={generation}");
+                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, requestId, cancellationToken);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
-                PreviewDiagnostics.Info("Preview", $"Provider result kind=\"WebView\" path=\"{result.FileInfo.FullPath}\" generation={generation}");
+                PreviewDiagnostics.Info("Preview", $"Provider result requestId=\"{requestId}\" kind=\"WebView\" path=\"{result.FileInfo.FullPath}\" generation={generation}");
                 LogPreviewUiState("Before WebView preview", generation, result.FileInfo.FullPath);
-                ReplacePreviewWithWebView(result.FileInfo.FullPath, result.FileInfo, generation);
+                ReplacePreviewWithWebView(result.FileInfo.FullPath, result.FileInfo, generation, requestId);
                 break;
 
 
@@ -643,6 +674,16 @@ public partial class MainWindow
                 ReplacePreviewWithMessage(_text.Format("PreviewLoadFailed", result.ErrorMessage ?? _text.Get("PreviewUnknownError")));
                 break;
         }
+
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"ShowPreviewResultAsync end requestId=\"{requestId}\" source=\"{source}\" path=\"{result.FileInfo?.FullPath ?? ""}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
+    }
+
+    private string CreatePreviewRequestId(int generation)
+    {
+        var sequence = Interlocked.Increment(ref _previewRequestSequence);
+        return $"preview-{sequence}-{generation}";
     }
 
     private void LogPreviewUiState(string label, int generation, string path)
@@ -750,6 +791,7 @@ public partial class MainWindow
         Guid clsid,
         FilePreviewInfo? fileInfo,
         int generation,
+        string requestId,
         CancellationToken cancellationToken)
     {
         const int maxAttempts = 2;
@@ -758,11 +800,11 @@ public partial class MainWindow
         {
             if (generation != _previewGeneration)
             {
-                PreviewDiagnostics.Verbose("PreviewShell", $"ReplacePreviewWithShell skipped reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
+                PreviewDiagnostics.Info("PreviewShell", $"ReplacePreviewWithShell skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation} path=\"{path}\"");
                 return;
             }
 
-            PreviewDiagnostics.Info("PreviewShell", $"Host attach start path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
+            PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create start requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
             ClearPreviewContent();
             ShellPreviewHost? shellHost = null;
             try
@@ -771,17 +813,17 @@ public partial class MainWindow
                 var initializationPreference = attempt == 1
                     ? ShellPreviewInitializationPreference.Default
                     : ShellPreviewInitializationPreference.FileFirst;
-                shellHost = new ShellPreviewHost(path, clsid, initializationPreference);
+                shellHost = new ShellPreviewHost(path, clsid, requestId, initializationPreference);
 
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;
-                PreviewDiagnostics.Info("PreviewShell", $"Host attached path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
+                PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create complete requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
                 return;
             }
             catch (Exception ex)
             {
-                PreviewDiagnostics.Error("PreviewShell", $"Host attach failed path=\"{path}\" clsid=\"{clsid:B}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" attempt={attempt}");
+                PreviewDiagnostics.Error("PreviewShell", $"ShellPreviewHost create failed requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" attempt={attempt}");
                 if (shellHost is not null && !ReferenceEquals(PreviewShellHostContainer.Child, shellHost))
                 {
                     try
@@ -790,20 +832,20 @@ public partial class MainWindow
                     }
                     catch (Exception disposeEx)
                     {
-                        PreviewDiagnostics.Error("PreviewShell", $"Local host dispose failed reason=\"{disposeEx.Message}\"");
+                        PreviewDiagnostics.Error("PreviewShell", $"Local host dispose failed requestId=\"{requestId}\" reason=\"{disposeEx.Message}\"");
                     }
                 }
                 ClearShellPreviewHost();
 
                 if (ShouldRetryShellPreview(clsid, ex) && attempt < maxAttempts)
                 {
-                    PreviewDiagnostics.Info("PreviewShell", $"Retry scheduled path=\"{path}\" clsid=\"{clsid:B}\" delayMs=150");
+                    PreviewDiagnostics.Info("PreviewShell", $"Retry scheduled requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" delayMs=150");
                     await Task.Delay(150, cancellationToken);
                     continue;
                 }
 
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback reason=\"shell-host-failed\" path=\"{path}\" clsid=\"{clsid:B}\"");
-                await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, cancellationToken, ex);
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback requestId=\"{requestId}\" reason=\"shell-host-failed\" path=\"{path}\" clsid=\"{clsid:B}\"");
+                await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, requestId, cancellationToken, ex);
                 return;
             }
         }
@@ -830,6 +872,7 @@ public partial class MainWindow
         string path,
         FilePreviewInfo? fileInfo,
         int generation,
+        string requestId,
         CancellationToken cancellationToken,
         Exception shellException)
     {
@@ -838,14 +881,14 @@ public partial class MainWindow
 
         if (isOffice)
         {
-            PreviewDiagnostics.Info("PreviewShell", $"Office fallback path=\"{path}\" reason=\"possible-protected-view-or-mark-of-the-web\"");
+            PreviewDiagnostics.Info("PreviewShell", $"Office fallback requestId=\"{requestId}\" path=\"{path}\" reason=\"possible-protected-view-or-mark-of-the-web\"");
         }
         else
         {
             var textProvider = new BuiltInTextPreviewProvider();
             if (!textProvider.CanPreview(path))
             {
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback skipped path=\"{path}\" ext=\"{ext}\" reason=\"not-text-preview-type\"");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback skipped requestId=\"{requestId}\" path=\"{path}\" ext=\"{ext}\" reason=\"not-text-preview-type\"");
                 if (fileInfo is not null)
                 {
                     ReplacePreviewWithUnsupportedInfo(fileInfo);
@@ -855,13 +898,13 @@ public partial class MainWindow
 
             try
             {
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback to provider=\"BuiltInTextPreviewProvider\" path=\"{path}\" ext=\"{ext}\"");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback to provider=\"BuiltInTextPreviewProvider\" requestId=\"{requestId}\" path=\"{path}\" ext=\"{ext}\"");
                 var result = await textProvider
-                    .CreatePreviewAsync(new PreviewRequest(path), cancellationToken);
+                    .CreatePreviewAsync(new PreviewRequest(path) { RequestId = requestId, Source = "shell-fallback", Generation = generation }, cancellationToken);
 
                 if (generation != _previewGeneration)
                 {
-                    PreviewDiagnostics.Verbose("PreviewShell", $"Fallback skipped reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
+                    PreviewDiagnostics.Info("PreviewShell", $"Fallback skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
                     return;
                 }
 
@@ -877,16 +920,16 @@ public partial class MainWindow
 
                 if (result.Status == FilePreviewStatus.Success && result.Kind == FilePreviewKind.Text)
                 {
-                    PreviewDiagnostics.Info("PreviewShell", $"Fallback selected provider=\"BuiltInTextPreviewProvider\" path=\"{path}\"");
+                    PreviewDiagnostics.Info("PreviewShell", $"Fallback selected provider=\"BuiltInTextPreviewProvider\" requestId=\"{requestId}\" path=\"{path}\"");
                     ApplyTextPreview(result, generation, cancellationToken, "ShellFallbackBuiltInTextPreviewProvider");
                     return;
                 }
 
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback provider result status={result.Status} kind={result.Kind} path=\"{path}\"");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback provider result requestId=\"{requestId}\" status={result.Status} kind={result.Kind} path=\"{path}\"");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
-                PreviewDiagnostics.Error("PreviewShell", $"Fallback provider failed HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" path=\"{path}\"");
+                PreviewDiagnostics.Error("PreviewShell", $"Fallback provider failed requestId=\"{requestId}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" path=\"{path}\"");
             }
         }
 
@@ -894,7 +937,7 @@ public partial class MainWindow
         {
             if (isOffice)
             {
-                PreviewDiagnostics.Info("PreviewShell", "Fallback display=\"office-protected-view-message\"");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback display=\"office-protected-view-message\" requestId=\"{requestId}\"");
                 ReplacePreviewWithUnsupportedInfo(
                     fileInfo,
                     _text.Get("PreviewOfficeFailedTitle"),
@@ -902,7 +945,7 @@ public partial class MainWindow
             }
             else
             {
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback display=\"unsupported-metadata-card\" shellHResult=0x{shellException.HResult:X8}");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback display=\"unsupported-metadata-card\" requestId=\"{requestId}\" shellHResult=0x{shellException.HResult:X8}");
                 ReplacePreviewWithUnsupportedInfo(fileInfo);
             }
         }
@@ -915,7 +958,7 @@ public partial class MainWindow
             }
             else
             {
-                PreviewDiagnostics.Info("PreviewShell", $"Fallback display=\"generic-unsupported-message\" shellHResult=0x{shellException.HResult:X8}");
+                PreviewDiagnostics.Info("PreviewShell", $"Fallback display=\"generic-unsupported-message\" requestId=\"{requestId}\" shellHResult=0x{shellException.HResult:X8}");
                 ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
             }
         }
@@ -1011,6 +1054,7 @@ public partial class MainWindow
 
     private void ClearNonVideoPreviewContent()
     {
+        PreviewDiagnostics.Info("Preview", $"ClearNonVideoPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration}");
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;
@@ -1023,6 +1067,7 @@ public partial class MainWindow
 
     private void ClearPreviewContent(bool keepWebView = false)
     {
+        PreviewDiagnostics.Info("Preview", $"ClearPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration} keepWebView={keepWebView}");
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;
@@ -1045,7 +1090,9 @@ public partial class MainWindow
 
     private void CancelPreviewLoad()
     {
-        Interlocked.Increment(ref _previewGeneration);
+        var previousGeneration = _previewGeneration;
+        var generation = Interlocked.Increment(ref _previewGeneration);
+        PreviewDiagnostics.Info("Preview", $"CancelPreviewLoad requestId=\"{_activePreviewRequestId}\" previousGeneration={previousGeneration} generation={generation}");
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
@@ -1053,9 +1100,11 @@ public partial class MainWindow
 
     private async Task CancelAndClearPreviewAsync(string reason)
     {
+        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync start requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" generation={_previewGeneration}");
         CancelPreviewLoad();
         ClearPreviewContent(keepWebView: true);
         await ClearWebViewAsync(reason);
+        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync end requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" generation={_previewGeneration}");
     }
 
     private static string FormatPreviewSize(long bytes)
@@ -1079,9 +1128,9 @@ public partial class MainWindow
         return unit == 0 ? $"{bytes:N0} B" : $"{value:N1} {units[unit]}";
     }
 
-    private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation)
+    private async void ReplacePreviewWithWebView(string path, FilePreviewInfo fileInfo, int generation, string requestId)
     {
-        PreviewDiagnostics.Info("PreviewWebView", $"Navigation preparing path=\"{path}\" generation={generation}");
+        PreviewDiagnostics.Info("PreviewWebView", $"Navigation preparing requestId=\"{requestId}\" path=\"{path}\" generation={generation}");
         LogPreviewUiState("WebView before clear", generation, path);
         ClearPreviewContent(keepWebView: true);
         LogPreviewUiState("WebView after clear", generation, path);
@@ -1155,7 +1204,7 @@ public partial class MainWindow
 
             if (generation != _previewGeneration)
             {
-                PreviewDiagnostics.Verbose("PreviewWebView", $"Navigate skipped reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
+                PreviewDiagnostics.Info("PreviewWebView", $"Navigate skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
                 return;
             }
 
@@ -1165,6 +1214,7 @@ public partial class MainWindow
             }
 
             _webViewNavigationGeneration = generation;
+            _currentWebViewRequestId = requestId;
             _currentWebViewFileInfo = fileInfo;
             _hasRetriedCurrentMhtml = false;
 
@@ -1180,7 +1230,7 @@ public partial class MainWindow
                     await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
                     if (generation != _previewGeneration)
                     {
-                        PreviewDiagnostics.Verbose("PreviewWebView", $"Navigate skipped after delay reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
+                        PreviewDiagnostics.Info("PreviewWebView", $"Navigate skipped after delay requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
                         return;
                     }
                 }
@@ -1193,19 +1243,19 @@ public partial class MainWindow
 
             var absoluteUri = new Uri(path).AbsoluteUri;
             _currentWebViewUri = absoluteUri; // Track target URI before navigating
-            PreviewDiagnostics.Info("PreviewWebView", $"Navigation started uri=\"{absoluteUri}\" generation={generation}");
+            PreviewDiagnostics.Info("PreviewWebView", $"Navigation started requestId=\"{requestId}\" uri=\"{absoluteUri}\" generation={generation}");
             PreviewWebView.CoreWebView2.Navigate(absoluteUri);
         }
         catch (Exception ex)
         {
-            PreviewDiagnostics.Error("PreviewWebView", $"Navigation failed reason=\"{ex.Message}\"");
+            PreviewDiagnostics.Error("PreviewWebView", $"Navigation failed requestId=\"{requestId}\" reason=\"{ex.Message}\"");
 
             _ = ClearWebViewAsync("navigation-failed");
             LogPreviewUiState("WebView after initialization failure clear", generation, path);
 
             if (generation != _previewGeneration)
             {
-                PreviewDiagnostics.Verbose("PreviewWebView", $"Fallback skipped reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
+                PreviewDiagnostics.Info("PreviewWebView", $"Fallback skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation}");
                 return;
             }
 
@@ -1213,12 +1263,12 @@ public partial class MainWindow
 
             if (!isMedia && ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
-                PreviewDiagnostics.Info("PreviewWebView", $"Fallback to provider=\"ShellPreviewHandlerProvider\" reason=\"{ex.Message}\" path=\"{path}\"");
-                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation, CancellationToken.None);
+                PreviewDiagnostics.Info("PreviewWebView", $"Fallback to provider=\"ShellPreviewHandlerProvider\" requestId=\"{requestId}\" reason=\"{ex.Message}\" path=\"{path}\"");
+                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation, requestId, CancellationToken.None);
             }
             else
             {
-                PreviewDiagnostics.Info("PreviewWebView", $"Fallback to unsupported reason=\"{ex.Message}\" path=\"{path}\" isMedia={isMedia}");
+                PreviewDiagnostics.Info("PreviewWebView", $"Fallback to unsupported requestId=\"{requestId}\" reason=\"{ex.Message}\" path=\"{path}\" isMedia={isMedia}");
                 ReplacePreviewWithUnsupportedInfo(fileInfo);
             }
         }
@@ -1284,7 +1334,7 @@ public partial class MainWindow
             allowed = string.Equals(uri, _currentWebViewUri, StringComparison.OrdinalIgnoreCase);
         }
 
-        PreviewDiagnostics.Verbose("PreviewWebView", $"NavigationStarting uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri ?? ""}\" allowed={allowed} generation={_previewGeneration}");
+        PreviewDiagnostics.Info("PreviewWebView", $"NavigationStarting requestId=\"{_currentWebViewRequestId}\" uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri ?? ""}\" allowed={allowed} generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration}");
 
         if (allowed)
         {
@@ -1293,7 +1343,7 @@ public partial class MainWindow
 
         // Block all document redirections, link clicks or page jumps
         e.Cancel = e.Cancel || true;
-        PreviewDiagnostics.Info("PreviewWebView", $"Navigation blocked reason=\"external-navigation-or-redirection\" uri=\"{uri}\"");
+        PreviewDiagnostics.Info("PreviewWebView", $"Navigation blocked requestId=\"{_currentWebViewRequestId}\" reason=\"external-navigation-or-redirection\" uri=\"{uri}\"");
     }
 
     private void CoreWebView2_NewWindowRequested(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NewWindowRequestedEventArgs e)
@@ -1313,7 +1363,12 @@ public partial class MainWindow
         var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
         if (string.Equals(currentUri, "about:blank", StringComparison.OrdinalIgnoreCase))
         {
+            var completedRequestId = string.IsNullOrEmpty(_currentWebViewRequestId)
+                ? _clearingWebViewRequestId
+                : _currentWebViewRequestId;
             _isClearingWebView = false;
+            PreviewDiagnostics.Info("PreviewWebView", $"NavigationCompleted requestId=\"{completedRequestId}\" uri=\"{currentUri}\" reason=\"about-blank-clear\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration}");
+            _clearingWebViewRequestId = "";
             // Do not show for blank page transitions (like ClearWebView)
             return;
         }
@@ -1321,7 +1376,7 @@ public partial class MainWindow
         var completedGen = _webViewNavigationGeneration;
         if (completedGen != _previewGeneration)
         {
-            PreviewDiagnostics.Verbose("PreviewWebView", $"NavigationCompleted ignored reason=\"generation-mismatch\" current={_previewGeneration} completed={completedGen}");
+            PreviewDiagnostics.Info("PreviewWebView", $"NavigationCompleted ignored requestId=\"{_currentWebViewRequestId}\" reason=\"generation-mismatch\" current={_previewGeneration} completed={completedGen} uri=\"{currentUri}\"");
             return;
         }
 
@@ -1334,7 +1389,7 @@ public partial class MainWindow
 
         if (e.IsSuccess || isMediaOrAudio)
         {
-            PreviewDiagnostics.Verbose("PreviewWebView", $"NavigationCompleted uri=\"{currentUri}\" success={e.IsSuccess} isMediaOrAudio={isMediaOrAudio} generation={completedGen}");
+            PreviewDiagnostics.Info("PreviewWebView", $"NavigationCompleted requestId=\"{_currentWebViewRequestId}\" uri=\"{currentUri}\" success={e.IsSuccess} isMediaOrAudio={isMediaOrAudio} generation={completedGen}");
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Visible reason=\"Navigation completed\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
 
@@ -1345,7 +1400,7 @@ public partial class MainWindow
         }
         else
         {
-            PreviewDiagnostics.Error("PreviewWebView", $"Navigation failed uri=\"{currentUri}\" webErrorStatus={e.WebErrorStatus} generation={completedGen}");
+            PreviewDiagnostics.Error("PreviewWebView", $"Navigation failed requestId=\"{_currentWebViewRequestId}\" uri=\"{currentUri}\" webErrorStatus={e.WebErrorStatus} generation={completedGen}");
 
             bool isMhtml = string.Equals(ext, ".mht", StringComparison.OrdinalIgnoreCase) ||
                            string.Equals(ext, ".mhtml", StringComparison.OrdinalIgnoreCase);
@@ -1353,7 +1408,7 @@ public partial class MainWindow
             if (isMhtml && !_hasRetriedCurrentMhtml && completedGen == _previewGeneration)
             {
                 _hasRetriedCurrentMhtml = true;
-                PreviewDiagnostics.Info("PreviewWebView", $"Navigation retry uri=\"{currentUri}\" reason=\"mhtml-first-load-failed\" generation={completedGen}");
+                PreviewDiagnostics.Info("PreviewWebView", $"Navigation retry requestId=\"{_currentWebViewRequestId}\" uri=\"{currentUri}\" reason=\"mhtml-first-load-failed\" generation={completedGen}");
                 PreviewWebView.CoreWebView2.Navigate(currentUri);
             }
             else
@@ -1372,6 +1427,9 @@ public partial class MainWindow
 
     private async Task ClearWebViewAsync(string reason)
     {
+        var requestId = _currentWebViewRequestId;
+        _clearingWebViewRequestId = requestId;
+        PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync start requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration} initialized={_isWebViewInitialized}");
         if (!_isWebViewInitialized || PreviewWebView.CoreWebView2 == null)
         {
             try
@@ -1383,11 +1441,13 @@ public partial class MainWindow
                 PreviewDiagnostics.Error("PreviewMedia", $"Temporary media HTML delete failed reason=\"{ex.Message}\"");
             }
             _currentWebViewUri = null;
+            _currentWebViewRequestId = "";
             _currentWebViewFileInfo = null;
             _currentWebViewMediaGeneration = -1;
             _currentWebViewMediaType = "";
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
             PreviewWebView.Visibility = Visibility.Collapsed;
+            PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync end requestId=\"{requestId}\" reason=\"{reason}\" mode=\"not-initialized\" generation={_previewGeneration}");
             return;
         }
 
@@ -1440,6 +1500,7 @@ public partial class MainWindow
         }
 
         _currentWebViewUri = null;
+        _currentWebViewRequestId = "";
         _currentWebViewFileInfo = null;
         _currentWebViewMediaGeneration = -1;
         _currentWebViewMediaType = "";
@@ -1466,6 +1527,7 @@ public partial class MainWindow
 
         PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
         PreviewWebView.Visibility = Visibility.Collapsed;
+        PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync end requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={activeGen}");
     }
 
     private void ClearWebViewForShutdown()

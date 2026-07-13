@@ -23,11 +23,13 @@ public sealed class FilePreviewController
         double dpiScaleX,
         double dpiScaleY,
         int generation,
+        string requestId,
+        string source,
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         var extension = Path.GetExtension(path);
-        PreviewDiagnostics.Info("Preview", $"Preview request path=\"{path}\" ext=\"{extension}\"");
+        PreviewDiagnostics.Info("Preview", $"FilePreviewController.LoadAsync start requestId=\"{requestId}\" source=\"{source}\" path=\"{path}\" ext=\"{extension}\" generation={generation}");
 
         var routing = await CreateRoutingContextAsync(
             path,
@@ -37,6 +39,8 @@ public sealed class FilePreviewController
             dpiScaleX,
             dpiScaleY,
             generation,
+            requestId,
+            source,
             cancellationToken).ConfigureAwait(false);
 
         if (!routing.ForceBuiltInText && ShouldTryShellFirst(path))
@@ -44,6 +48,7 @@ public sealed class FilePreviewController
             var shellResult = await TryLoadShellPreviewAsync(routing.Request, cancellationToken, stopwatch).ConfigureAwait(false);
             if (shellResult is not null)
             {
+                PreviewDiagnostics.Info("Preview", $"FilePreviewController.LoadAsync end requestId=\"{requestId}\" path=\"{path}\" providerPath=\"shell-first\" kind={shellResult.Kind} status={shellResult.Status} elapsedMs={stopwatch.ElapsedMilliseconds}");
                 return shellResult;
             }
         }
@@ -57,10 +62,13 @@ public sealed class FilePreviewController
             stopwatch).ConfigureAwait(false);
         if (providerResult is not null)
         {
+            PreviewDiagnostics.Info("Preview", $"FilePreviewController.LoadAsync end requestId=\"{requestId}\" path=\"{path}\" providerPath=\"normal-provider-order\" kind={providerResult.Kind} status={providerResult.Status} elapsedMs={stopwatch.ElapsedMilliseconds}");
             return providerResult;
         }
 
-        return await CreateUnsupportedFallbackAsync(path, extension, stopwatch).ConfigureAwait(false);
+        var fallbackResult = await CreateUnsupportedFallbackAsync(path, extension, stopwatch).ConfigureAwait(false);
+        PreviewDiagnostics.Info("Preview", $"FilePreviewController.LoadAsync end requestId=\"{requestId}\" path=\"{path}\" providerPath=\"unsupported-fallback\" kind={fallbackResult.Kind} status={fallbackResult.Status} elapsedMs={stopwatch.ElapsedMilliseconds}");
+        return fallbackResult;
     }
 
     private async Task<PreviewRoutingContext> CreateRoutingContextAsync(
@@ -71,10 +79,14 @@ public sealed class FilePreviewController
         double dpiScaleX,
         double dpiScaleY,
         int generation,
+        string requestId,
+        string source,
         CancellationToken cancellationToken)
     {
         var request = new PreviewRequest(path)
         {
+            RequestId = requestId,
+            Source = source,
             TargetWidthDip = targetWidthDip,
             TargetHeightDip = targetHeightDip,
             DpiScaleX = dpiScaleX,
@@ -100,6 +112,8 @@ public sealed class FilePreviewController
             var encodingName = BuiltInTextPreviewProvider.DetectEncodingName(preloaded, path, extension);
             request = new PreviewRequest(path)
             {
+                RequestId = requestId,
+                Source = source,
                 PreloadedContent = readLen == fileInfo.Length ? preloaded : null,
                 PreloadedEncoding = encodingName,
                 TargetWidthDip = targetWidthDip,
@@ -164,7 +178,7 @@ public sealed class FilePreviewController
                 }
 
                 stopwatch.Stop();
-                PreviewDiagnostics.Info("Preview", $"Provider selected path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
+                PreviewDiagnostics.Info("Preview", $"Provider selected requestId=\"{request.RequestId}\" source=\"{request.Source}\" path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
                 return result;
             }
         }
@@ -219,14 +233,14 @@ public sealed class FilePreviewController
             PreviewDiagnostics.Info("PreviewRouting", "Markdown checking shell preview handler ext=\".md\"");
         }
 
-        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first lookup path=\"{request.FilePath}\" ext=\"{ext}\"");
+        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first lookup requestId=\"{request.RequestId}\" source=\"{request.Source}\" path=\"{request.FilePath}\" ext=\"{ext}\"");
         if (!ShellPreviewHandlerRegistry.TryGetPreviewHandler(request.FilePath, out var registration))
         {
             if (IsMarkdown(request.FilePath))
             {
                 PreviewDiagnostics.Info("PreviewRouting", "Markdown shell handler not found; fallback=\"BuiltInTextPreviewProvider\"");
             }
-            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first handler not found path=\"{request.FilePath}\" ext=\"{ext}\"");
+            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first handler not found requestId=\"{request.RequestId}\" path=\"{request.FilePath}\" ext=\"{ext}\" fallback=\"normal-provider-order\"");
             return null;
         }
 
@@ -237,7 +251,7 @@ public sealed class FilePreviewController
 
         PreviewDiagnostics.Info(
             "PreviewRouting",
-            $"Shell-first handler found path=\"{request.FilePath}\" ext=\"{ext}\" clsid=\"{registration.Clsid:B}\" description=\"{registration.ClsidDescription ?? ""}\" sourceKind=\"{registration.SourceKind}\"");
+            $"Shell-first handler found requestId=\"{request.RequestId}\" path=\"{request.FilePath}\" ext=\"{ext}\" clsid=\"{registration.Clsid:B}\" description=\"{registration.ClsidDescription ?? ""}\" sourceKind=\"{registration.SourceKind}\"");
         foreach (var provider in _providers)
         {
             if (provider is not ShellPreviewHandlerProvider)
@@ -253,7 +267,7 @@ public sealed class FilePreviewController
                     PreviewDiagnostics.Info("PreviewRouting", "Markdown selected provider=\"ShellPreviewHandlerProvider\"");
                 }
                 stopwatch.Stop();
-                PreviewDiagnostics.Info("Preview", $"Provider selected path=\"{request.FilePath}\" ext=\"{ext}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
+                PreviewDiagnostics.Info("Preview", $"Provider selected requestId=\"{request.RequestId}\" source=\"{request.Source}\" path=\"{request.FilePath}\" ext=\"{ext}\" provider=\"{provider.GetType().Name}\" kind={result.Kind} status={result.Status} fallback=false elapsedMs={stopwatch.ElapsedMilliseconds}");
                 return result;
             }
 
@@ -261,7 +275,7 @@ public sealed class FilePreviewController
             {
                 PreviewDiagnostics.Info("PreviewRouting", $"Markdown shell provider returned status={result.Status} kind={result.Kind}; fallback=\"BuiltInTextPreviewProvider\"");
             }
-            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider returned status={result.Status} kind={result.Kind}; fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
+            PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider returned requestId=\"{request.RequestId}\" status={result.Status} kind={result.Kind}; fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
             return null;
         }
 
@@ -269,7 +283,7 @@ public sealed class FilePreviewController
         {
             PreviewDiagnostics.Info("PreviewRouting", "Markdown shell provider unavailable; fallback=\"BuiltInTextPreviewProvider\"");
         }
-        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider unavailable; fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
+        PreviewDiagnostics.Info("PreviewRouting", $"Shell-first provider unavailable requestId=\"{request.RequestId}\" fallback=\"normal-provider-order\" path=\"{request.FilePath}\"");
         return null;
     }
 

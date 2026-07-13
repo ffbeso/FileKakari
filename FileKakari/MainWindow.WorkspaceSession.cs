@@ -261,7 +261,7 @@ public partial class MainWindow
         paneGroup.RefreshDisplay();
         RefreshWorkspaceDisplayPanes();
         UpdateWindowTitle();
-        RefreshPreviewForActiveSelection();
+        RefreshPreviewForActiveSelection("workspace-session-ui-applied");
     }
 
     private void EnsureWorkspacePaneHasFallbackTab(WorkspacePaneGroup paneGroup)
@@ -2655,7 +2655,7 @@ public partial class MainWindow
         UpdateWorkspacePaneActiveStates();
         UpdateFolderWatchForWorkspacePanes();
         ApplyColumnSettingsToWorkspacePane(pane);
-        RefreshPreviewForActiveSelection();
+        RefreshPreviewForActiveSelection("workspace-subtab-close-active");
         ScheduleSessionSave("subtab-close-active");
     }
 
@@ -2682,7 +2682,7 @@ public partial class MainWindow
         await LoadFolderPaneItemsAsync(pane, restoreTrigger: "subtab-selection-changed");
         UpdateFolderWatchForWorkspacePanes();
         ApplyColumnSettingsToWorkspacePane(pane);
-        RefreshPreviewForActiveSelection();
+        RefreshPreviewForActiveSelection("workspace-subtab-close-inactive");
         ScheduleSessionSave("subtab-close-inactive");
     }
 }

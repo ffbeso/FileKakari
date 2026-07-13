@@ -21,6 +21,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     private readonly string _filePath;
     private readonly Guid _clsid;
+    private readonly string _requestId;
     private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
     private readonly bool _isMarkdownPreview;
@@ -68,16 +69,18 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     public ShellPreviewHost(
         string filePath,
         Guid clsid,
+        string requestId,
         ShellPreviewInitializationPreference initializationPreference = ShellPreviewInitializationPreference.Default)
     {
         _filePath = filePath;
         _clsid = clsid;
+        _requestId = requestId;
         _initializationPreference = initializationPreference;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == MonacoPreviewHandlerClsid ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
-        LogDiag($"Begin constructor: path='{_filePath}', clsid='{_clsid:B}', initializationPreference='{_initializationPreference}'");
+        LogInfo($"ShellPreviewHost constructor start requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" initializationPreference=\"{_initializationPreference}\"");
 
         try
         {
@@ -312,11 +315,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 throw exception;
             }
 
-            LogInfo($"Ready handler=\"{description}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" initialize=\"{_initializationMethod}\"");
+            LogInfo($"ShellPreviewHost constructor complete requestId=\"{_requestId}\" handler=\"{description}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" initialize=\"{_initializationMethod}\"");
         }
         catch (Exception ex)
         {
-            LogError($"Initialization failed clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
+            LogError($"ShellPreviewHost constructor failed requestId=\"{_requestId}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
             DisposePreviewHandler();
             throw;
         }
@@ -681,12 +684,12 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         if (_previewHandler is not null)
         {
-            LogDiag("DisposePreviewHandler starting...");
+            LogInfo($"DisposePreviewHandler start requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\"");
             try
             {
                 LogDiag("Invoking IPreviewHandler.Unload...");
                 var unloadHr = _previewHandler.Unload();
-                LogDiag($"IPreviewHandler.Unload HRESULT=0x{unloadHr:X8}");
+                LogInfo($"IPreviewHandler.Unload requestId=\"{_requestId}\" HRESULT=0x{unloadHr:X8}");
                 if (unloadHr < 0)
                 {
                     LogError($"Unload failed clsid=\"{_clsid:B}\" HRESULT=0x{unloadHr:X8}");
@@ -700,7 +703,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             {
                 var refCount = Marshal.ReleaseComObject(_previewHandler);
                 _previewHandler = null;
-                LogDiag($"ReleaseComObject done. Remaining RefCount={refCount}");
+                LogInfo($"DisposePreviewHandler complete requestId=\"{_requestId}\" remainingRefCount={refCount}");
             }
         }
 
@@ -761,7 +764,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     protected override void Dispose(bool disposing)
     {
-        LogDiag($"Dispose called: disposing={disposing}, _isDisposed={_isDisposed}");
+        LogInfo($"ShellPreviewHost Dispose requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" disposing={disposing} isDisposed={_isDisposed}");
         if (!_isDisposed)
         {
             if (disposing)

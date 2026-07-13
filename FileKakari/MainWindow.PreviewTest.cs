@@ -99,6 +99,7 @@ public partial class MainWindow
                     monacoClsid,
                     null,
                     _previewGeneration,
+                    "auto-test",
                     CancellationToken.None);
             });
             await Task.Delay(1500);

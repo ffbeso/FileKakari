@@ -27,6 +27,7 @@ public partial class MainWindow
     private int _previewGeneration;
     private int _previewRequestSequence;
     private string _activePreviewRequestId = "";
+    private string? _currentPreviewPath;
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
     private int _currentWebViewMediaGeneration = -1;
@@ -487,6 +488,7 @@ public partial class MainWindow
 
         if (selectedEntries.Count == 0)
         {
+            _currentPreviewPath = null;
             PreviewLoadingBar.Visibility = Visibility.Collapsed;
             _ = ShowNoSelectionDelayedAsync(generation, requestId, source);
             return;
@@ -494,6 +496,7 @@ public partial class MainWindow
 
         if (selectedEntries.Count != 1)
         {
+            _currentPreviewPath = null;
             PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"multi-selection\" selectedCount={selectedEntries.Count} generation={generation}");
             PreviewTitleText.Text = "";
             ReplacePreviewWithMessage(_text.Get("PreviewSingleFileOnly"));
@@ -504,11 +507,13 @@ public partial class MainWindow
         PreviewTitleText.Text = entry.Name;
         if (entry.IsDirectory)
         {
+            _currentPreviewPath = null;
             PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"directory\" path=\"{entry.FullPath}\" generation={generation}");
             ReplacePreviewWithMessage(_text.Get("PreviewFoldersUnsupported"));
             return;
         }
 
+        _currentPreviewPath = entry.FullPath;
         _previewCancellation = new CancellationTokenSource();
         _ = LoadPreviewAsync(entry.FullPath, generation, requestId, source, _previewCancellation.Token);
     }
@@ -964,7 +969,7 @@ public partial class MainWindow
         }
     }
 
-    private void ClearShellPreviewHost()
+    private void ClearShellPreviewHost(bool failOnDisposeFailure = false)
     {
         if (PreviewShellHostContainer.Child is ShellPreviewHost host)
         {
@@ -977,6 +982,10 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 PreviewDiagnostics.Error("PreviewShell", $"ClearShellPreviewHost dispose failed reason=\"{ex.Message}\"");
+                if (failOnDisposeFailure)
+                {
+                    throw;
+                }
             }
         }
 
@@ -1065,7 +1074,7 @@ public partial class MainWindow
         _ = ClearWebViewAsync("clear-non-video-content");
     }
 
-    private void ClearPreviewContent(bool keepWebView = false)
+    private void ClearPreviewContent(bool keepWebView = false, bool failOnShellHostDisposeFailure = false)
     {
         PreviewDiagnostics.Info("Preview", $"ClearPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration} keepWebView={keepWebView}");
         PreviewTextBox.Text = "";
@@ -1075,7 +1084,7 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
-        ClearShellPreviewHost();
+        ClearShellPreviewHost(failOnShellHostDisposeFailure);
         if (!keepWebView)
         {
             _ = ClearWebViewAsync("preview-type-changed");
@@ -1098,13 +1107,15 @@ public partial class MainWindow
         _previewCancellation = null;
     }
 
-    private async Task CancelAndClearPreviewAsync(string reason)
+    private async Task CancelAndClearPreviewAsync(string reason, bool failOnShellHostDisposeFailure = false)
     {
-        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync start requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" generation={_previewGeneration}");
+        var path = _currentPreviewPath ?? "";
+        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync start requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" path=\"{path}\" generation={_previewGeneration}");
         CancelPreviewLoad();
-        ClearPreviewContent(keepWebView: true);
+        ClearPreviewContent(keepWebView: true, failOnShellHostDisposeFailure);
         await ClearWebViewAsync(reason);
-        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync end requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" generation={_previewGeneration}");
+        _currentPreviewPath = null;
+        PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync end requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" path=\"{path}\" generation={_previewGeneration}");
     }
 
     private static string FormatPreviewSize(long bytes)

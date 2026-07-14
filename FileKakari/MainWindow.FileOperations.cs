@@ -366,16 +366,17 @@ public partial class MainWindow
             return;
         }
 
+        var deleteTargetPaths = selectedEntries.Select(entry => entry.FullPath).ToList();
         _isFileOperationInProgress = true;
         try
         {
             var deletedCount = selectedEntries.Count;
             var paneItems = GetPaneItems(context.Pane);
+            await ReleasePreviewForDeleteTargetsAsync(deleteTargetPaths);
             if (selectedEntries.Count > 1)
             {
                 var hwnd = new WindowInteropHelper(this).Handle;
-                var sourcePaths = selectedEntries.Select(entry => entry.FullPath).ToList();
-                var (errorCode, userAborted) = await _fileOperationService.DeleteMultipleAsync(hwnd, sourcePaths);
+                var (errorCode, userAborted) = await _fileOperationService.DeleteMultipleAsync(hwnd, deleteTargetPaths);
                 if (userAborted)
                 {
                     return;
@@ -448,6 +449,44 @@ public partial class MainWindow
             tab,
             tab.Navigation.CurrentPath,
             GetSelectedEntries(pane));
+    }
+
+    private async Task ReleasePreviewForDeleteTargetsAsync(IReadOnlyList<string> deleteTargetPaths)
+    {
+        var previewPath = _currentPreviewPath;
+        if (string.IsNullOrEmpty(previewPath))
+        {
+            return;
+        }
+
+        var matchedPath = deleteTargetPaths.FirstOrDefault(
+            path => string.Equals(path, previewPath, StringComparison.OrdinalIgnoreCase));
+        if (matchedPath is null)
+        {
+            return;
+        }
+
+        var requestId = _activePreviewRequestId;
+        var generation = _previewGeneration;
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"DeletePreviewRelease start requestId=\"{requestId}\" generation={generation} previewPath=\"{previewPath}\" targetPath=\"{matchedPath}\" targetCount={deleteTargetPaths.Count}");
+
+        try
+        {
+            await CancelAndClearPreviewAsync("delete-target", failOnShellHostDisposeFailure: true);
+        }
+        catch (Exception ex)
+        {
+            PreviewDiagnostics.Error(
+                "Preview",
+                $"DeletePreviewRelease failed requestId=\"{requestId}\" generation={generation} previewPath=\"{previewPath}\" targetPath=\"{matchedPath}\" reason=\"{ex.Message}\"");
+            throw new IOException("Failed to release the active preview before deleting the selected file.", ex);
+        }
+
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"DeletePreviewRelease end requestId=\"{requestId}\" generation={generation} currentGeneration={_previewGeneration} previewPath=\"{previewPath}\" targetPath=\"{matchedPath}\"");
     }
 
     private async Task<bool> EnsureFileOperationPathReadyAsync(FileOperationContext context, string operationName)

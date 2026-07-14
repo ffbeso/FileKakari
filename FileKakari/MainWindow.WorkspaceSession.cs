@@ -705,6 +705,7 @@ public partial class MainWindow
             return;
         }
 
+        var activePaneChanged = !ReferenceEquals(pane, _activeWorkspaceSession?.ActivePaneGroup);
         var isAccepted = TryRequestActivePane(pane, "listview", listView);
         if (!isAccepted)
         {
@@ -716,7 +717,7 @@ public partial class MainWindow
             PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e);
         }
 
-        ScheduleWorkspacePaneActivation(pane);
+        ScheduleWorkspacePaneActivation(pane, refreshPreviewIfAlreadyActivated: activePaneChanged);
     }
 
     private async void WorkspacePaneFileList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

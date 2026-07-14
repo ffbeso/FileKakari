@@ -3838,7 +3838,7 @@ public partial class MainWindow : Window
 
 
 
-    private void ScheduleWorkspacePaneActivation(FolderPane pane)
+    private void ScheduleWorkspacePaneActivation(FolderPane pane, bool refreshPreviewIfAlreadyActivated = false)
     {
         var scheduledSwitchGeneration = _workspaceSwitchGeneration;
         Dispatcher.BeginInvoke(
@@ -3858,7 +3858,7 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                ActivateWorkspacePaneAfterDeferredInput(pane);
+                ActivateWorkspacePaneAfterDeferredInput(pane, refreshPreviewIfAlreadyActivated);
             }),
             DispatcherPriority.Background);
     }
@@ -3970,7 +3970,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ActivateWorkspacePaneAfterDeferredInput(FolderPane pane)
+    private void ActivateWorkspacePaneAfterDeferredInput(FolderPane pane, bool refreshPreviewIfAlreadyActivated = false)
     {
         if (_activeWorkspaceSession is null
             || !IsWorkspaceDisplayPane(pane)
@@ -4002,6 +4002,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        var previousActivePaneId = _activeWorkspaceSession.ActivePaneId;
         if (!TryRequestActivePane(pane, "click"))
         {
             return;
@@ -4009,6 +4010,8 @@ public partial class MainWindow : Window
 
         if (pane is WorkspacePaneGroup paneGroup)
         {
+            var activePaneChanged = refreshPreviewIfAlreadyActivated
+                || !string.Equals(previousActivePaneId, paneGroup.Id, StringComparison.Ordinal);
             EnsureWorkspacePaneHasFallbackTab(paneGroup);
             var rootOffset = _activeWorkspaceSession.Workspace?.HasRootPath == true ? 1 : 0;
             _activeWorkspaceSession.SelectedTabIndex = Math.Clamp(
@@ -4017,8 +4020,17 @@ public partial class MainWindow : Window
                 Math.Max(0, paneGroup.Tabs.Count));
             ApplyWorkspaceSessionToFolderTabs();
             paneGroup.RefreshDisplay();
-            RefreshPreviewForActiveSelection("active-workspace-pane-changed");
-            ScheduleSessionSave("active-pane");
+            if (activePaneChanged)
+            {
+                RefreshPreviewForActiveSelection("active-workspace-pane-changed");
+                ScheduleSessionSave("active-pane");
+            }
+            else
+            {
+                PreviewDiagnostics.Info(
+                    "Preview",
+                    $"RefreshPreviewForActiveSelection skipped source=\"active-workspace-pane-changed\" reason=\"same-active-pane\" paneId=\"{paneGroup.Id}\" generation={_previewGeneration}");
+            }
         }
 
         UpdateWorkspacePaneActiveStates();

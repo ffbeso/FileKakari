@@ -10,16 +10,36 @@ internal sealed class FileWatcherRefreshCoordinator
 
     public TimeSpan SuppressDuration => SelfOperationSuppressDuration;
 
+    public DateTimeOffset SuppressUntil => _suppressUntil;
+
+    public bool HasPendingRefresh => _refreshPending;
+
+    public string? PendingPath => _pendingPath;
+
     public void RequestRefresh(string path)
     {
         _refreshPending = true;
         _pendingPath = path;
     }
 
-    public void SuppressRefresh()
+    public bool IsRefreshPendingFor(string path)
     {
-        _suppressUntil = DateTimeOffset.UtcNow + SelfOperationSuppressDuration;
-        ClearPendingRefresh();
+        return _refreshPending
+            && _pendingPath is not null
+            && string.Equals(_pendingPath, path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool SuppressRefresh(out DateTimeOffset previousSuppressUntil, out DateTimeOffset suppressUntil)
+    {
+        previousSuppressUntil = _suppressUntil;
+        var nextSuppressUntil = DateTimeOffset.UtcNow + SelfOperationSuppressDuration;
+        if (nextSuppressUntil > _suppressUntil)
+        {
+            _suppressUntil = nextSuppressUntil;
+        }
+
+        suppressUntil = _suppressUntil;
+        return previousSuppressUntil > DateTimeOffset.UtcNow;
     }
 
     public bool IsSuppressed(bool isFileOperationInProgress, out TimeSpan remaining)

@@ -145,6 +145,8 @@ public sealed class FolderWatchService : IDisposable
 
     private void OnChanged(object sender, FileSystemEventArgs e)
     {
+        var watchedRoot = GetStatePath(sender);
+        PerfLog.Write($"folder-watch-raw type={e.ChangeType} path=\"{e.FullPath}\" watchedRoot=\"{watchedRoot ?? ""}\"");
         if (e.ChangeType == WatcherChangeTypes.Changed)
         {
             QueueFileMetadataChanged(sender, e.FullPath);
@@ -159,6 +161,8 @@ public sealed class FolderWatchService : IDisposable
 
     private void OnRenamed(object sender, RenamedEventArgs e)
     {
+        var watchedRoot = GetStatePath(sender);
+        PerfLog.Write($"folder-watch-raw type={e.ChangeType} path=\"{e.FullPath}\" oldPath=\"{e.OldFullPath}\" watchedRoot=\"{watchedRoot ?? ""}\"");
         QueueChanged(sender, e.FullPath);
         ChangeObserved?.Invoke(e.FullPath);
     }
@@ -192,9 +196,14 @@ public sealed class FolderWatchService : IDisposable
                 return;
             }
 
+            var previousPath = state.PendingChangedPath;
             state.PendingChangedPath = string.IsNullOrWhiteSpace(changedPath) ? state.Path : changedPath;
+            PerfLog.Write(
+                $"folder-watch-debounce-pending action={(string.IsNullOrWhiteSpace(previousPath) ? "enqueue" : "replace")} " +
+                $"refreshType=full changedPath=\"{state.PendingChangedPath}\" previousPath=\"{previousPath ?? ""}\" watchedRoot=\"{state.Path}\"");
             state.DebounceTimer ??= new Timer(OnDebounceElapsed, state, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             state.DebounceTimer.Change(RefreshDebounce, Timeout.InfiniteTimeSpan);
+            PerfLog.Write($"folder-watch-debounce-scheduled refreshType=full changedPath=\"{state.PendingChangedPath}\" watchedRoot=\"{state.Path}\" delayMs={(int)RefreshDebounce.TotalMilliseconds}");
         }
     }
 
@@ -210,11 +219,15 @@ public sealed class FolderWatchService : IDisposable
 
             if (!string.IsNullOrWhiteSpace(changedPath))
             {
-                state.PendingMetadataChangedPaths.Add(changedPath);
+                var added = state.PendingMetadataChangedPaths.Add(changedPath);
+                PerfLog.Write(
+                    $"folder-watch-debounce-pending action={(added ? "enqueue" : "merge")} " +
+                    $"refreshType=metadata changedPath=\"{changedPath}\" watchedRoot=\"{state.Path}\" pendingCount={state.PendingMetadataChangedPaths.Count}");
             }
 
             state.DebounceTimer ??= new Timer(OnDebounceElapsed, state, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
             state.DebounceTimer.Change(RefreshDebounce, Timeout.InfiniteTimeSpan);
+            PerfLog.Write($"folder-watch-debounce-scheduled refreshType=metadata changedPath=\"{changedPath}\" watchedRoot=\"{state.Path}\" delayMs={(int)RefreshDebounce.TotalMilliseconds}");
         }
     }
 
@@ -237,13 +250,23 @@ public sealed class FolderWatchService : IDisposable
 
         if (!string.IsNullOrWhiteSpace(changedPath))
         {
+            PerfLog.Write($"folder-watch-debounce-execute refreshType=full changedPath=\"{changedPath}\"");
             Changed?.Invoke(changedPath);
             return;
         }
 
         if (metadataChangedPaths.Count > 0)
         {
+            PerfLog.Write($"folder-watch-debounce-execute refreshType=metadata changes={metadataChangedPaths.Count}");
             FileMetadataChanged?.Invoke(metadataChangedPaths);
+        }
+    }
+
+    private string? GetStatePath(object sender)
+    {
+        lock (_gate)
+        {
+            return FindStateLocked(sender)?.Path;
         }
     }
 

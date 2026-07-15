@@ -197,6 +197,7 @@ public partial class MainWindow
         if (_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var remaining))
         {
             var beforeCount = _pendingFolderWatchMetadataPaths.Count;
+            var addedCount = 0;
 
             var key = PendingNormalRefresh.GetKey(sessionId, stateId, activePath);
             var hasFullPending = _pendingNormalRefreshes.ContainsKey(key);

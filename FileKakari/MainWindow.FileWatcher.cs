@@ -6,21 +6,21 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
+    private readonly Dictionary<string, PendingNormalRefresh> _pendingNormalRefreshes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PendingWorkspacePaneWatchRefresh> _pendingWorkspacePaneWatchRefreshes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pendingFolderWatchMetadataPaths = new(StringComparer.OrdinalIgnoreCase);
     private DispatcherTimer? _delayedFolderWatchRefreshTimer;
     private bool _isExecutingDelayedFolderWatchRefresh;
+
+
 
     private void FolderWatchService_ChangeObserved(string changedPath)
     {
         _ = Dispatcher.InvokeAsync(
             () =>
             {
-                if (!_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out _))
-                {
-                    _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
-                    MarkWorkspaceDisplayPanesExternalChange(changedPath);
-                }
+                _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
+                MarkWorkspaceDisplayPanesExternalChange(changedPath);
             },
             DispatcherPriority.Background);
     }
@@ -52,7 +52,7 @@ public partial class MainWindow
             return;
         }
 
-        if (ActiveNavigation is not { } navigation)
+        if (ActiveNavigation is not { } navigation || ActiveTab is not { } activeTab)
         {
             return;
         }
@@ -63,18 +63,40 @@ public partial class MainWindow
             return;
         }
 
+        var sessionId = ActiveSession?.Id ?? "unknown";
+        var stateId = activeTab.State.Id;
+
         if (_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var remaining))
         {
-            _fileWatcherRefreshCoordinator.RequestRefresh(activePath);
-            _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
-            _performanceLogger.Write($"folder-watch-refresh-suppressed path=\"{activePath}\" changedPath=\"{changedPath}\" remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)} pendingAction=enqueue refreshType=full");
-            ScheduleDelayedFolderWatchRefresh(remaining, "normal-full-suppressed");
+            EnqueueNormalRefresh(sessionId, stateId, activePath, changedPath, remaining);
             return;
         }
 
-        _fileWatcherRefreshCoordinator.RequestRefresh(activePath);
-        _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
+        EnqueueNormalRefresh(sessionId, stateId, activePath, changedPath, TimeSpan.Zero);
         await ProcessPendingFolderWatchRefreshAsync();
+    }
+
+    private void EnqueueNormalRefresh(string sessionId, string stateId, string path, string changedPath, TimeSpan remaining)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var key = PendingNormalRefresh.GetKey(sessionId, stateId, path);
+        var exists = _pendingNormalRefreshes.TryGetValue(key, out var existing);
+        var action = exists ? "merge" : "enqueue";
+
+        _pendingNormalRefreshes[key] = new PendingNormalRefresh(sessionId, stateId, path, changedPath, IsFullRefresh: true);
+
+        _performanceLogger.Write(
+            $"folder-watch-refresh-suppressed path=\"{path}\" changedPath=\"{changedPath}\" " +
+            $"pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
+
+        if (remaining > TimeSpan.Zero)
+        {
+            ScheduleDelayedFolderWatchRefresh(remaining, "normal-full-suppressed");
+        }
     }
 
     private void MarkWorkspaceDisplayPanesExternalChange(string changedPath)
@@ -99,49 +121,130 @@ public partial class MainWindow
             return;
         }
 
+        var sessionId = ActiveSession?.Id ?? "unknown";
+
         if (_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var remaining))
         {
-            EnqueueWorkspacePaneWatchRefreshes(panes, changedPath, remaining);
+            EnqueueWorkspacePaneWatchRefreshes(sessionId, panes, changedPath, remaining);
             return;
         }
 
         foreach (var pane in panes)
         {
-            pane.FileList.MarkExternalChange();
-            if (pane.ActiveTabState is { } state)
-            {
-                state.MarkPendingExternalChange();
-            }
+            EnqueueWorkspacePaneWatchRefresh(sessionId, pane, changedPath, TimeSpan.Zero);
+        }
+        await ProcessPendingWorkspacePaneWatchRefreshAsync();
+    }
 
-            if (pane.IsLoading)
-            {
-                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason=loading paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? ""} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" refreshType=full");
-                continue;
-            }
+    private void EnqueueWorkspacePaneWatchRefreshes(string sessionId, IReadOnlyList<FolderPane> panes, string changedPath, TimeSpan remaining)
+    {
+        foreach (var pane in panes)
+        {
+            EnqueueWorkspacePaneWatchRefresh(sessionId, pane, changedPath, remaining);
+        }
+    }
 
-            var beforeCount = pane.FileList.Items.Count;
-            _performanceLogger.Write($"folder-pane-watch-refresh-start paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? ""} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" refreshType=full itemsBefore={beforeCount}");
-            var preservedState = CaptureWorkspacePanePreservedState(pane);
-            ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
-            pane.ActiveTabState?.ClearPendingExternalChange();
-            _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? ""} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
+    private void EnqueueWorkspacePaneWatchRefresh(string sessionId, FolderPane pane, string changedPath, TimeSpan remaining)
+    {
+        if (pane.ActiveTabState is not { } state)
+        {
+            _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason=no-active-state paneId={pane.Id} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" refreshType=full uiApply=false");
+            return;
+        }
+
+        pane.FileList.MarkExternalChange();
+        state.MarkPendingExternalChange();
+
+        var key = PendingWorkspacePaneWatchRefresh.GetKey(sessionId, pane.Id, state.Id, state.CurrentPath);
+        var exists = _pendingWorkspacePaneWatchRefreshes.TryGetValue(key, out var existing);
+        var action = exists ? "merge" : "enqueue";
+
+        _pendingWorkspacePaneWatchRefreshes[key] = new PendingWorkspacePaneWatchRefresh(sessionId, pane.Id, state.Id, state.CurrentPath, changedPath, IsFullRefresh: true);
+
+        _performanceLogger.Write(
+            $"folder-pane-watch-refresh-suppressed paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" " +
+            $"changedPath=\"{changedPath}\" pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
+
+        if (remaining > TimeSpan.Zero)
+        {
+            ScheduleDelayedFolderWatchRefresh(remaining, "workspace-full-suppressed");
         }
     }
 
     private IEnumerable<FolderPane> GetWorkspacePanesForChangedPath(string changedPath)
     {
         return _workspaceDisplayPanes
-
             .Where(pane => !string.IsNullOrWhiteSpace(pane.CurrentPath)
                 && FolderWatchTabTracker.IsPathSameOrUnderFolder(pane.CurrentPath, changedPath));
     }
 
     private void RequestFolderWatchMetadataRefresh(IReadOnlyList<string> changedPaths)
     {
+        if (changedPaths.Count == 0)
+        {
+            return;
+        }
+
+        if (ActiveNavigation is not { } navigation || ActiveTab is not { } activeTab)
+        {
+            return;
+        }
+
+        var activePath = navigation.CurrentPath;
+        var sessionId = ActiveSession?.Id ?? "unknown";
+        var stateId = activeTab.State.Id;
+
         if (_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var remaining))
         {
-            EnqueueFolderWatchMetadataRefresh(changedPaths, remaining);
+            var beforeCount = _pendingFolderWatchMetadataPaths.Count;
+
+            var key = PendingNormalRefresh.GetKey(sessionId, stateId, activePath);
+            var hasFullPending = _pendingNormalRefreshes.ContainsKey(key);
+
+            foreach (var changedPath in changedPaths)
+            {
+                if (string.IsNullOrWhiteSpace(changedPath) || !IsDirectChildPath(activePath, changedPath))
+                {
+                    continue;
+                }
+
+                _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
+                MarkWorkspaceDisplayPanesExternalChange(changedPath);
+
+                if (hasFullPending)
+                {
+                    continue;
+                }
+
+                var hasExistingMetadataForPath = _pendingFolderWatchMetadataPaths.Any(p => IsDirectChildPath(activePath, p));
+                if (hasExistingMetadataForPath)
+                {
+                    EnqueueNormalRefresh(sessionId, stateId, activePath, changedPath, remaining);
+                    hasFullPending = true;
+                    var childPaths = _pendingFolderWatchMetadataPaths.Where(p => IsDirectChildPath(activePath, p)).ToList();
+                    foreach (var cp in childPaths)
+                    {
+                        _pendingFolderWatchMetadataPaths.Remove(cp);
+                    }
+                }
+                else
+                {
+                    if (_pendingFolderWatchMetadataPaths.Add(changedPath))
+                    {
+                        addedCount++;
+                    }
+                }
+            }
+
+            if (addedCount > 0)
+            {
+                var action = beforeCount == 0 ? "enqueue" : "merge";
+                _performanceLogger.Write(
+                    $"folder-watch-metadata-suppressed changes={changedPaths.Count} pendingBefore={beforeCount} " +
+                    $"pendingAfter={_pendingFolderWatchMetadataPaths.Count} pendingAction={action} " +
+                    $"refreshType=metadata remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
+                ScheduleDelayedFolderWatchRefresh(remaining, "metadata-suppressed");
+            }
             return;
         }
 
@@ -162,7 +265,7 @@ public partial class MainWindow
         }
 
         var activePath = navigation.CurrentPath;
-        if (_fileWatcherRefreshCoordinator.IsRefreshPendingFor(activePath))
+        if (_pendingNormalRefreshes.Values.Any(p => string.Equals(p.Path, activePath, StringComparison.OrdinalIgnoreCase)))
         {
             _performanceLogger.Write($"folder-watch-metadata-skipped reason=full-refresh-pending path=\"{activePath}\" changes={changedPaths.Count} refreshType=metadata uiApply=false");
             return;
@@ -260,40 +363,83 @@ public partial class MainWindow
         }
     }
 
-    private async Task ProcessPendingFolderWatchRefreshAsync()
+    private async Task<bool> ProcessPendingFolderWatchRefreshAsync()
     {
-        var activePath = ActiveNavigation?.CurrentPath;
-        if (!_fileWatcherRefreshCoordinator.TryGetPendingRefreshPath(activePath, out var pendingPath))
+        var activeSession = ActiveSession;
+        var activeTab = ActiveTab;
+
+        foreach (var pending in _pendingNormalRefreshes.Values.ToList())
         {
-            if (_fileWatcherRefreshCoordinator.PendingPath is { } stalePath)
+            var session = _workspaceSessions.FirstOrDefault(s => string.Equals(s.Id, pending.SessionId, StringComparison.Ordinal));
+            if (session is null)
             {
-                _performanceLogger.Write($"folder-watch-refresh-skipped reason=active-path-mismatch pendingPath=\"{stalePath}\" activePath=\"{activePath ?? ""}\" refreshType=full uiApply=false");
+                _pendingNormalRefreshes.Remove(pending.Key);
+                _performanceLogger.Write($"folder-watch-refresh-skipped reason=session-missing sessionId={pending.SessionId} path=\"{pending.Path}\" refreshType=full uiApply=false");
+                continue;
             }
-            return;
-        }
 
-        if (!CanRefreshFromFolderWatch())
-        {
-            _performanceLogger.Write($"folder-watch-refresh-skipped reason=background-refresh-busy path=\"{pendingPath}\" refreshType=full loading={_isLoading} rename={IsRenameInteractionActive()} drag={_isFileDragInProgress} fileOperation={_isFileOperationInProgress} selecting={_selectionInteraction.IsSelecting} autoScroll={_scrollBehavior.IsAutoScrolling} uiApply=false");
-            return;
-        }
+            var tab = session.Tabs.FirstOrDefault(t => string.Equals(t.State.Id, pending.StateId, StringComparison.Ordinal));
+            if (tab is null || !string.Equals(tab.Navigation.CurrentPath, pending.Path, StringComparison.OrdinalIgnoreCase))
+            {
+                _pendingNormalRefreshes.Remove(pending.Key);
+                _performanceLogger.Write($"folder-watch-refresh-skipped reason=state-mismatch sessionId={pending.SessionId} stateId={pending.StateId} path=\"{pending.Path}\" refreshType=full uiApply=false");
+                continue;
+            }
 
-        if (!_fileWatcherRefreshCoordinator.TryBeginRefresh(pendingPath))
-        {
-            return;
-        }
+            var isActive = activeSession is not null
+                && string.Equals(activeSession.Id, pending.SessionId, StringComparison.Ordinal)
+                && activeTab is not null
+                && string.Equals(activeTab.State.Id, pending.StateId, StringComparison.Ordinal);
 
-        try
-        {
-            var beforeCount = _items.Count;
-            _performanceLogger.Write($"folder-watch-refresh-start path=\"{pendingPath}\" refreshType=full itemsBefore={beforeCount}");
-            await NavigateToFolderAsync(pendingPath, NavigationKind.Refresh);
-            _performanceLogger.Write($"folder-watch-refresh-complete path=\"{pendingPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={_items.Count} uiApply=true");
+            if (!isActive)
+            {
+                _pendingNormalRefreshes.Remove(pending.Key);
+                tab.MarkPendingExternalChange();
+                _performanceLogger.Write($"folder-watch-refresh-deferred-nonactive sessionId={pending.SessionId} stateId={pending.StateId} path=\"{pending.Path}\" refreshType=full");
+                continue;
+            }
+
+            if (!CanRefreshFromFolderWatch(tab))
+            {
+                _performanceLogger.Write($"folder-watch-refresh-skipped reason=background-refresh-busy path=\"{pending.Path}\" refreshType=full uiApply=false");
+                return false;
+            }
+
+            if (!_fileWatcherRefreshCoordinator.TryBeginRefresh())
+            {
+                _performanceLogger.Write($"folder-watch-refresh-skipped reason=lock-failed path=\"{pending.Path}\" refreshType=full uiApply=false");
+                return false;
+            }
+
+            var capturedPending = pending;
+            var success = false;
+            try
+            {
+                var beforeCount = _items.Count;
+                _performanceLogger.Write($"folder-watch-refresh-start path=\"{pending.Path}\" refreshType=full itemsBefore={beforeCount}");
+                await NavigateToFolderAsync(pending.Path, NavigationKind.Refresh);
+                _performanceLogger.Write($"folder-watch-refresh-complete path=\"{pending.Path}\" refreshType=full itemsBefore={beforeCount} itemsAfter={_items.Count} uiApply=true");
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                _performanceLogger.Write($"folder-watch-refresh-failed path=\"{pending.Path}\" error=\"{ex.Message}\"");
+            }
+            finally
+            {
+                _fileWatcherRefreshCoordinator.CompleteRefresh();
+            }
+
+            if (success)
+            {
+                if (_pendingNormalRefreshes.TryGetValue(pending.Key, out var currentPending) && ReferenceEquals(currentPending, capturedPending))
+                {
+                    _pendingNormalRefreshes.Remove(pending.Key);
+                }
+            }
+            return true;
         }
-        finally
-        {
-            _fileWatcherRefreshCoordinator.CompleteRefresh();
-        }
+        return false;
     }
 
     private bool CanRefreshFromFolderWatch()
@@ -349,56 +495,10 @@ public partial class MainWindow
 
     private void ClearPendingFolderWatchRefresh(string path)
     {
-        _fileWatcherRefreshCoordinator.ClearPendingRefresh(path);
-    }
-
-    private void EnqueueFolderWatchMetadataRefresh(IReadOnlyList<string> changedPaths, TimeSpan remaining)
-    {
-        if (changedPaths.Count == 0)
-        {
-            return;
-        }
-
-        var beforeCount = _pendingFolderWatchMetadataPaths.Count;
-        foreach (var changedPath in changedPaths)
-        {
-            if (!string.IsNullOrWhiteSpace(changedPath))
-            {
-                _pendingFolderWatchMetadataPaths.Add(changedPath);
-                _folderWatchTabTracker.MarkTabsPendingExternalChange(changedPath);
-                MarkWorkspaceDisplayPanesExternalChange(changedPath);
-            }
-        }
-
-        _performanceLogger.Write(
-            $"folder-watch-metadata-suppressed changes={changedPaths.Count} pendingBefore={beforeCount} " +
-            $"pendingAfter={_pendingFolderWatchMetadataPaths.Count} pendingAction={(beforeCount == 0 ? "enqueue" : "merge")} " +
-            $"refreshType=metadata remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
-        ScheduleDelayedFolderWatchRefresh(remaining, "metadata-suppressed");
-    }
-
-    private void EnqueueWorkspacePaneWatchRefreshes(IReadOnlyList<FolderPane> panes, string changedPath, TimeSpan remaining)
-    {
-        foreach (var pane in panes)
-        {
-            if (pane.ActiveTabState is not { } state)
-            {
-                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason=no-active-state paneId={pane.Id} path=\"{pane.CurrentPath}\" changedPath=\"{changedPath}\" refreshType=full uiApply=false");
-                continue;
-            }
-
-            pane.FileList.MarkExternalChange();
-            state.MarkPendingExternalChange();
-            var pending = new PendingWorkspacePaneWatchRefresh(pane.Id, state.Id, state.CurrentPath, changedPath);
-            var key = pending.Key;
-            var action = _pendingWorkspacePaneWatchRefreshes.ContainsKey(key) ? "merge" : "enqueue";
-            _pendingWorkspacePaneWatchRefreshes[key] = pending;
-            _performanceLogger.Write(
-                $"folder-pane-watch-refresh-suppressed paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" " +
-                $"changedPath=\"{changedPath}\" pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
-        }
-
-        ScheduleDelayedFolderWatchRefresh(remaining, "workspace-full-suppressed");
+        var sessionId = ActiveSession?.Id ?? "unknown";
+        var stateId = ActiveTab?.State.Id ?? "unknown";
+        var key = PendingNormalRefresh.GetKey(sessionId, stateId, path);
+        _pendingNormalRefreshes.Remove(key);
     }
 
     private void ScheduleDelayedFolderWatchRefresh(TimeSpan remaining, string reason)
@@ -411,7 +511,7 @@ public partial class MainWindow
         _delayedFolderWatchRefreshTimer.Start();
         _performanceLogger.Write(
             $"folder-watch-delayed-refresh-{action} reason={reason} remainingMs={(int)Math.Ceiling(interval.TotalMilliseconds)} " +
-            $"pendingNormal={_fileWatcherRefreshCoordinator.HasPendingRefresh} pendingWorkspace={_pendingWorkspacePaneWatchRefreshes.Count} pendingMetadata={_pendingFolderWatchMetadataPaths.Count}");
+            $"pendingNormal={_pendingNormalRefreshes.Count} pendingWorkspace={_pendingWorkspacePaneWatchRefreshes.Count} pendingMetadata={_pendingFolderWatchMetadataPaths.Count}");
     }
 
     private DispatcherTimer CreateDelayedFolderWatchRefreshTimer()
@@ -436,16 +536,25 @@ public partial class MainWindow
         }
 
         _isExecutingDelayedFolderWatchRefresh = true;
+        var executedAny = false;
         try
         {
             _performanceLogger.Write(
-                $"folder-watch-suppression-end pendingNormal={_fileWatcherRefreshCoordinator.HasPendingRefresh} " +
+                $"folder-watch-suppression-end pendingNormal={_pendingNormalRefreshes.Count} " +
                 $"pendingWorkspace={_pendingWorkspacePaneWatchRefreshes.Count} pendingMetadata={_pendingFolderWatchMetadataPaths.Count}");
             _performanceLogger.Write("folder-watch-delayed-refresh-executed");
 
-            await ProcessPendingFolderWatchRefreshAsync();
-            await ProcessPendingWorkspacePaneWatchRefreshAsync();
-            ApplyPendingFolderWatchMetadataRefreshes();
+            executedAny = await ProcessPendingFolderWatchRefreshAsync();
+
+            if (!executedAny)
+            {
+                executedAny = await ProcessPendingWorkspacePaneWatchRefreshAsync();
+            }
+
+            if (!executedAny)
+            {
+                ApplyPendingFolderWatchMetadataRefreshes();
+            }
         }
         finally
         {
@@ -454,12 +563,14 @@ public partial class MainWindow
 
         if (HasDelayedFolderWatchRefreshPending())
         {
-            ScheduleDelayedFolderWatchRefresh(TimeSpan.FromMilliseconds(500), "refresh-deferred");
+            ScheduleDelayedFolderWatchRefresh(TimeSpan.FromMilliseconds(50), "refresh-deferred");
         }
     }
 
-    private async Task ProcessPendingWorkspacePaneWatchRefreshAsync()
+    private async Task<bool> ProcessPendingWorkspacePaneWatchRefreshAsync()
     {
+        var activeSession = ActiveSession;
+
         foreach (var pending in _pendingWorkspacePaneWatchRefreshes.Values.ToList())
         {
             if (!_pendingWorkspacePaneWatchRefreshes.ContainsKey(pending.Key))
@@ -467,7 +578,15 @@ public partial class MainWindow
                 continue;
             }
 
-            var pane = _workspaceDisplayPanes.FirstOrDefault(pane => string.Equals(pane.Id, pending.PaneId, StringComparison.OrdinalIgnoreCase));
+            var session = _workspaceSessions.FirstOrDefault(s => string.Equals(s.Id, pending.SessionId, StringComparison.Ordinal));
+            if (session is null)
+            {
+                _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
+                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason=session-missing paneId={pending.PaneId} stateId={pending.StateId} path=\"{pending.Path}\" changedPath=\"{pending.ChangedPath}\" refreshType=full uiApply=false");
+                continue;
+            }
+
+            var pane = _workspaceDisplayPanes.FirstOrDefault(p => string.Equals(p.Id, pending.PaneId, StringComparison.OrdinalIgnoreCase));
             if (pane is null)
             {
                 _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
@@ -485,21 +604,61 @@ public partial class MainWindow
                 continue;
             }
 
-            if (!CanRefreshWorkspacePaneFromFolderWatch(pane, out var skipReason))
+            var isActive = activeSession is not null && string.Equals(activeSession.Id, pending.SessionId, StringComparison.Ordinal);
+
+            if (!isActive)
             {
-                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason={skipReason} paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full uiApply=false");
+                _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
+                pane.FileList.MarkExternalChange();
+                state.MarkPendingExternalChange();
+                _performanceLogger.Write($"folder-pane-watch-refresh-deferred-nonactive sessionId={pending.SessionId} paneId={pending.PaneId} stateId={pending.StateId} path=\"{pending.Path}\" refreshType=full");
                 continue;
             }
 
-            _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
-            var beforeCount = pane.FileList.Items.Count;
-            _performanceLogger.Write($"folder-pane-watch-refresh-start paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount}");
-            var preservedState = CaptureWorkspacePanePreservedState(pane);
-            ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-            await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
-            pane.ActiveTabState?.ClearPendingExternalChange();
-            _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
+            if (!CanRefreshWorkspacePaneFromFolderWatch(pane, out var skipReason))
+            {
+                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason={skipReason} paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full uiApply=false");
+                return false;
+            }
+
+            if (!_fileWatcherRefreshCoordinator.TryBeginRefresh())
+            {
+                _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason=lock-failed paneId={pane.Id} path=\"{pending.Path}\" refreshType=full uiApply=false");
+                return false;
+            }
+
+            var capturedPending = pending;
+            var success = false;
+            try
+            {
+                var beforeCount = pane.FileList.Items.Count;
+                _performanceLogger.Write($"folder-pane-watch-refresh-start paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount}");
+                var preservedState = CaptureWorkspacePanePreservedState(pane);
+                ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
+                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
+                pane.ActiveTabState?.ClearPendingExternalChange();
+                _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                _performanceLogger.Write($"folder-pane-watch-refresh-failed paneId={pane.Id} error=\"{ex.Message}\"");
+            }
+            finally
+            {
+                _fileWatcherRefreshCoordinator.CompleteRefresh();
+            }
+
+            if (success)
+            {
+                if (_pendingWorkspacePaneWatchRefreshes.TryGetValue(pending.Key, out var currentPending) && ReferenceEquals(currentPending, capturedPending))
+                {
+                    _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
+                }
+            }
+            return true;
         }
+        return false;
     }
 
     private void ApplyPendingFolderWatchMetadataRefreshes()
@@ -509,21 +668,45 @@ public partial class MainWindow
             return;
         }
 
-        if (ActiveNavigation?.CurrentPath is { } activePath
-            && _fileWatcherRefreshCoordinator.IsRefreshPendingFor(activePath))
+        if (ActiveNavigation?.CurrentPath is { } activePath && ActiveTab is { } activeTab)
         {
-            _performanceLogger.Write($"folder-watch-metadata-skipped reason=full-refresh-pending path=\"{activePath}\" changes={_pendingFolderWatchMetadataPaths.Count} refreshType=metadata uiApply=false");
-            return;
+            var sessionId = ActiveSession?.Id ?? "unknown";
+            var stateId = activeTab.State.Id;
+            var key = PendingNormalRefresh.GetKey(sessionId, stateId, activePath);
+
+            if (_pendingNormalRefreshes.ContainsKey(key))
+            {
+                _performanceLogger.Write($"folder-watch-metadata-skipped reason=full-refresh-pending path=\"{activePath}\" changes={_pendingFolderWatchMetadataPaths.Count} refreshType=metadata uiApply=false");
+                var childPaths = _pendingFolderWatchMetadataPaths.Where(p => IsDirectChildPath(activePath, p)).ToList();
+                foreach (var cp in childPaths)
+                {
+                    _pendingFolderWatchMetadataPaths.Remove(cp);
+                }
+                return;
+            }
+
+            if (!CanRefreshFromFolderWatch())
+            {
+                _performanceLogger.Write($"folder-watch-metadata-skipped reason=background-refresh-busy path=\"{activePath}\" changes={_pendingFolderWatchMetadataPaths.Count} refreshType=metadata uiApply=false");
+                return;
+            }
         }
 
-        var changedPaths = _pendingFolderWatchMetadataPaths.ToList();
-        _pendingFolderWatchMetadataPaths.Clear();
-        ApplyFolderWatchMetadataChanges(changedPaths);
+        var activeFolderPath = ActiveNavigation?.CurrentPath;
+        if (activeFolderPath is not null)
+        {
+            var changedPaths = _pendingFolderWatchMetadataPaths.Where(p => IsDirectChildPath(activeFolderPath, p)).ToList();
+            foreach (var cp in changedPaths)
+            {
+                _pendingFolderWatchMetadataPaths.Remove(cp);
+            }
+            ApplyFolderWatchMetadataChanges(changedPaths);
+        }
     }
 
     private bool HasDelayedFolderWatchRefreshPending()
     {
-        return _fileWatcherRefreshCoordinator.HasPendingRefresh
+        return _pendingNormalRefreshes.Count > 0
             || _pendingWorkspacePaneWatchRefreshes.Count > 0
             || _pendingFolderWatchMetadataPaths.Count > 0;
     }
@@ -576,11 +759,6 @@ public partial class MainWindow
         return true;
     }
 
-    private sealed record PendingWorkspacePaneWatchRefresh(string PaneId, string StateId, string Path, string ChangedPath)
-    {
-        public string Key => $"{PaneId}\u001f{StateId}\u001f{Path}";
-    }
-
     private async Task<bool> ShouldRefreshTabOnSwitchAsync(FolderTab tab)
     {
         var path = tab.Navigation.CurrentPath;
@@ -600,5 +778,27 @@ public partial class MainWindow
         }
 
         return true;
+    }
+}
+
+internal sealed record PendingNormalRefresh(string SessionId, string StateId, string Path, string ChangedPath, bool IsFullRefresh)
+{
+    public string Key => GetKey(this.SessionId, this.StateId, this.Path);
+
+    public static string GetKey(string sessionId, string stateId, string path)
+    {
+        var normalized = System.IO.Path.GetFullPath(path).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        return $"{sessionId}\u001f{stateId}\u001f{normalized.ToLowerInvariant()}";
+    }
+}
+
+internal sealed record PendingWorkspacePaneWatchRefresh(string SessionId, string PaneId, string StateId, string Path, string ChangedPath, bool IsFullRefresh)
+{
+    public string Key => GetKey(this.SessionId, this.PaneId, this.StateId, this.Path);
+
+    public static string GetKey(string sessionId, string paneId, string stateId, string path)
+    {
+        var normalized = System.IO.Path.GetFullPath(path).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+        return $"{sessionId}\u001f{paneId}\u001f{stateId}\u001f{normalized.ToLowerInvariant()}";
     }
 }

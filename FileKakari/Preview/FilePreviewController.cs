@@ -43,7 +43,19 @@ public sealed class FilePreviewController
             source,
             cancellationToken).ConfigureAwait(false);
 
-        if (!routing.ForceBuiltInText && ShouldTryShellFirst(path))
+        LogProviderCandidates(path, extension, routing.Request);
+
+        var shouldTryShellFirst = ShouldTryShellFirst(path, out var shellFirstReason);
+        if (routing.ForceBuiltInText)
+        {
+            shouldTryShellFirst = false;
+            shellFirstReason = "forced-built-in-text";
+        }
+        PreviewDiagnostics.Info(
+            "PreviewRouting",
+            $"ShouldTryShellFirst requestId=\"{requestId}\" source=\"{source}\" path=\"{path}\" ext=\"{extension}\" result={shouldTryShellFirst} reason=\"{shellFirstReason}\"");
+
+        if (shouldTryShellFirst)
         {
             var shellResult = await TryLoadShellPreviewAsync(routing.Request, cancellationToken, stopwatch).ConfigureAwait(false);
             if (shellResult is not null)
@@ -213,12 +225,19 @@ public sealed class FilePreviewController
         PreviewDiagnostics.Info("PreviewRouting", $"BAT/CMD routing path=\"{path}\" ext=\"{extension}\" encoding=\"{encodingName}\" provider=\"ShellPreviewHandlerProvider\"");
     }
 
-    private void LogProviderCandidates(string path, string extension)
+    private void LogProviderCandidates(string path, string extension, PreviewRequest request)
     {
+        if (!PreviewDiagnostics.IsVerboseEnabled)
+        {
+            return;
+        }
+
         foreach (var provider in _providers)
         {
             var canPreview = provider.CanPreview(path);
-            PreviewDiagnostics.Verbose("Preview", $"Candidate provider path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" canPreview={canPreview}");
+            PreviewDiagnostics.Verbose(
+                "Preview",
+                $"Candidate provider requestId=\"{request.RequestId}\" source=\"{request.Source}\" path=\"{path}\" ext=\"{extension}\" provider=\"{provider.GetType().Name}\" canPreview={canPreview}");
         }
     }
 
@@ -287,11 +306,24 @@ public sealed class FilePreviewController
         return null;
     }
 
-    private bool ShouldTryShellFirst(string path)
+    private bool ShouldTryShellFirst(string path, out string reason)
     {
         var extension = Path.GetExtension(path);
-        if (string.IsNullOrEmpty(extension) || IsBuiltInTextPreferred(extension))
+        if (string.IsNullOrEmpty(extension))
         {
+            reason = "missing-extension";
+            return false;
+        }
+
+        if (IsPdf(extension))
+        {
+            reason = "pdf-forced-webview";
+            return false;
+        }
+
+        if (IsBuiltInTextPreferred(extension))
+        {
+            reason = "built-in-text-preferred";
             return false;
         }
 
@@ -300,11 +332,18 @@ public sealed class FilePreviewController
             if (provider is BuiltInImagePreviewProvider or WebViewPreviewProvider
                 && provider.CanPreview(path))
             {
+                reason = $"built-in-provider-can-preview:{provider.GetType().Name}";
                 return false;
             }
         }
 
+        reason = "no-built-in-provider";
         return true;
+    }
+
+    private static bool IsPdf(string extension)
+    {
+        return string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsBuiltInTextPreferred(string extension)

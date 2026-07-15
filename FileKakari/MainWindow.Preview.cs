@@ -42,6 +42,8 @@ public partial class MainWindow
     private string? _currentWebViewUri;
     private string _currentWebViewRequestId = "";
     private string _clearingWebViewRequestId = "";
+    private string _blankWebViewNavigationRequestId = "";
+    private int _blankWebViewNavigationGeneration = -1;
     private int _webViewNavigationGeneration;
     private FilePreviewInfo? _currentWebViewFileInfo;
     private bool _hasRetriedCurrentMhtml;
@@ -1208,10 +1210,10 @@ public partial class MainWindow
                 }
             }
 
-            PreviewDiagnostics.Verbose("PreviewWebView", $"InitializeWebViewAsync begin generation={generation}");
+            PreviewDiagnostics.Info("PreviewWebView", $"InitializeWebViewAsync begin requestId=\"{requestId}\" generation={generation}");
             bool wasInitialized = _isWebViewInitialized;
             await InitializeWebViewAsync();
-            PreviewDiagnostics.Verbose("PreviewWebView", $"InitializeWebViewAsync completed generation={generation}");
+            PreviewDiagnostics.Info("PreviewWebView", $"InitializeWebViewAsync completed requestId=\"{requestId}\" generation={generation}");
 
             if (generation != _previewGeneration)
             {
@@ -1227,6 +1229,7 @@ public partial class MainWindow
             _webViewNavigationGeneration = generation;
             _currentWebViewRequestId = requestId;
             _currentWebViewFileInfo = fileInfo;
+            _isClearingWebView = false;
             _hasRetriedCurrentMhtml = false;
 
             bool justInitialized = !wasInitialized;
@@ -1324,6 +1327,18 @@ public partial class MainWindow
         var uri = e.Uri;
         if (_isClearingWebView && string.Equals(uri, "about:blank", StringComparison.OrdinalIgnoreCase))
         {
+            if (string.IsNullOrEmpty(_currentWebViewUri))
+            {
+                PreviewDiagnostics.Info(
+                    "PreviewWebView",
+                    $"NavigationStarting requestId=\"{_blankWebViewNavigationRequestId}\" uri=\"{uri}\" reason=\"about-blank-clear\" generation={_previewGeneration} navigationGeneration={_blankWebViewNavigationGeneration}");
+                return;
+            }
+
+            e.Cancel = true;
+            PreviewDiagnostics.Info(
+                "PreviewWebView",
+                $"Navigation blocked requestId=\"{_currentWebViewRequestId}\" reason=\"stale-about-blank-clear\" uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri}\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration}");
             return;
         }
 
@@ -1374,12 +1389,22 @@ public partial class MainWindow
         var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
         if (string.Equals(currentUri, "about:blank", StringComparison.OrdinalIgnoreCase))
         {
-            var completedRequestId = string.IsNullOrEmpty(_currentWebViewRequestId)
+            var completedRequestId = string.IsNullOrEmpty(_blankWebViewNavigationRequestId)
                 ? _clearingWebViewRequestId
-                : _currentWebViewRequestId;
+                : _blankWebViewNavigationRequestId;
+            if (!string.IsNullOrEmpty(_currentWebViewUri))
+            {
+                PreviewDiagnostics.Info(
+                    "PreviewWebView",
+                    $"NavigationCompleted ignored requestId=\"{completedRequestId}\" uri=\"{currentUri}\" reason=\"stale-about-blank-clear\" currentWebViewUri=\"{_currentWebViewUri}\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration} blankGeneration={_blankWebViewNavigationGeneration}");
+                return;
+            }
+
             _isClearingWebView = false;
             PreviewDiagnostics.Info("PreviewWebView", $"NavigationCompleted requestId=\"{completedRequestId}\" uri=\"{currentUri}\" reason=\"about-blank-clear\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration}");
             _clearingWebViewRequestId = "";
+            _blankWebViewNavigationRequestId = "";
+            _blankWebViewNavigationGeneration = -1;
             // Do not show for blank page transitions (like ClearWebView)
             return;
         }
@@ -1440,6 +1465,7 @@ public partial class MainWindow
     {
         var requestId = _currentWebViewRequestId;
         _clearingWebViewRequestId = requestId;
+        var activeGen = _webViewNavigationGeneration;
         PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync start requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration} initialized={_isWebViewInitialized}");
         if (!_isWebViewInitialized || PreviewWebView.CoreWebView2 == null)
         {
@@ -1454,6 +1480,8 @@ public partial class MainWindow
             _currentWebViewUri = null;
             _currentWebViewRequestId = "";
             _currentWebViewFileInfo = null;
+            _blankWebViewNavigationRequestId = "";
+            _blankWebViewNavigationGeneration = -1;
             _currentWebViewMediaGeneration = -1;
             _currentWebViewMediaType = "";
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
@@ -1464,7 +1492,6 @@ public partial class MainWindow
 
         var currentUri = PreviewWebView.Source?.AbsoluteUri ?? _currentWebViewUri ?? "";
         var isMediaHtml = PreviewTemporaryFileManager.IsMediaPreviewHtmlUri(currentUri);
-        var activeGen = _webViewNavigationGeneration;
 
         if (isMediaHtml)
         {
@@ -1510,16 +1537,26 @@ public partial class MainWindow
             PreviewDiagnostics.Verbose("PreviewWebView", $"Media stopped\r\nreason=\"{reason}\"\r\ngeneration={activeGen}");
         }
 
+        if (!IsCurrentWebViewClearOwner(requestId, activeGen))
+        {
+            PreviewDiagnostics.Info(
+                "PreviewWebView",
+                $"ClearWebViewAsync skipped requestId=\"{requestId}\" reason=\"owner-changed\" clearReason=\"{reason}\" currentRequestId=\"{_currentWebViewRequestId}\" clearGeneration={activeGen} currentNavigationGeneration={_webViewNavigationGeneration} previewGeneration={_previewGeneration}");
+            return;
+        }
+
         _currentWebViewUri = null;
         _currentWebViewRequestId = "";
         _currentWebViewFileInfo = null;
         _currentWebViewMediaGeneration = -1;
         _currentWebViewMediaType = "";
         _isClearingWebView = true;
+        _blankWebViewNavigationRequestId = requestId;
+        _blankWebViewNavigationGeneration = activeGen;
 
         try
         {
-            PreviewDiagnostics.Verbose("PreviewWebView", "ClearWebView navigating to about:blank");
+            PreviewDiagnostics.Info("PreviewWebView", $"ClearWebView navigating to about:blank requestId=\"{requestId}\" generation={_previewGeneration} navigationGeneration={activeGen}");
             PreviewWebView.CoreWebView2.Navigate("about:blank");
         }
         catch (Exception ex)
@@ -1539,6 +1576,12 @@ public partial class MainWindow
         PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
         PreviewWebView.Visibility = Visibility.Collapsed;
         PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync end requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={activeGen}");
+    }
+
+    private bool IsCurrentWebViewClearOwner(string requestId, int navigationGeneration)
+    {
+        return navigationGeneration == _webViewNavigationGeneration
+            && string.Equals(requestId, _currentWebViewRequestId, StringComparison.Ordinal);
     }
 
     private void ClearWebViewForShutdown()

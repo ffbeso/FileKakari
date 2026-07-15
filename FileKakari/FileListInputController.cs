@@ -360,7 +360,7 @@ public partial class MainWindow
                 return;
             }
 
-            var clickedEntry = GetFileEntryFromItemHitTarget(source);
+            var clickedEntry = _owner.GetFileEntryFromDisplayedContentHitTarget(source);
             _owner.PrepareRightClickSelection(clickedEntry);
             e.Handled = true;
 

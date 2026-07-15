@@ -44,6 +44,59 @@ internal sealed class FileListHitTestService
         return FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
     }
 
+    public FileEntry? GetFileEntryFromDisplayedContentHitTarget(DependencyObject? source)
+    {
+        return GetFileEntryFromDisplayedContentHitTarget(source, _getDisplayMode());
+    }
+
+    public static FileEntry? GetFileEntryFromDisplayedContentHitTarget(
+        DependencyObject? source,
+        FileDisplayMode displayMode)
+    {
+        if (source is null
+            || FindVisualParent<ScrollBar>(source) is not null
+            || FindVisualParent<GridViewColumnHeader>(source) is not null)
+        {
+            return null;
+        }
+
+        if (displayMode == FileDisplayMode.List)
+        {
+            if (!IsInsideFileNameHitTarget(source))
+            {
+                return null;
+            }
+
+            return FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
+        }
+
+        if (IsInsideFileNameHitTarget(source)
+            && FindVisualParent<ListViewItem>(source)?.DataContext is FileEntry nameEntry)
+        {
+            return nameEntry;
+        }
+
+        var current = source;
+        while (current is not null)
+        {
+            if (current is ListViewItem)
+            {
+                return null;
+            }
+
+            if (current is FrameworkElement element
+                && element.DataContext is FileEntry entry
+                && IsDisplayedCellContentElement(element))
+            {
+                return entry;
+            }
+
+            current = GetVisualOrLogicalParent(current);
+        }
+
+        return null;
+    }
+
     public FileEntry? GetFileEntryFromRenameHitTarget(DependencyObject? source)
     {
         if (!IsInsideFileRenameHitTarget(source))
@@ -73,7 +126,7 @@ internal sealed class FileListHitTestService
             && IsInsideItemsList(source)
             && !IsInsideScrollBar(source)
             && FindVisualParent<GridViewColumnHeader>(source) is null
-            && GetFileEntryFromItemHitTarget(source) is null;
+            && GetFileEntryFromDisplayedContentHitTarget(source) is null;
     }
 
     public bool IsInsideRenameTextBox(DependencyObject? source)
@@ -85,7 +138,7 @@ internal sealed class FileListHitTestService
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
 
         return false;
@@ -105,7 +158,7 @@ internal sealed class FileListHitTestService
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
 
         return false;
@@ -115,6 +168,24 @@ internal sealed class FileListHitTestService
     {
         return itemsListPosition.X >= 0
             && itemsListPosition.X <= _getVisibleColumnsWidth();
+    }
+
+    private static bool IsDisplayedCellContentElement(FrameworkElement element)
+    {
+        if (element.Visibility != Visibility.Visible
+            || element.ActualWidth <= 0
+            || element.ActualHeight <= 0)
+        {
+            return false;
+        }
+
+        return element switch
+        {
+            TextBlock textBlock => !string.IsNullOrEmpty(textBlock.Text),
+            Image => true,
+            TextBox => true,
+            _ => false
+        };
     }
 
     public static bool IsInsideFileNameHitTarget(DependencyObject? source)
@@ -132,7 +203,7 @@ internal sealed class FileListHitTestService
                 return false;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
 
         return false;
@@ -152,7 +223,7 @@ internal sealed class FileListHitTestService
                 return false;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
 
         return false;
@@ -168,9 +239,21 @@ internal sealed class FileListHitTestService
                 return typedSource;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetVisualOrLogicalParent(source);
         }
 
         return null;
+    }
+
+    private static DependencyObject? GetVisualOrLogicalParent(DependencyObject source)
+    {
+        try
+        {
+            return VisualTreeHelper.GetParent(source) ?? LogicalTreeHelper.GetParent(source);
+        }
+        catch (InvalidOperationException)
+        {
+            return LogicalTreeHelper.GetParent(source);
+        }
     }
 }

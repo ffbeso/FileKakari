@@ -815,7 +815,9 @@ public partial class MainWindow
             return;
         }
 
-        var clickedEntry = FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject)?.DataContext as FileEntry;
+        var source = e.OriginalSource as DependencyObject;
+        var displayMode = AppSettings.NormalizeDisplayMode(pane.ActiveTabState?.ViewMode ?? _settingsService.Settings.DisplayMode);
+        var clickedEntry = FileListHitTestService.GetFileEntryFromDisplayedContentHitTarget(source, displayMode);
         PreparePaneRightClickSelection(pane, listView, clickedEntry);
         e.Handled = true;
         ShowWorkspacePaneContextMenu(pane, listView, clickedEntry);

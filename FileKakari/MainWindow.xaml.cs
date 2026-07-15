@@ -6255,6 +6255,11 @@ public partial class MainWindow : Window
         return FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
     }
 
+    private FileEntry? GetFileEntryFromDisplayedContentHitTarget(DependencyObject? source)
+    {
+        return _fileListHitTest.GetFileEntryFromDisplayedContentHitTarget(source);
+    }
+
     private FileEntry? GetFileEntryFromRenameHitTarget(DependencyObject? source)
     {
         return _fileListHitTest.GetFileEntryFromRenameHitTarget(source);

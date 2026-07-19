@@ -95,6 +95,8 @@ public partial class MainWindow
             }
         }
 
+        SynchronizeWorkspaceSessionHostVisibility(reason);
+
         var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();
         var primaryId = PrimaryDisplayedWorkspaceSession?.Id ?? "null";
         var secondaryId = SecondaryDisplayedWorkspaceSession?.Id ?? "null";

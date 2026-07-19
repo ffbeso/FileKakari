@@ -5390,18 +5390,102 @@ public partial class MainWindow : Window
         return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
-    private void SynchronizeWorkspaceSessionHostVisibility(WorkspaceSession requestedSession)
+    private FrameworkElement? GetWorkspaceSessionHostContainer(WorkspaceSession session)
     {
+        return WorkspaceSessionsHost.ItemContainerGenerator.ContainerFromItem(session) as FrameworkElement;
+    }
+
+    private void SynchronizeWorkspaceSessionHostVisibility(string reason = "sync")
+    {
+        var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();
+        var primary = PrimaryDisplayedWorkspaceSession;
+        var secondary = SecondaryDisplayedWorkspaceSession;
+        var isSideBySide = displayedSessions.Count >= 2 && primary is not null && secondary is not null;
+
+        int primaryCol = -1;
+        int secondaryCol = -1;
+
         foreach (var session in _workspaceSessions)
         {
-            if (GetWorkspaceSessionHostElement(session) is not { } host)
+            session.IsActiveSession = IsSameWorkspaceSession(session, _activeWorkspaceSession);
+
+            if (GetWorkspaceSessionHostContainer(session) is not { } container)
             {
                 continue;
             }
 
-            host.Visibility = IsSameWorkspaceSession(session, requestedSession)
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            if (isSideBySide)
+            {
+                if (IsSameWorkspaceSession(session, primary))
+                {
+                    Grid.SetColumn(container, 0);
+                    Grid.SetColumnSpan(container, 1);
+                    container.Visibility = Visibility.Visible;
+                    primaryCol = 0;
+                }
+                else if (IsSameWorkspaceSession(session, secondary))
+                {
+                    Grid.SetColumn(container, 1);
+                    Grid.SetColumnSpan(container, 1);
+                    container.Visibility = Visibility.Visible;
+                    secondaryCol = 1;
+                }
+                else
+                {
+                    container.Visibility = Visibility.Collapsed;
+                }
+            }
+            else
+            {
+                if (IsSameWorkspaceSession(session, primary ?? _activeWorkspaceSession))
+                {
+                    Grid.SetColumn(container, 0);
+                    Grid.SetColumnSpan(container, 2);
+                    container.Visibility = Visibility.Visible;
+                    primaryCol = 0;
+                }
+                else
+                {
+                    container.Visibility = Visibility.Collapsed;
+                }
+            }
+        }
+
+        if (WorkspaceSideBySideDivider is not null)
+        {
+            WorkspaceSideBySideDivider.Visibility = isSideBySide ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        var displayedIds = string.Join(",", _displayedWorkspaceSessionIds);
+        _performanceLogger.Write(
+            $"workspace-layout-synced reason={reason} " +
+            $"displayedSessionIds=[{displayedIds}] " +
+            $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"} " +
+            $"primarySessionId={primary?.Id ?? "null"} " +
+            $"secondarySessionId={secondary?.Id ?? "null"} " +
+            $"mode={(isSideBySide ? "side-by-side" : "single")} " +
+            $"primaryColumn={primaryCol} " +
+            $"secondaryColumn={secondaryCol} " +
+            $"visualTreeRecreated=false sessionLoadTriggered=false");
+    }
+
+    private void SynchronizeWorkspaceSessionHostVisibility(WorkspaceSession requestedSession)
+    {
+        SynchronizeWorkspaceSessionHostVisibility($"requested:{requestedSession.Id}");
+    }
+
+    private void WorkspaceSplitGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        var owner = ResolveWorkspaceVisualOwner(source);
+        if (owner.Session is { } session && _displayedWorkspaceSessionIds.Contains(session.Id))
+        {
+            if (!IsSameWorkspaceSession(session, _activeWorkspaceSession))
+            {
+                _activeWorkspaceSession = session;
+                UpdateActiveWorkspaceSessionUi(session);
+                SynchronizeDisplayedWorkspaceState("workspace-click");
+            }
         }
     }
 

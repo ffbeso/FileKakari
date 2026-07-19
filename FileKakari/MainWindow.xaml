@@ -968,27 +968,23 @@
             </Grid>
             <Grid x:Name="WorkspaceSplitGrid"
                   Grid.Row="0"
-                  Visibility="Collapsed">
+                  Visibility="Collapsed"
+                  PreviewMouseLeftButtonDown="WorkspaceSplitGrid_PreviewMouseLeftButtonDown">
                 <ItemsControl x:Name="WorkspaceSessionsHost"
                               ItemsSource="{Binding WorkspaceSessions, RelativeSource={RelativeSource AncestorType=Window}}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <Grid />
+                            <Grid x:Name="WorkspaceSessionsGrid">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                            </Grid>
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:WorkspaceSession}">
                             <Grid>
-                                <Grid.Style>
-                                    <Style TargetType="Grid">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsActiveSession}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Grid.Style>
                                 <ItemsControl ItemsSource="{Binding PaneGroups}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
@@ -1504,6 +1500,13 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <Border x:Name="WorkspaceSideBySideDivider"
+                        Width="1"
+                        HorizontalAlignment="Center"
+                        Background="{DynamicResource BorderBrush}"
+                        IsHitTestVisible="False"
+                        Visibility="Collapsed"
+                        Panel.ZIndex="100" />
             </Grid>
             <GridSplitter x:Name="PreviewGridSplitter"
                            Grid.Row="1"

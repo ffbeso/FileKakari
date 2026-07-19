@@ -17,8 +17,22 @@ public partial class MainWindow
             .ToList();
     }
 
-    public WorkspaceSession? PrimaryDisplayedWorkspaceSession =>
-        GetDisplayedWorkspaceSessionsInTabOrder().FirstOrDefault();
+    public WorkspaceSession? PrimaryDisplayedWorkspaceSession
+    {
+        get
+        {
+            var session = GetDisplayedWorkspaceSessionsInTabOrder().FirstOrDefault();
+            if (session is not null)
+            {
+                return session;
+            }
+            if (_activeWorkspaceSession is not null && _workspaceSessions.Contains(_activeWorkspaceSession))
+            {
+                return _activeWorkspaceSession;
+            }
+            return null;
+        }
+    }
 
     public WorkspaceSession? SecondaryDisplayedWorkspaceSession =>
         GetDisplayedWorkspaceSessionsInTabOrder().Skip(1).FirstOrDefault();

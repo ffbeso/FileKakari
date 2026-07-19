@@ -585,6 +585,13 @@ public partial class MainWindow : Window
         DataContext = this;
         WorkspacePaneList.ItemsSource = _workspacePaneGroups;
         TabsControl.ItemsSource = _mainTabs;
+        WorkspaceSessionsHost.ItemContainerGenerator.StatusChanged += (_, _) =>
+        {
+            if (WorkspaceSessionsHost.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+            {
+                SynchronizeWorkspaceSessionHostVisibility("containers-ready");
+            }
+        };
         SelectWorkspaceSession(_activeWorkspaceSession);
         ApplyDisplayMode();
         ApplyColumnSettings();

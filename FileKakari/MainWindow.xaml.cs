@@ -1170,6 +1170,59 @@ public partial class MainWindow : Window
             && (PreviewWebView.IsKeyboardFocusWithin || _isPreviewWebViewKeyboardFocused);
     }
 
+    private bool IsPreviewWebViewKeyEvent(KeyEventArgs e)
+    {
+        return ReferenceEquals(e.OriginalSource, PreviewWebView)
+            || ReferenceEquals(e.Source, PreviewWebView);
+    }
+
+    private bool IsKeyboardFocusInsideActiveFileList()
+    {
+        return GetActivePreviewListView()?.IsKeyboardFocusWithin == true;
+    }
+
+    private static string GetClipboardContentKind()
+    {
+        try
+        {
+            var dataObject = Clipboard.GetDataObject();
+            if (dataObject is null)
+            {
+                return "empty";
+            }
+
+            if (dataObject.GetDataPresent(DataFormats.FileDrop))
+            {
+                return "file-drop";
+            }
+
+            if (dataObject.GetDataPresent(DataFormats.UnicodeText))
+            {
+                return "unicode-text";
+            }
+
+            if (dataObject.GetDataPresent(DataFormats.Text))
+            {
+                return "text";
+            }
+
+            return "other";
+        }
+        catch (Exception ex)
+        {
+            return $"unavailable:{ex.GetType().Name}";
+        }
+    }
+
+    private void LogClipboardStateAfterWebViewCopy(uint sequenceBefore)
+    {
+        _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() =>
+        {
+            var sequenceAfter = GetClipboardSequenceNumber();
+            WriteDiagLog($"shortcut=ctrl-c post-webview-copy clipboardSequenceBefore={sequenceBefore} clipboardSequenceAfter={sequenceAfter} clipboardContent={GetClipboardContentKind()}");
+        }));
+    }
+
     private void PreviewWebView_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         _isPreviewWebViewKeyboardFocused = true;
@@ -1379,7 +1432,7 @@ public partial class MainWindow : Window
     {
         var focused = Keyboard.FocusedElement;
         var focusedType = focused?.GetType().FullName ?? "null";
-        if (IsDiagLogEnabled) WriteDiagLog($"event=PreviewKeyDown key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} handled={e.Handled}");
+        if (IsDiagLogEnabled) WriteDiagLog($"event=PreviewKeyDown key={e.Key} systemKey={e.SystemKey} modifiers={Keyboard.Modifiers} leftAlt={Keyboard.IsKeyDown(Key.LeftAlt)} rightAlt={Keyboard.IsKeyDown(Key.RightAlt)} ctrl={Keyboard.IsKeyDown(Key.LeftCtrl)||Keyboard.IsKeyDown(Key.RightCtrl)} shift={Keyboard.IsKeyDown(Key.LeftShift)||Keyboard.IsKeyDown(Key.RightShift)} win={Keyboard.IsKeyDown(Key.LWin)||Keyboard.IsKeyDown(Key.RWin)} focused={focusedType} webViewFocusWithin={PreviewWebView.IsKeyboardFocusWithin} webViewFocusTracked={_isPreviewWebViewKeyboardFocused} handled={e.Handled}");
 
         var focusedTextBox = Keyboard.FocusedElement as TextBox;
         var isRenameTextBoxFocused = focusedTextBox?.DataContext is FileEntry
@@ -1454,11 +1507,16 @@ public partial class MainWindow : Window
         var isAltOnly = altDown && !disallowedModifier;
 
         var isWebViewFocused = IsKeyboardFocusInsidePreviewWebView();
-        if (hasControl && (key == Key.A || key == Key.C) && isWebViewFocused)
+        var isWebViewKeyEvent = IsPreviewWebViewKeyEvent(e);
+        if (hasControl && (key == Key.A || key == Key.C) && (isWebViewFocused || isWebViewKeyEvent))
         {
             if (IsDiagLogEnabled)
             {
-                WriteDiagLog($"shortcut=ctrl-{key} source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocused={isWebViewFocused} handled=false fileCopyExecuted=false clipboardWrite=none");
+                WriteDiagLog($"shortcut=ctrl-{key} receiver=Window_PreviewKeyDown source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocusWithin={PreviewWebView.IsKeyboardFocusWithin} webViewFocusTracked={_isPreviewWebViewKeyboardFocused} webViewKeyEvent={isWebViewKeyEvent} handled=false fileCopyExecuted=false clipboardWrite=none");
+                if (key == Key.C)
+                {
+                    LogClipboardStateAfterWebViewCopy(GetClipboardSequenceNumber());
+                }
             }
 
             // Do not mark this event handled: WebView2 owns text selection and copying.
@@ -1676,19 +1734,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (hasControl && e.Key == Key.A)
+        if (hasControl && e.Key == Key.A && IsKeyboardFocusInsideActiveFileList())
         {
             e.Handled = true;
             SelectAllVisibleItems();
             return;
         }
 
-        if (hasControl && e.Key == Key.C)
+        if (hasControl && e.Key == Key.C && IsKeyboardFocusInsideActiveFileList())
         {
             e.Handled = true;
             if (IsDiagLogEnabled)
             {
-                WriteDiagLog($"shortcut=ctrl-c source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocused=false handled=true fileCopyExecuted=true clipboardWrite=none internalClipboard=pending-file-operation");
+                WriteDiagLog($"shortcut=ctrl-c receiver=Window_PreviewKeyDown source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocusWithin={PreviewWebView.IsKeyboardFocusWithin} webViewFocusTracked={_isPreviewWebViewKeyboardFocused} webViewKeyEvent=false handled=true fileCopyExecuted=true clipboardWrite=none internalClipboard=pending-file-operation clipboardContent={GetClipboardContentKind()}");
             }
             await SetPendingFileOperationAsync(PendingFileOperationKind.Copy);
             return;

@@ -11,6 +11,8 @@
   <data name="PlacesButton" xml:space="preserve"><value>Locations</value></data>
   <data name="NewTabButton" xml:space="preserve"><value>New Tab</value></data>
   <data name="CloseTabButton" xml:space="preserve"><value>Close Tab</value></data>
+  <data name="InternalPageUnsavedChangesTitle" xml:space="preserve"><value>Unsaved Changes</value></data>
+  <data name="InternalPageUnsavedChangesMessage" xml:space="preserve"><value>Discard unsaved changes and close this tab?</value></data>
   <data name="CloseThisTabMenu" xml:space="preserve"><value>Close This Tab</value></data>
   <data name="CloseOtherTabsMenu" xml:space="preserve"><value>Close Other Tabs</value></data>
   <data name="CloseTabsToRightMenu" xml:space="preserve"><value>Close Tabs to the Right</value></data>

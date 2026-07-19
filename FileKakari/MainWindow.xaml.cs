@@ -4440,7 +4440,7 @@ public partial class MainWindow : Window
             if (e.ChangedButton == MouseButton.Middle)
             {
                 e.Handled = true;
-                CloseInternalPage(mainTab);
+                TryCloseInternalPage(mainTab);
             }
 
             return;
@@ -4614,7 +4614,7 @@ public partial class MainWindow : Window
     {
         if (GetSelectedInternalPage() is { } internalPage)
         {
-            CloseInternalPage(internalPage);
+            TryCloseInternalPage(internalPage);
             return;
         }
 

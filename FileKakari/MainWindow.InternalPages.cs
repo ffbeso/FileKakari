@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace FileKakari;
 
@@ -99,7 +100,16 @@ public partial class MainWindow
         if (sender is SettingsView settingsView
             && _mainTabs.FirstOrDefault(tab => ReferenceEquals(tab.Content, settingsView)) is { } tab)
         {
-            CloseInternalPage(tab);
+            TryCloseInternalPage(tab);
+        }
+    }
+
+    private void InternalPageTabCloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (FindVisualParent<TabItem>(sender as DependencyObject)?.DataContext is MainTabItem { IsInternalPage: true } tab)
+        {
+            e.Handled = true;
+            TryCloseInternalPage(tab);
         }
     }
 
@@ -144,6 +154,37 @@ public partial class MainWindow
         {
             RefreshPreviewForActiveSelection("internal-page-hidden");
         }
+    }
+
+    private void ShowInternalPageTabContextMenu(MainTabItem tab)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = TabsControl
+        };
+        menu.Items.Add(CreateMenuItem(_text.Get("CloseThisTabMenu"), true, () => TryCloseInternalPage(tab)));
+        menu.IsOpen = true;
+    }
+
+    private bool TryCloseInternalPage(MainTabItem tab)
+    {
+        if (tab.Content is SettingsView { HasUnsavedChanges: true }
+            or UserCommandEditorView { HasUnsavedChanges: true })
+        {
+            var result = MessageBox.Show(
+                this,
+                _text.Get("InternalPageUnsavedChangesMessage"),
+                _text.Get("InternalPageUnsavedChangesTitle"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return false;
+            }
+        }
+
+        CloseInternalPage(tab);
+        return true;
     }
 
     private void CloseInternalPage(MainTabItem tab)

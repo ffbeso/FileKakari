@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
 namespace FileKakari;
@@ -8,14 +9,21 @@ namespace FileKakari;
 public partial class SettingsView : UserControl
 {
     private readonly LocalizationService _text;
+    private bool _isInitializing = true;
+    private bool _hasUnsavedChanges;
 
     public SettingsView(AppSettings settings, LocalizationService text)
     {
         InitializeComponent();
         _text = text;
         Result = settings.Clone();
+        AddHandler(TextBoxBase.TextChangedEvent, new TextChangedEventHandler(SettingsInputChanged), true);
+        AddHandler(Selector.SelectionChangedEvent, new SelectionChangedEventHandler(SettingsSelectionChanged), true);
+        AddHandler(ToggleButton.CheckedEvent, new RoutedEventHandler(SettingsInputChanged), true);
+        AddHandler(ToggleButton.UncheckedEvent, new RoutedEventHandler(SettingsInputChanged), true);
         ApplyLocalizedText();
         LoadSettings();
+        _isInitializing = false;
     }
 
     public event EventHandler? SaveRequested;
@@ -25,6 +33,24 @@ public partial class SettingsView : UserControl
     public event EventHandler<OpenFolderRequestedEventArgs>? OpenFolderRequested;
 
     public AppSettings Result { get; }
+
+    public bool HasUnsavedChanges => _hasUnsavedChanges;
+
+    private void SettingsInputChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_isInitializing)
+        {
+            _hasUnsavedChanges = true;
+        }
+    }
+
+    private void SettingsSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitializing)
+        {
+            _hasUnsavedChanges = true;
+        }
+    }
 
     private void ApplyLocalizedText()
     {

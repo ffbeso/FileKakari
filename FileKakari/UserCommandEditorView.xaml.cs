@@ -12,6 +12,7 @@ public partial class UserCommandEditorView : UserControl
     private readonly UserCommandService _userCommandService;
     private List<UserCommand> _editingCommands = new();
     private bool _isUpdatingFields = false;
+    private bool _hasUnsavedChanges;
 
     public UserCommandEditorView(LocalizationService text)
     {
@@ -23,6 +24,8 @@ public partial class UserCommandEditorView : UserControl
         ApplyLocalizedText();
         ReloadUserCommands();
     }
+
+    public bool HasUnsavedChanges => _hasUnsavedChanges;
 
     private void ApplyLocalizedText()
     {
@@ -57,6 +60,7 @@ public partial class UserCommandEditorView : UserControl
     {
         _editingCommands = _userCommandService.Commands.Select(CloneUserCommand).ToList();
         RefreshCommandsList();
+        _hasUnsavedChanges = false;
     }
 
     private void RefreshCommandsList()
@@ -190,6 +194,8 @@ public partial class UserCommandEditorView : UserControl
         {
             CommandsListBox.Items.Refresh();
         }
+
+        _hasUnsavedChanges = true;
     }
 
     private void AddCommandButton_Click(object sender, RoutedEventArgs e)
@@ -209,6 +215,7 @@ public partial class UserCommandEditorView : UserControl
             AllowMultiple = true
         };
         _editingCommands.Add(newCmd);
+        _hasUnsavedChanges = true;
         RefreshCommandsList();
         CommandsListBox.SelectedItem = newCmd;
     }
@@ -221,6 +228,7 @@ public partial class UserCommandEditorView : UserControl
 
         var index = _editingCommands.IndexOf(selected);
         _editingCommands.Insert(index + 1, newCmd);
+        _hasUnsavedChanges = true;
         RefreshCommandsList();
         CommandsListBox.SelectedItem = newCmd;
     }
@@ -230,6 +238,7 @@ public partial class UserCommandEditorView : UserControl
         if (CommandsListBox.SelectedItem is not UserCommand selected) return;
         var index = _editingCommands.IndexOf(selected);
         _editingCommands.Remove(selected);
+        _hasUnsavedChanges = true;
 
         RefreshCommandsList();
 
@@ -248,6 +257,7 @@ public partial class UserCommandEditorView : UserControl
 
         _editingCommands.RemoveAt(index);
         _editingCommands.Insert(index - 1, selected);
+        _hasUnsavedChanges = true;
 
         RefreshCommandsList();
         CommandsListBox.SelectedItem = selected;
@@ -261,6 +271,7 @@ public partial class UserCommandEditorView : UserControl
 
         _editingCommands.RemoveAt(index);
         _editingCommands.Insert(index + 1, selected);
+        _hasUnsavedChanges = true;
 
         RefreshCommandsList();
         CommandsListBox.SelectedItem = selected;
@@ -277,6 +288,7 @@ public partial class UserCommandEditorView : UserControl
         try
         {
             _userCommandService.Save(_editingCommands);
+            _hasUnsavedChanges = false;
 
             if (Window.GetWindow(this) is MainWindow mainWindow)
             {

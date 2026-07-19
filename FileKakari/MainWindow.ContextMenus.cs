@@ -309,9 +309,10 @@ public partial class MainWindow
         CancelScheduledWorkspaceRenameClick();
         ClearPendingWorkspaceRenameClick();
 
-        if (FindVisualParent<TabItem>(e.OriginalSource as DependencyObject)?.DataContext is MainTabItem { IsInternalPage: true })
+        if (FindVisualParent<TabItem>(e.OriginalSource as DependencyObject)?.DataContext is MainTabItem { IsInternalPage: true } internalPage)
         {
             e.Handled = true;
+            ShowInternalPageTabContextMenu(internalPage);
             return;
         }
 

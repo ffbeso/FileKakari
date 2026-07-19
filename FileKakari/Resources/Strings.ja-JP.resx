@@ -11,6 +11,8 @@
   <data name="PlacesButton" xml:space="preserve"><value>場所</value></data>
   <data name="NewTabButton" xml:space="preserve"><value>新規タブ</value></data>
   <data name="CloseTabButton" xml:space="preserve"><value>タブを閉じる</value></data>
+  <data name="InternalPageUnsavedChangesTitle" xml:space="preserve"><value>未保存の変更</value></data>
+  <data name="InternalPageUnsavedChangesMessage" xml:space="preserve"><value>未保存の変更を破棄して、このタブを閉じますか？</value></data>
   <data name="CloseThisTabMenu" xml:space="preserve"><value>このタブを閉じる</value></data>
   <data name="CloseOtherTabsMenu" xml:space="preserve"><value>他のタブを閉じる</value></data>
   <data name="CloseTabsToRightMenu" xml:space="preserve"><value>右側のタブを閉じる</value></data>

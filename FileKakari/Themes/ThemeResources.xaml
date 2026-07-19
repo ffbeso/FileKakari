@@ -109,6 +109,8 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
     <Style x:Key="InternalPageTabCloseButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="18" />
         <Setter Property="Height" Value="18" />

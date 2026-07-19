@@ -23,6 +23,15 @@ public partial class MainWindow
     public WorkspaceSession? SecondaryDisplayedWorkspaceSession =>
         GetDisplayedWorkspaceSessionsInTabOrder().Skip(1).FirstOrDefault();
 
+    private void ResetToSingleWorkspaceDisplay(WorkspaceSession targetSession, string reason)
+    {
+        _isPreservingMultiSelection = false;
+        _displayedWorkspaceSessionIds.Clear();
+        _displayedWorkspaceSessionIds.Add(targetSession.Id);
+        _activeWorkspaceSession = targetSession;
+        SynchronizeDisplayedWorkspaceState(reason);
+    }
+
     private void SynchronizeDisplayedWorkspaceState(string reason)
     {
         var validSessionIds = _workspaceSessions.Select(s => s.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -41,6 +50,15 @@ public partial class MainWindow
         {
             _activeWorkspaceSession = _workspaceSessions[0];
             _displayedWorkspaceSessionIds.Add(_activeWorkspaceSession.Id);
+        }
+
+        if (!_isPreservingMultiSelection && _displayedWorkspaceSessionIds.Count > 1)
+        {
+            _displayedWorkspaceSessionIds.Clear();
+            if (_activeWorkspaceSession is not null)
+            {
+                _displayedWorkspaceSessionIds.Add(_activeWorkspaceSession.Id);
+            }
         }
 
         if (_displayedWorkspaceSessionIds.Count > 2)

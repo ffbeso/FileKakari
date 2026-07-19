@@ -74,12 +74,9 @@ public partial class MainWindow
             return;
         }
 
-        if (_displayedWorkspaceSessionIds.Count > 1)
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
-            _displayedWorkspaceSessionIds.Clear();
-            _displayedWorkspaceSessionIds.Add(session.Id);
-            _activeWorkspaceSession = session;
-            SynchronizeDisplayedWorkspaceState("normal-tab-click-reset-single");
+            ResetToSingleWorkspaceDisplay(session, "normal-tab-click");
         }
 
         if (ReferenceEquals(GetSelectedWorkspaceSession(), session)

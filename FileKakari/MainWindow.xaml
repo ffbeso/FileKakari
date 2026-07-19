@@ -268,16 +268,9 @@
                                         </TextBox.Style>
                                     </TextBox>
                                 </Grid>
-                                <Button Width="20"
-                                        Height="20"
-                                        Padding="0"
-                                        Margin="3,0,0,0"
-                                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                        FontSize="12"
-                                        Content="&#xE8BB;"
-                                        Click="InternalPageTabCloseButton_Click">
+                                <Button Click="InternalPageTabCloseButton_Click">
                                     <Button.Style>
-                                        <Style TargetType="Button">
+                                        <Style TargetType="Button" BasedOn="{StaticResource InternalPageTabCloseButtonStyle}">
                                             <Setter Property="Visibility" Value="Collapsed" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsInternalPage}" Value="True">
@@ -286,6 +279,11 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Button.Style>
+                                    <TextBlock Text="&#xE8BB;"
+                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                               FontSize="9"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
                                 </Button>
                             </StackPanel>
                         </DataTemplate>

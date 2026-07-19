@@ -1628,6 +1628,8 @@
                                 Visibility="Collapsed" />
                         <wv2:WebView2 x:Name="PreviewWebView"
                                       Margin="8"
+                                      GotKeyboardFocus="PreviewWebView_GotKeyboardFocus"
+                                      LostKeyboardFocus="PreviewWebView_LostKeyboardFocus"
                                       Visibility="Collapsed" />
                         <TextBox x:Name="PreviewTextBox"
                                  Margin="8"

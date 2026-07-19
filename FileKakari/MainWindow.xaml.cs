@@ -228,6 +228,7 @@ public partial class MainWindow : Window
     private int _diagnosticLoadId => _loadController.DiagnosticLoadId;
     private PendingFileOperation? _pendingFileOperation;
     private uint _internalClipboardSequence;
+    private bool _isPreviewWebViewKeyboardFocused;
     private Dictionary<string, GridViewColumn> _columnsById = [];
 
     private int _workspaceSwitchGeneration;
@@ -1162,6 +1163,30 @@ public partial class MainWindow : Window
             && IsInsideItemsList(focused);
     }
 
+    private bool IsKeyboardFocusInsidePreviewWebView()
+    {
+        return PreviewWebView.Visibility == Visibility.Visible
+            && (PreviewWebView.IsKeyboardFocusWithin || _isPreviewWebViewKeyboardFocused);
+    }
+
+    private void PreviewWebView_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _isPreviewWebViewKeyboardFocused = true;
+        if (IsDiagLogEnabled)
+        {
+            WriteDiagLog($"event=PreviewWebView.GotKeyboardFocus focused={Keyboard.FocusedElement?.GetType().FullName ?? "null"}");
+        }
+    }
+
+    private void PreviewWebView_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _isPreviewWebViewKeyboardFocused = false;
+        if (IsDiagLogEnabled)
+        {
+            WriteDiagLog($"event=PreviewWebView.LostKeyboardFocus focused={Keyboard.FocusedElement?.GetType().FullName ?? "null"}");
+        }
+    }
+
     private static bool IsSelectionKey(Key key)
     {
         return key is Key.Up
@@ -1427,6 +1452,18 @@ public partial class MainWindow : Window
 
         var isAltOnly = altDown && !disallowedModifier;
 
+        var isWebViewFocused = IsKeyboardFocusInsidePreviewWebView();
+        if (hasControl && (key == Key.A || key == Key.C) && isWebViewFocused)
+        {
+            if (IsDiagLogEnabled)
+            {
+                WriteDiagLog($"shortcut=ctrl-{key} source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocused={isWebViewFocused} handled=false fileCopyExecuted=false clipboardWrite=none");
+            }
+
+            // Do not mark this event handled: WebView2 owns text selection and copying.
+            return;
+        }
+
         if (GetSelectedInternalPage() is not null)
         {
             if (IsDiagLogEnabled) WriteDiagLog($"PreviewKeyDown internal-page-focused. Check key={e.Key}");
@@ -1648,6 +1685,10 @@ public partial class MainWindow : Window
         if (hasControl && e.Key == Key.C)
         {
             e.Handled = true;
+            if (IsDiagLogEnabled)
+            {
+                WriteDiagLog($"shortcut=ctrl-c source={e.OriginalSource?.GetType().FullName ?? "null"} focused={focusedType} webViewFocused=false handled=true fileCopyExecuted=true clipboardWrite=none internalClipboard=pending-file-operation");
+            }
             await SetPendingFileOperationAsync(PendingFileOperationKind.Copy);
             return;
         }

@@ -1307,7 +1307,8 @@ public partial class MainWindow
 
         // Security restrictions on WebView2 settings
         PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
-        PreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+        // Keep WebView2's standard context menu enabled so selected PDF/HTML text can be copied.
+        PreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
         PreviewWebView.CoreWebView2.Settings.AreHostObjectsAllowed = false;
         PreviewWebView.CoreWebView2.Settings.IsWebMessageEnabled = false;
         PreviewWebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;

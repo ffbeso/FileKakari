@@ -28,7 +28,12 @@ public partial class MainWindow
             return;
         }
 
-        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        var isCtrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var wasAlreadySingleDisplayed = _displayedWorkspaceSessionIds.Count == 1 && _displayedWorkspaceSessionIds.Contains(session.Id);
+        var wasAlreadyActiveSession = IsSameWorkspaceSession(_activeWorkspaceSession, session);
+        var isEligibleForRenameBeforeClick = !isCtrlPressed && wasAlreadySingleDisplayed && wasAlreadyActiveSession;
+
+        if (isCtrlPressed)
         {
             ClearTabDragState();
             ClearPendingWorkspaceRenameClick();
@@ -74,12 +79,12 @@ public partial class MainWindow
             return;
         }
 
-        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        if (!isCtrlPressed)
         {
             ResetToSingleWorkspaceDisplay(session, "normal-tab-click");
         }
 
-        if (ReferenceEquals(GetSelectedWorkspaceSession(), session)
+        if (isEligibleForRenameBeforeClick
             && IsWorkspaceTabTitleTarget(source)
             && !session.IsRenaming)
         {

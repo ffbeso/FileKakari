@@ -44,7 +44,11 @@ public partial class MainWindow
         else if (_displayedWorkspaceSessionIds.Count > 0)
         {
             var firstId = _displayedWorkspaceSessionIds.First();
-            _activeWorkspaceSession = _workspaceSessions.FirstOrDefault(s => string.Equals(s.Id, firstId, StringComparison.OrdinalIgnoreCase)) ?? _workspaceSessions.FirstOrDefault();
+            var fallbackSession = _workspaceSessions.FirstOrDefault(s => string.Equals(s.Id, firstId, StringComparison.OrdinalIgnoreCase)) ?? _workspaceSessions.FirstOrDefault();
+            if (fallbackSession is not null)
+            {
+                _activeWorkspaceSession = fallbackSession;
+            }
         }
         else if (_workspaceSessions.Count > 0)
         {

@@ -28,6 +28,52 @@ public partial class MainWindow
             return;
         }
 
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            ClearTabDragState();
+            ClearPendingWorkspaceRenameClick();
+
+            var isCurrentlyDisplayed = _displayedWorkspaceSessionIds.Contains(session.Id);
+            if (isCurrentlyDisplayed)
+            {
+                if (_displayedWorkspaceSessionIds.Count <= 1)
+                {
+                    StatusText.Text = "少なくとも1つのWorkspaceを表示する必要があります";
+                    _performanceLogger.Write($"main-tab-ctrl-click-rejected reason=min-displayed-count sessionId={session.Id}");
+                    e.Handled = true;
+                    return;
+                }
+
+                _displayedWorkspaceSessionIds.Remove(session.Id);
+                if (IsSameWorkspaceSession(_activeWorkspaceSession, session))
+                {
+                    var remainingSession = GetDisplayedWorkspaceSessionsInTabOrder().FirstOrDefault();
+                    if (remainingSession is not null)
+                    {
+                        _activeWorkspaceSession = remainingSession;
+                    }
+                }
+            }
+            else
+            {
+                if (_displayedWorkspaceSessionIds.Count >= 2)
+                {
+                    StatusText.Text = "同時に表示できるWorkspaceは最大2つです";
+                    _performanceLogger.Write($"main-tab-ctrl-click-rejected reason=max-displayed-count sessionId={session.Id}");
+                    e.Handled = true;
+                    return;
+                }
+
+                _displayedWorkspaceSessionIds.Add(session.Id);
+                _activeWorkspaceSession = session;
+            }
+
+            _isPreservingMultiSelection = true;
+            SynchronizeDisplayedWorkspaceState("ctrl-click");
+            e.Handled = true;
+            return;
+        }
+
         if (ReferenceEquals(GetSelectedWorkspaceSession(), session)
             && IsWorkspaceTabTitleTarget(source)
             && !session.IsRenaming)
@@ -440,6 +486,8 @@ public partial class MainWindow
         {
             var clampedTarget = Math.Clamp(targetIndex, 0, _workspaceSessions.Count - 1);
             _workspaceSessions.Move(sourceIndex, clampedTarget);
+            _isPreservingMultiSelection = true;
+            SynchronizeDisplayedWorkspaceState("tab-reorder");
             SelectWorkspaceSession(selectedSession);
         }
         finally

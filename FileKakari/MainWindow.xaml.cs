@@ -574,6 +574,7 @@ public partial class MainWindow : Window
             _workspaceSessions.Add(s);
         }
 
+        SynchronizeDisplayedWorkspaceState("startup-init");
         UpdateActiveWorkspaceSessionUi(initialActiveSession);
         _workspaceTabSync.ApplyToDisplay(_activeWorkspaceSession);
         _primaryPaneGroup.SelectedTabIndex = Math.Clamp(_activeWorkspaceSession.SelectedTabIndex, 0, Math.Max(0, _primaryPaneTabs.Count - 1));
@@ -4595,6 +4596,7 @@ public partial class MainWindow : Window
         try
         {
             _workspaceSessions.Remove(session);
+            SynchronizeDisplayedWorkspaceState("close-session");
             var nextSession = result.ActiveSession!;
             if (ReferenceEquals(nextSession, session))
             {

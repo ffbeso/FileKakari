@@ -209,6 +209,13 @@
                             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                         </Trigger>
 
+                        <DataTrigger Binding="{Binding IsDisplayed}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource TabSelectedBackgroundBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource TabSelectedBackgroundBrush}" />
+                            <Setter TargetName="ActiveTabAccentLine" Property="Background" Value="{DynamicResource SubtleTextBrush}" />
+                        </DataTrigger>
+
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Panel.ZIndex" Value="10" />
                             <Setter Property="Background" Value="{DynamicResource TabSelectedBackgroundBrush}" />

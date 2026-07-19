@@ -22,6 +22,7 @@ public sealed class MainTabItem : INotifyPropertyChanged, IDisposable
 {
     private string _title;
     private object? _content;
+    private bool _isDisplayed;
 
     private MainTabItem(
         MainTabKind kind,
@@ -58,6 +59,21 @@ public sealed class MainTabItem : INotifyPropertyChanged, IDisposable
     public bool IsWorkspace => WorkspaceSession?.IsWorkspace == true;
 
     public bool IsInternalPage => Kind == MainTabKind.InternalPage;
+
+    public bool IsDisplayed
+    {
+        get => _isDisplayed;
+        set
+        {
+            if (_isDisplayed == value)
+            {
+                return;
+            }
+
+            _isDisplayed = value;
+            OnPropertyChanged(nameof(IsDisplayed));
+        }
+    }
 
     public string InternalPageIconGlyph => InternalPageKind switch
     {

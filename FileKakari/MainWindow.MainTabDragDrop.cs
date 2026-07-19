@@ -74,6 +74,14 @@ public partial class MainWindow
             return;
         }
 
+        if (_displayedWorkspaceSessionIds.Count > 1)
+        {
+            _displayedWorkspaceSessionIds.Clear();
+            _displayedWorkspaceSessionIds.Add(session.Id);
+            _activeWorkspaceSession = session;
+            SynchronizeDisplayedWorkspaceState("normal-tab-click-reset-single");
+        }
+
         if (ReferenceEquals(GetSelectedWorkspaceSession(), session)
             && IsWorkspaceTabTitleTarget(source)
             && !session.IsRenaming)

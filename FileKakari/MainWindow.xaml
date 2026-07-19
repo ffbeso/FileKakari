@@ -984,8 +984,81 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:WorkspaceSession}">
-                            <Grid>
-                                <ItemsControl ItemsSource="{Binding PaneGroups}">
+                            <Border x:Name="WorkspaceSessionContainerBorder"
+                                    Margin="0"
+                                    BorderThickness="1">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsSideBySideDisplayActive}" Value="True" />
+                                                    <Condition Binding="{Binding IsActiveSession}" Value="True" />
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource ActivePaneBorderBrush}" />
+                                            </MultiDataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsSideBySideDisplayActive}" Value="True" />
+                                                    <Condition Binding="{Binding IsActiveSession}" Value="False" />
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Border x:Name="WorkspaceHeaderBar"
+                                            Grid.Row="0"
+                                            Padding="10,5"
+                                            BorderThickness="0,0,0,1">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsSideBySideDisplayActive}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=Window}, Path=IsSideBySideDisplayActive}" Value="True" />
+                                                            <Condition Binding="{Binding IsActiveSession}" Value="True" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource ActivePaneBorderBrush}" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <DockPanel LastChildFill="True">
+                                            <TextBlock Text="{Binding Title}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                                        <Setter Property="FontWeight" Value="Normal" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsActiveSession}" Value="True">
+                                                                <Setter Property="Foreground" Value="#FFFFFF" />
+                                                                <Setter Property="FontWeight" Value="Bold" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DockPanel>
+                                    </Border>
+
+                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding PaneGroups}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <local:WorkspaceSplitPanel LayoutRoot="{Binding DataContext.DisplayLayoutRoot, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
@@ -1497,13 +1570,14 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                             </Grid>
+                            </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <Border x:Name="WorkspaceSideBySideDivider"
-                        Width="1"
+                        Width="2"
                         HorizontalAlignment="Center"
-                        Background="{DynamicResource BorderBrush}"
+                        Background="{DynamicResource ActivePaneBorderBrush}"
                         IsHitTestVisible="False"
                         Visibility="Collapsed"
                         Panel.ZIndex="100" />

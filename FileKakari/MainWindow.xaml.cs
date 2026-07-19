@@ -5390,6 +5390,19 @@ public partial class MainWindow : Window
         return left.SequenceEqual(right, StringComparer.Ordinal);
     }
 
+    public static readonly DependencyProperty IsSideBySideDisplayActiveProperty =
+        DependencyProperty.Register(
+            nameof(IsSideBySideDisplayActive),
+            typeof(bool),
+            typeof(MainWindow),
+            new PropertyMetadata(false));
+
+    public bool IsSideBySideDisplayActive
+    {
+        get => (bool)GetValue(IsSideBySideDisplayActiveProperty);
+        set => SetValue(IsSideBySideDisplayActiveProperty, value);
+    }
+
     private FrameworkElement? GetWorkspaceSessionHostContainer(WorkspaceSession session)
     {
         return WorkspaceSessionsHost.ItemContainerGenerator.ContainerFromItem(session) as FrameworkElement;
@@ -5397,6 +5410,7 @@ public partial class MainWindow : Window
 
     private void SynchronizeWorkspaceSessionHostVisibility(string reason = "sync")
     {
+        IsSideBySideDisplayActive = _displayedWorkspaceSessionIds.Count >= 2;
         var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();
         var primary = PrimaryDisplayedWorkspaceSession;
         var secondary = SecondaryDisplayedWorkspaceSession;

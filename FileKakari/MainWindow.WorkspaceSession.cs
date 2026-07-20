@@ -932,6 +932,16 @@ public partial class MainWindow
             ? DragDropEffects.Copy
             : DragDropEffects.Move;
         e.Handled = true;
+
+        var targetSession = FindSessionContainingPane(pane);
+        var sourceSession = _fileDragSourceSession ?? ActiveSession;
+        _performanceLogger.Write(
+            $"drag-drop-executed " +
+            $"dragSourceSessionId={sourceSession?.Id ?? "unknown"} " +
+            $"dragTargetSessionId={targetSession?.Id ?? "unknown"} " +
+            $"dropTargetPath=\"{targetDirectory}\" " +
+            $"refreshAfterDrop=true");
+
         var transferItems = dragItems
             .Select(item => new FileTransferItem(item.SourcePath, item.Name, item.IsDirectory))
             .ToList();

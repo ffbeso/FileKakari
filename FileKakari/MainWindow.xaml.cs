@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     private readonly FolderWatchService _folderWatchService = new();
     private readonly DeviceChangeService _deviceChangeService;
     private readonly RenameInteractionService _renameInteraction = new();
+    private WorkspaceSession? _fileDragSourceSession;
     private RenameFocusService _renameFocus = null!;
     private readonly IShellContextMenuService _shellContextMenuService = new ShellContextMenuService();
     private readonly ListViewRestoreService _listViewRestore = new();
@@ -2501,11 +2502,13 @@ public partial class MainWindow : Window
             }
 
             _isFileDragInProgress = true;
+            _fileDragSourceSession = ActiveSession;
             DragDrop.DoDragDrop(sourceListView, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
         }
         finally
         {
             _isFileDragInProgress = false;
+            _fileDragSourceSession = null;
             ClearFileDragStart();
             ClearFileDropHighlight();
             ClearFileTabHover();

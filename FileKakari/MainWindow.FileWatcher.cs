@@ -161,9 +161,11 @@ public partial class MainWindow
 
         _pendingWorkspacePaneWatchRefreshes[key] = new PendingWorkspacePaneWatchRefresh(sessionId, pane.Id, state.Id, state.CurrentPath, changedPath, IsFullRefresh: true);
 
+        var suppressionState = remaining > TimeSpan.Zero ? "suppressed" : "ready";
         _performanceLogger.Write(
             $"folder-pane-watch-refresh-suppressed paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" " +
-            $"changedPath=\"{changedPath}\" pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)}");
+            $"changedPath=\"{changedPath}\" pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)} " +
+            $"suppressionState={suppressionState} pendingKey=\"{key}\" refreshTargetSessionId={sessionId} refreshTargetPaneId={pane.Id}");
 
         if (remaining > TimeSpan.Zero)
         {
@@ -456,6 +458,12 @@ public partial class MainWindow
             && Directory.Exists(tab.Navigation.CurrentPath);
     }
 
+    private WorkspaceSession? GetWorkspaceSessionForPath(string path)
+    {
+        return GetDisplayedWorkspaceSessionsInTabOrder().FirstOrDefault(s =>
+            s.PaneGroups.Any(p => string.Equals(p.ActiveTab?.Navigation.CurrentPath, path, StringComparison.OrdinalIgnoreCase)));
+    }
+
     private void UpdateFolderWatch(bool force = false)
     {
         if (_isSwitchingWorkspacePane && !force)
@@ -464,29 +472,42 @@ public partial class MainWindow
         }
 
         var watchPaths = new List<string>();
-        if (GetSelectedInternalPage() is null && ActiveSession is not null)
+        if (GetSelectedInternalPage() is null)
         {
-            if (WorkspaceSplitGrid.Visibility == Visibility.Visible && _workspaceDisplayPanes.Count > 0)
+            var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();
+            foreach (var session in displayedSessions)
             {
-                foreach (var pane in _workspaceDisplayPanes)
-                {
-                    if (pane.ActiveTab?.Navigation.CurrentPath is { } path)
-                    {
-                        watchPaths.Add(path);
-                    }
-                }
-            }
-            else
-            {
-                var activePane = ActiveSession.ActivePaneGroup ?? ActiveSession.PaneGroups.FirstOrDefault();
-                if (activePane?.ActiveTab?.Navigation.CurrentPath is { } path)
+                var activePane = session.ActivePaneGroup ?? session.PaneGroups.FirstOrDefault();
+                if (activePane?.ActiveTab?.Navigation.CurrentPath is { } path && !string.IsNullOrWhiteSpace(path))
                 {
                     watchPaths.Add(path);
                 }
             }
         }
 
-        _folderWatchTabTracker.UpdateWatchedFolders(watchPaths, ClearPendingFolderWatchRefresh);
+        var currentWatched = _folderWatchService.CurrentPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var newWatched = watchPaths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        _folderWatchTabTracker.UpdateWatchedFolders(newWatched, ClearPendingFolderWatchRefresh);
+
+        foreach (var path in newWatched)
+        {
+            if (!currentWatched.Contains(path))
+            {
+                var owner = GetWorkspaceSessionForPath(path);
+                var activePane = owner?.ActivePaneGroup ?? owner?.PaneGroups.FirstOrDefault();
+                _performanceLogger.Write(
+                    $"watcher-added watcherOwnerSessionId={owner?.Id ?? "unknown"} watcherOwnerPaneId={activePane?.Id ?? "unknown"} watchedPath=\"{path}\" watcherAdded=true");
+            }
+        }
+        foreach (var path in currentWatched)
+        {
+            if (!newWatched.Contains(path, StringComparer.OrdinalIgnoreCase))
+            {
+                _performanceLogger.Write(
+                    $"watcher-removed watchedPath=\"{path}\" watcherRemoved=true");
+            }
+        }
     }
 
     private void UpdateFolderWatchForOpenTabs(bool force = false)

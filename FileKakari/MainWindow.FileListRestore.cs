@@ -392,7 +392,7 @@ public partial class MainWindow
             }
         }
 
-        foreach (var pane in _workspaceDisplayPanes)
+        foreach (var pane in GetDisplayedWorkspacePanes())
         {
             var matchFound = false;
             foreach (var tab in pane.Tabs)

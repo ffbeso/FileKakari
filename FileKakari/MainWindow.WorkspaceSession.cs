@@ -1209,7 +1209,7 @@ public partial class MainWindow
 
         if (pane is null
             || tab is null
-            || !_workspaceDisplayPanes.Contains(pane)
+            || !IsWorkspaceDisplayPane(pane)
             || !pane.Tabs.Contains(tab)
             || ReferenceEquals(pane.ActiveTab, tab))
         {

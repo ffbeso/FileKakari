@@ -786,7 +786,7 @@ public partial class MainWindow
             }
 
             // Restore selection for the affected paths in all matching visible panes
-            var uniquePanes = _workspaceDisplayPanes.Concat([_primaryPaneGroup]).Distinct().ToList();
+            var uniquePanes = GetDisplayedWorkspacePanes().Concat([_primaryPaneGroup]).Distinct().ToList();
             foreach (var pane in uniquePanes)
             {
                 if (pane.ActiveTab is { } tab)

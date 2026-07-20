@@ -27,6 +27,7 @@ public partial class MainWindow
     private int _previewGeneration;
     private int _previewRequestSequence;
     private string _activePreviewRequestId = "";
+    private string? _previewOwnerSessionId;
     private string? _currentPreviewPath;
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
@@ -486,6 +487,7 @@ public partial class MainWindow
         var generation = Interlocked.Increment(ref _previewGeneration);
         var requestId = CreatePreviewRequestId(generation);
         _activePreviewRequestId = requestId;
+        _previewOwnerSessionId = _activeWorkspaceSession?.Id;
         var selectedPath = selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "";
         PreviewDiagnostics.Info(
             "Preview",
@@ -1123,6 +1125,7 @@ public partial class MainWindow
         ClearPreviewContent(keepWebView: true, failOnShellHostDisposeFailure);
         await ClearWebViewAsync(reason);
         _currentPreviewPath = null;
+        _previewOwnerSessionId = null;
         PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync end requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" path=\"{path}\" generation={_previewGeneration}");
     }
 

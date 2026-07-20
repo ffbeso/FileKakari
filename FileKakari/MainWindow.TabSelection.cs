@@ -17,6 +17,26 @@ public partial class MainWindow
             .ToList();
     }
 
+    // _workspaceDisplayPanes remains the active-session projection used by the
+    // legacy active-workspace controller.  It is not the source for deciding
+    // whether a pane is currently rendered: simultaneous display derives that
+    // directly from the displayed session IDs and each session's PaneGroups.
+    private IReadOnlyList<FolderPane> GetActiveWorkspaceSessionPanes()
+    {
+        return _activeWorkspaceSession?.PaneGroups
+            .Cast<FolderPane>()
+            .ToList()
+            ?? [];
+    }
+
+    private IReadOnlyList<FolderPane> GetDisplayedWorkspacePanes()
+    {
+        return GetDisplayedWorkspaceSessionsInTabOrder()
+            .SelectMany(session => session.PaneGroups)
+            .Cast<FolderPane>()
+            .ToList();
+    }
+
     public WorkspaceSession? PrimaryDisplayedWorkspaceSession
     {
         get
@@ -141,6 +161,63 @@ public partial class MainWindow
             $"activeId={_activeWorkspaceSession?.Id ?? "null"} " +
             $"displayedCount={_displayedWorkspaceSessionIds.Count} " +
             $"primaryId={primaryId} secondaryId={secondaryId}");
+    }
+
+    private async Task ReconcileWorkspaceSessionsAfterMutationAsync(
+        string source,
+        WorkspaceSession? preferredActiveSession = null,
+        IEnumerable<string>? removedSessionIds = null)
+    {
+        var wasSwitchingTabs = _isSwitchingTabs;
+        _isSwitchingTabs = true;
+        var removedIds = removedSessionIds?.ToList() ?? [];
+        var activeSessionWasRemoved = _activeWorkspaceSession is not null
+            && removedIds.Contains(_activeWorkspaceSession.Id, StringComparer.OrdinalIgnoreCase);
+        var previewCleared = false;
+
+        try
+        {
+            var nextActiveSession = preferredActiveSession is not null && _workspaceSessions.Contains(preferredActiveSession)
+                ? preferredActiveSession
+                : _activeWorkspaceSession is not null && _workspaceSessions.Contains(_activeWorkspaceSession)
+                    ? _activeWorkspaceSession
+                    : _workspaceSessions.FirstOrDefault();
+            if (nextActiveSession is null)
+            {
+                _performanceLogger.Write($"workspace-session-reconcile-skipped source={source} skipReason=no-remaining-session");
+                return;
+            }
+
+            _activeWorkspaceSession = nextActiveSession;
+            SynchronizeDisplayedWorkspaceState($"session-mutation:{source}");
+            UpdateActiveWorkspaceSessionUi(nextActiveSession);
+            ApplyWorkspaceSessionToFolderTabs();
+            RefreshWorkspaceDisplayPanes();
+
+            DiscardPendingFolderWatchRefreshesForRemovedSessions(removedIds, source);
+            if (activeSessionWasRemoved
+                || (!string.IsNullOrWhiteSpace(_previewOwnerSessionId)
+                    && removedIds.Contains(_previewOwnerSessionId, StringComparer.OrdinalIgnoreCase)))
+            {
+                await CancelAndClearPreviewAsync($"session-mutation:{source}");
+                previewCleared = true;
+            }
+
+            UpdateFolderWatch(force: true);
+            UpdateWindowTitle();
+            UpdateNavigationButtons();
+            SynchronizeSharedFilterBox(nextActiveSession);
+
+            _performanceLogger.Write(
+                $"workspace-session-reconciled source={source} " +
+                $"displayedSessionIds=[{string.Join(",", _displayedWorkspaceSessionIds)}] " +
+                $"activeSessionId={_activeWorkspaceSession.Id} " +
+                $"sessionRemoved=[{string.Join(",", removedIds)}] watcherRebuilt=true previewCleared={previewCleared}");
+        }
+        finally
+        {
+            _isSwitchingTabs = wasSwitchingTabs;
+        }
     }
 
     private async void TabsControl_SelectionChanged(object sender, SelectionChangedEventArgs e)

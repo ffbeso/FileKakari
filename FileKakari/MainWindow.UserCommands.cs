@@ -18,7 +18,7 @@ public partial class MainWindow
             FolderPane? pane = null;
             if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
-                pane = _workspaceDisplayPanes.FirstOrDefault(p =>
+                pane = GetDisplayedWorkspacePanes().FirstOrDefault(p =>
                     string.Equals(NormalizePathForComparison(p.ActiveTab?.Navigation.CurrentPath), NormalizePathForComparison(currentDir), StringComparison.OrdinalIgnoreCase));
             }
             else

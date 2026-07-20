@@ -38,9 +38,9 @@ public partial class MainWindow : Window
             SetFolderColumnHeaders();
         }
 
-        if (_workspaceDisplayPanes is not null)
+        if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
-            foreach (var pane in _workspaceDisplayPanes)
+            foreach (var pane in GetDisplayedWorkspacePanes())
             {
                 UpdateWorkspacePaneColumnHeadersForPane(pane);
             }

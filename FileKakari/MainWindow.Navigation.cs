@@ -98,7 +98,7 @@ public partial class MainWindow
 
         if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
-            return _workspaceDisplayPanes.Contains(pane);
+            return GetDisplayedWorkspacePanes().Any(candidate => ReferenceEquals(candidate, pane));
         }
         else
         {

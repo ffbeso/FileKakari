@@ -2581,7 +2581,7 @@ public partial class MainWindow : Window
 
         if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
-            foreach (var pane in _workspaceDisplayPanes)
+            foreach (var pane in GetDisplayedWorkspacePanes())
             {
                 if (pane.Items.Contains(entry))
                 {
@@ -2777,9 +2777,9 @@ public partial class MainWindow : Window
         ApplyPreviewPanePlacement();
         ApplyColumnSettings();
 
-        if (_workspaceDisplayPanes is not null)
+        if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
-            foreach (var pane in _workspaceDisplayPanes)
+            foreach (var pane in GetDisplayedWorkspacePanes())
             {
                 ApplyColumnSettingsToWorkspacePane(pane);
                 if (needsReload)
@@ -3184,7 +3184,7 @@ public partial class MainWindow : Window
 
     private FolderPane? FindWorkspacePaneById(string paneId)
     {
-        return _workspaceDisplayPanes.FirstOrDefault(pane => string.Equals(pane.Id, paneId, StringComparison.Ordinal));
+        return GetDisplayedWorkspacePanes().FirstOrDefault(pane => string.Equals(pane.Id, paneId, StringComparison.Ordinal));
     }
 
 
@@ -3789,11 +3789,10 @@ public partial class MainWindow : Window
         try
         {
             _workspaceSessions.Remove(draggedSession);
-            _activeWorkspaceSession = targetSession;
-            UpdateActiveWorkspaceSessionUi(targetSession);
-            ApplyWorkspaceSessionToFolderTabs();
-            RefreshWorkspaceDisplayPanes();
-            SelectWorkspaceSession(targetSession);
+            await ReconcileWorkspaceSessionsAfterMutationAsync(
+                "demote-main-tab",
+                targetSession,
+                [draggedSession.Id]);
         }
         finally
         {
@@ -4179,6 +4178,7 @@ public partial class MainWindow : Window
         if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
             return (IsWorkspaceDisplayPane(_lastInteractedWorkspaceDisplayPane)
+                    && IsPaneOwnedByActiveWorkspaceSession(_lastInteractedWorkspaceDisplayPane)
                     ? _lastInteractedWorkspaceDisplayPane
                     : null)
                 ?? session.ActiveFolderPane
@@ -4225,7 +4225,7 @@ public partial class MainWindow : Window
     {
         return pane is not null
             && WorkspaceSplitGrid.Visibility == Visibility.Visible
-            && _workspaceDisplayPanes.Contains(pane);
+            && GetDisplayedWorkspacePanes().Any(candidate => ReferenceEquals(candidate, pane));
     }
 
     private bool IsPaneOwnedByActiveWorkspaceSession(FolderPane? pane)
@@ -4664,17 +4664,15 @@ public partial class MainWindow : Window
         try
         {
             _workspaceSessions.Remove(session);
-            SynchronizeDisplayedWorkspaceState("close-session");
             var nextSession = result.ActiveSession!;
             if (ReferenceEquals(nextSession, session))
             {
                 nextSession = _workspaceSessions.FirstOrDefault(s => !ReferenceEquals(s, session))!;
             }
-            _activeWorkspaceSession = nextSession;
-            UpdateActiveWorkspaceSessionUi(nextSession);
-            ApplyWorkspaceSessionToFolderTabs();
-            RefreshWorkspaceDisplayPanes();
-            SelectWorkspaceSession(nextSession);
+            await ReconcileWorkspaceSessionsAfterMutationAsync(
+                "close-session",
+                nextSession,
+                [session.Id]);
         }
         finally
         {
@@ -4893,19 +4891,20 @@ public partial class MainWindow : Window
         _isSwitchingTabs = true;
         try
         {
+            var removedSessionIds = new List<string>();
             if (result.SessionsToRemove is { } toRemove)
             {
                 foreach (var r in toRemove)
                 {
                     _workspaceSessions.Remove(r);
+                    removedSessionIds.Add(r.Id);
                 }
             }
 
-            _activeWorkspaceSession = session;
-            UpdateActiveWorkspaceSessionUi(session);
-            ApplyWorkspaceSessionToFolderTabs();
-            RefreshWorkspaceDisplayPanes();
-            SelectWorkspaceSession(session);
+            await ReconcileWorkspaceSessionsAfterMutationAsync(
+                "close-other-sessions",
+                session,
+                removedSessionIds);
         }
         finally
         {
@@ -4932,20 +4931,21 @@ public partial class MainWindow : Window
         _isSwitchingTabs = true;
         try
         {
+            var removedSessionIds = new List<string>();
             if (result.SessionsToRemove is { } toRemove)
             {
                 foreach (var r in toRemove)
                 {
                     _workspaceSessions.Remove(r);
+                    removedSessionIds.Add(r.Id);
                 }
             }
 
             var nextSession = result.ActiveSession!;
-            _activeWorkspaceSession = nextSession;
-            UpdateActiveWorkspaceSessionUi(nextSession);
-            ApplyWorkspaceSessionToFolderTabs();
-            RefreshWorkspaceDisplayPanes();
-            SelectWorkspaceSession(nextSession);
+            await ReconcileWorkspaceSessionsAfterMutationAsync(
+                "close-sessions-to-right",
+                nextSession,
+                removedSessionIds);
         }
         finally
         {
@@ -5642,6 +5642,10 @@ public partial class MainWindow : Window
             _isActivatingWorkspaceSession = false;
         }
 
+        // Keep the legacy active-session projection in step with the new
+        // Active Session.  Displayed-pane ownership itself is derived from
+        // _displayedWorkspaceSessionIds and is never inferred from this list.
+        RefreshWorkspaceDisplayPanes($"activate:{source}", 0, session);
         UpdateWindowTitle();
         UpdateNavigationButtons();
         SynchronizeSharedFilterBox(session);
@@ -6351,7 +6355,7 @@ public partial class MainWindow : Window
         {
             return _primaryPaneGroup;
         }
-        foreach (var pane in _workspaceDisplayPanes)
+        foreach (var pane in GetDisplayedWorkspacePanes())
         {
             if (pane.Tabs.Contains(tab))
             {

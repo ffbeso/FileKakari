@@ -7,6 +7,7 @@ public partial class MainWindow
 {
     private readonly HashSet<string> _displayedWorkspaceSessionIds = new(StringComparer.OrdinalIgnoreCase);
     private bool _isPreservingMultiSelection;
+    private bool _isRecoveringTabSelectionFailure;
 
     public IReadOnlyList<WorkspaceSession> GetDisplayedWorkspaceSessionsInTabOrder()
     {
@@ -231,12 +232,13 @@ public partial class MainWindow
 
         if (!ReferenceEquals(e.Source, TabsControl)
             || _isSwitchingTabs
+            || _isRecoveringTabSelectionFailure
             || _isActivatingWorkspaceSession
             || (_isSwitchingWorkspacePane && !shouldProcessDuringPaneSwitch))
         {
             var reason = !ReferenceEquals(e.Source, TabsControl)
                 ? "ignored-source"
-                : _isSwitchingTabs || _isActivatingWorkspaceSession
+                : _isSwitchingTabs || _isRecoveringTabSelectionFailure || _isActivatingWorkspaceSession
                     ? "ignored-switching-tabs"
                     : "ignored-switching-workspace-pane";
             WriteMainTabSelectionChangedLog(e, reason);
@@ -370,12 +372,78 @@ public partial class MainWindow
         catch (Exception ex)
         {
             LogException("tabs-selection-restore", ex, ActiveTabState);
-            throw;
+            await RecoverTabSelectionAfterRestoreFailureAsync(oldSession, selectedSession);
         }
         finally
         {
             UpdateWindowTitle();
             LogMemoryMetrics("tab-switch");
+        }
+    }
+
+    private async Task RecoverTabSelectionAfterRestoreFailureAsync(
+        WorkspaceSession? previousSession,
+        WorkspaceSession failedSession)
+    {
+        if (_isRecoveringTabSelectionFailure)
+        {
+            _performanceLogger.Write(
+                $"tab-selection-recovery-skipped skipReason=already-recovering " +
+                $"failedSessionId={failedSession.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"}");
+            return;
+        }
+
+        var wasSwitchingTabs = _isSwitchingTabs;
+        _isSwitchingTabs = true;
+        _isRecoveringTabSelectionFailure = true;
+        WorkspaceSession? fallbackSession = null;
+
+        try
+        {
+            fallbackSession = previousSession is not null && _workspaceSessions.Contains(previousSession)
+                ? previousSession
+                : _workspaceSessions.FirstOrDefault(session => !ReferenceEquals(session, failedSession))
+                    ?? _workspaceSessions.FirstOrDefault();
+            if (fallbackSession is null)
+            {
+                _performanceLogger.Write(
+                    $"tab-selection-recovery-skipped skipReason=no-session " +
+                    $"failedSessionId={failedSession.Id}");
+                StatusText.Text = "タブの復元に失敗しました。";
+                return;
+            }
+
+            ResetToSingleWorkspaceDisplay(fallbackSession, "tab-restore-failure-recovery");
+            UpdateMainTabContent(GetMainTabItem(fallbackSession));
+            ApplyWorkspaceSessionSelection(fallbackSession);
+            CancelActiveLoadForWorkspaceSwitch(fallbackSession, "tab-restore-failure-recovery");
+
+            if (IsLoaded && !ReferenceEquals(fallbackSession, failedSession))
+            {
+                await RestoreWorkspaceTabAsync(fallbackSession);
+            }
+
+            SynchronizeSharedFilterBox(fallbackSession);
+            UpdateNavigationButtons();
+            _performanceLogger.Write(
+                $"tab-selection-recovered failedSessionId={failedSession.Id} " +
+                $"fallbackSessionId={fallbackSession.Id} " +
+                $"selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"} " +
+                $"activeSessionId={_activeWorkspaceSession?.Id ?? "null"}");
+            StatusText.Text = "タブの復元に失敗したため、利用可能なタブへ戻しました。";
+        }
+        catch (Exception recoveryException)
+        {
+            LogException(
+                "tabs-selection-recovery",
+                recoveryException,
+                fallbackSession is null ? null : GetSessionActiveTab(fallbackSession)?.State);
+            StatusText.Text = "タブの復元に失敗しました。";
+        }
+        finally
+        {
+            _isRecoveringTabSelectionFailure = false;
+            _isSwitchingTabs = wasSwitchingTabs;
         }
     }
 

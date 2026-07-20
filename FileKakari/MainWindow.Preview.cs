@@ -466,6 +466,12 @@ public partial class MainWindow
             return;
         }
 
+        if (_activeWorkspaceSession is not null && !IsCurrentActiveSessionAndPane(_activeWorkspaceSession, out var skipReason, null, null))
+        {
+            PreviewDiagnostics.Info("Preview", $"RefreshPreviewForActiveSelection skipped source=\"{source}\" reason=\"{skipReason}\"");
+            return;
+        }
+
         SchedulePreview(GetSelectedEntries(), source);
     }
 

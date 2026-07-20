@@ -986,7 +986,7 @@
             <Grid x:Name="WorkspaceSplitGrid"
                   Grid.Row="0"
                   Visibility="Collapsed"
-                  PreviewMouseLeftButtonDown="WorkspaceSplitGrid_PreviewMouseLeftButtonDown">
+                  PreviewMouseDown="WorkspaceSplitGrid_PreviewMouseDown">
                 <ItemsControl x:Name="WorkspaceSessionsHost"
                               ItemsSource="{Binding WorkspaceSessions, RelativeSource={RelativeSource AncestorType=Window}}">
                     <ItemsControl.ItemsPanel>

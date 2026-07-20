@@ -15,6 +15,37 @@ public partial class MainWindow
 {
     private const int FilterDebounceDelayMs = 300;
 
+    private void SynchronizeSharedFilterBox(WorkspaceSession session)
+    {
+        if (FilterBox is null)
+        {
+            return;
+        }
+
+        var filterText = string.Empty;
+        if (session.ActivePaneGroup?.ActiveTab?.State is { } state)
+        {
+            filterText = state.FilterText ?? string.Empty;
+        }
+
+        if (!string.Equals(FilterBox.Text, filterText, StringComparison.Ordinal))
+        {
+            _isSyncingPaneFilter = true;
+            try
+            {
+                FilterBox.Text = filterText;
+                if (NormalPaneFilterBox is not null)
+                {
+                    NormalPaneFilterBox.Text = filterText;
+                }
+            }
+            finally
+            {
+                _isSyncingPaneFilter = false;
+            }
+        }
+    }
+
     private bool FilterEntry(object item)
     {
         _filterPredicateCount++;

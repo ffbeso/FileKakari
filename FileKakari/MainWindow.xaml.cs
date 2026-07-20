@@ -5495,17 +5495,232 @@ public partial class MainWindow : Window
         SynchronizeWorkspaceSessionHostVisibility($"requested:{requestedSession.Id}");
     }
 
-    private void WorkspaceSplitGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private WorkspaceSession? FindWorkspaceSessionForPane(FolderPane pane)
+    {
+        return _workspaceSessions.FirstOrDefault(s => s.PaneGroups.Any(p => ReferenceEquals(p, pane)));
+    }
+
+    private enum FocusRestoreStrategy
+    {
+        None,
+        PreserveCurrentFocus,
+        RestoreToLastActivePane,
+        RestoreToListView
+    }
+
+    private bool IsCurrentActiveSessionAndPane(
+        WorkspaceSession? session,
+        out string skipReason,
+        FolderPane? pane = null,
+        long? requestId = null)
+    {
+        if (session is null)
+        {
+            skipReason = "session-null";
+            return false;
+        }
+        if (!IsSameWorkspaceSession(session, _activeWorkspaceSession))
+        {
+            skipReason = $"not-active-session(requested={session.Id},active={_activeWorkspaceSession?.Id ?? "null"})";
+            return false;
+        }
+        if (!_displayedWorkspaceSessionIds.Contains(session.Id))
+        {
+            skipReason = $"session-not-displayed(session={session.Id})";
+            return false;
+        }
+        if (pane is not null)
+        {
+            var activePaneGroup = session.ActivePaneGroup ?? _activeWorkspacePaneGroup;
+            if (activePaneGroup is not null && !ReferenceEquals(pane, activePaneGroup))
+            {
+                skipReason = $"not-active-pane(requested={pane.Id},active={activePaneGroup.Id})";
+                return false;
+            }
+        }
+        if (requestId.HasValue && requestId.Value < _previewGeneration)
+        {
+            skipReason = $"obsolete-request-id(requested={requestId.Value},current={_previewGeneration})";
+            return false;
+        }
+
+        skipReason = string.Empty;
+        return true;
+    }
+
+    private WorkspaceSession? ResolveWorkspaceSession(DependencyObject? target)
+    {
+        if (target is null)
+        {
+            return null;
+        }
+
+        if (target is FrameworkElement fe)
+        {
+            if (fe.DataContext is WorkspaceSession sessionFromDataContext)
+            {
+                return sessionFromDataContext;
+            }
+            if (fe.Tag is WorkspaceSession sessionFromTag)
+            {
+                return sessionFromTag;
+            }
+            if (fe is ContextMenu cm && cm.PlacementTarget is DependencyObject cmTarget)
+            {
+                return ResolveWorkspaceSession(cmTarget);
+            }
+            if (fe is MenuItem mi)
+            {
+                var parentCm = ItemsControl.ItemsControlFromItemContainer(mi) as ContextMenu;
+                if (parentCm?.PlacementTarget is DependencyObject miTarget)
+                {
+                    return ResolveWorkspaceSession(miTarget);
+                }
+            }
+            if (fe is System.Windows.Controls.Primitives.Popup popup && popup.PlacementTarget is DependencyObject popupTarget)
+            {
+                return ResolveWorkspaceSession(popupTarget);
+            }
+        }
+        else if (target is FrameworkContentElement fce)
+        {
+            if (fce.DataContext is WorkspaceSession sessionFromDataContext)
+            {
+                return sessionFromDataContext;
+            }
+            if (fce.Tag is WorkspaceSession sessionFromTag)
+            {
+                return sessionFromTag;
+            }
+            if (fce.Parent is DependencyObject fceParent)
+            {
+                return ResolveWorkspaceSession(fceParent);
+            }
+        }
+
+        var visualOwner = ResolveWorkspaceVisualOwner(target);
+        if (visualOwner.Session is { } ownerSession)
+        {
+            return ownerSession;
+        }
+
+        return null;
+    }
+
+    private bool _isActivatingWorkspaceSession;
+
+    private async Task ActivateDisplayedWorkspaceSessionAsync(
+        WorkspaceSession session,
+        string source,
+        FocusRestoreStrategy focusStrategy = FocusRestoreStrategy.PreserveCurrentFocus)
+    {
+        if (!_displayedWorkspaceSessionIds.Contains(session.Id))
+        {
+            _performanceLogger.Write($"workspace-activation-skipped reason=not-displayed sessionId={session.Id} source={source}");
+            return;
+        }
+
+        var previousSession = _activeWorkspaceSession;
+        var isSessionChange = !IsSameWorkspaceSession(previousSession, session);
+
+        bool focusRestoreRequested = focusStrategy != FocusRestoreStrategy.None;
+        bool focusRestoreExecuted = false;
+
+        _activeWorkspaceSession = session;
+        UpdateActiveWorkspaceSessionUi(session);
+
+        _isActivatingWorkspaceSession = true;
+        try
+        {
+            SynchronizeDisplayedWorkspaceState($"activate:{source}");
+        }
+        finally
+        {
+            _isActivatingWorkspaceSession = false;
+        }
+
+        UpdateWindowTitle();
+        UpdateNavigationButtons();
+        SynchronizeSharedFilterBox(session);
+
+        RefreshPreviewForActiveSelection($"workspace-activate:{source}");
+
+        if (focusStrategy == FocusRestoreStrategy.RestoreToLastActivePane && isSessionChange)
+        {
+            if (session.ActivePaneGroup is { } activePane)
+            {
+                var lv = GetFolderPaneListView(activePane);
+                if (lv is not null)
+                {
+                    lv.Focus();
+                    focusRestoreExecuted = true;
+                }
+            }
+        }
+        else if (focusStrategy == FocusRestoreStrategy.RestoreToListView)
+        {
+            if (GetActiveFolderPane() is { } currentPane && GetFolderPaneListView(currentPane) is { } lv)
+            {
+                lv.Focus();
+                focusRestoreExecuted = true;
+            }
+        }
+
+        var currentFocused = System.Windows.Input.Keyboard.FocusedElement?.GetType().Name ?? "null";
+        _performanceLogger.Write(
+            $"workspace-session-activated " +
+            $"source={source} " +
+            $"previousActiveSessionId={previousSession?.Id ?? "null"} " +
+            $"newActiveSessionId={session.Id} " +
+            $"displayedSessionIds=[{string.Join(",", _displayedWorkspaceSessionIds)}] " +
+            $"activePaneId={session.ActivePaneId} " +
+            $"focusedElement={currentFocused} " +
+            $"tabSelectionUpdated=true " +
+            $"sharedUiUpdated=true " +
+            $"previewRequested=true " +
+            $"reloadTriggered=false " +
+            $"loadCanceled=false " +
+            $"visualTreeRecreated=false " +
+            $"focusRestoreRequested={focusRestoreRequested} " +
+            $"focusRestoreExecuted={focusRestoreExecuted}");
+
+        await Task.CompletedTask;
+    }
+
+    private async void MainWindow_PreviewGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (e.NewFocus is not DependencyObject newTarget)
+        {
+            return;
+        }
+
+        var oldSession = ResolveWorkspaceSession(e.OldFocus as DependencyObject);
+        var newSession = ResolveWorkspaceSession(newTarget);
+
+        if (newSession is not null
+            && _displayedWorkspaceSessionIds.Contains(newSession.Id)
+            && !IsSameWorkspaceSession(oldSession, newSession)
+            && !IsSameWorkspaceSession(newSession, _activeWorkspaceSession))
+        {
+            await ActivateDisplayedWorkspaceSessionAsync(
+                newSession,
+                "preview-got-keyboard-focus",
+                FocusRestoreStrategy.PreserveCurrentFocus);
+        }
+    }
+
+    private async void WorkspaceSplitGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         var source = e.OriginalSource as DependencyObject;
-        var owner = ResolveWorkspaceVisualOwner(source);
-        if (owner.Session is { } session && _displayedWorkspaceSessionIds.Contains(session.Id))
+        var session = ResolveWorkspaceSession(source);
+        if (session is { } s && _displayedWorkspaceSessionIds.Contains(s.Id))
         {
-            if (!IsSameWorkspaceSession(session, _activeWorkspaceSession))
+            if (!IsSameWorkspaceSession(s, _activeWorkspaceSession))
             {
-                _activeWorkspaceSession = session;
-                UpdateActiveWorkspaceSessionUi(session);
-                SynchronizeDisplayedWorkspaceState("workspace-click");
+                await ActivateDisplayedWorkspaceSessionAsync(
+                    s,
+                    "split-grid-mouse-down",
+                    FocusRestoreStrategy.PreserveCurrentFocus);
             }
         }
     }

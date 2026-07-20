@@ -154,11 +154,12 @@ public partial class MainWindow
 
         if (!ReferenceEquals(e.Source, TabsControl)
             || _isSwitchingTabs
+            || _isActivatingWorkspaceSession
             || (_isSwitchingWorkspacePane && !shouldProcessDuringPaneSwitch))
         {
             var reason = !ReferenceEquals(e.Source, TabsControl)
                 ? "ignored-source"
-                : _isSwitchingTabs
+                : _isSwitchingTabs || _isActivatingWorkspaceSession
                     ? "ignored-switching-tabs"
                     : "ignored-switching-workspace-pane";
             WriteMainTabSelectionChangedLog(e, reason);

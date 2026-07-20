@@ -406,6 +406,10 @@ public partial class MainWindow
 
     private void UpdateNavigationButtons()
     {
+        if (_activeWorkspaceSession is not null && !IsCurrentActiveSessionAndPane(_activeWorkspaceSession, out _, null, null))
+        {
+            return;
+        }
         _navigationController.UpdateNavigationButtons();
     }
 

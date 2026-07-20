@@ -181,6 +181,14 @@ public partial class MainWindow
 
     private void ShowWorkspacePaneContextMenu(FolderPane pane, ListView listView, FileEntry? clickedEntry)
     {
+        if (FindWorkspaceSessionForPane(pane) is { } session && _displayedWorkspaceSessionIds.Contains(session.Id))
+        {
+            if (!IsSameWorkspaceSession(session, _activeWorkspaceSession))
+            {
+                _ = ActivateDisplayedWorkspaceSessionAsync(session, "context-menu", FocusRestoreStrategy.None);
+            }
+        }
+
         if (pane.ActiveTab is not { } tab || pane.ActiveTabState is not { } state)
         {
             return;

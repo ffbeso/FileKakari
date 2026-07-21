@@ -47,6 +47,10 @@ public partial class MainWindow
             var normalizedPath = NavigationState.NormalizePath(path);
             if (normalizedPath is null)
             {
+                if (_owner.ActiveTab is { } invalidPathTab)
+                {
+                    await _owner.ClearNormalFolderLoadFailureAsync(invalidPathTab, path, "navigate-invalid-path", null);
+                }
                 _owner.StatusText.Text = _owner._text.Format("PathNotFound", path);
                 _owner.UpdatePathDisplay(navigation.CurrentPath);
                 return;
@@ -60,6 +64,7 @@ public partial class MainWindow
                 {
                     if (sameAsCurrentPath || navigationKind == NavigationKind.Refresh)
                     {
+                        await _owner.ClearNormalFolderLoadFailureAsync(activeTab, normalizedPath, "navigate-unavailable", null);
                         _owner.MarkActiveLocationDisconnected(availability, "navigate");
                     }
                     else
@@ -74,6 +79,7 @@ public partial class MainWindow
 
                 if (!await _owner._driveAvailabilityService.DirectoryExistsAsync(normalizedPath))
                 {
+                    await _owner.ClearNormalFolderLoadFailureAsync(activeTab, normalizedPath, "navigate-directory-not-found", null);
                     _owner.StatusText.Text = _owner._text.Format("PathNotFound", path);
                     _owner.UpdatePathDisplay(navigation.CurrentPath);
                     return;
@@ -328,6 +334,7 @@ public partial class MainWindow
                 var availability = await _owner._driveAvailabilityService.CheckAsync(normalizedPath);
                 if (!availability.IsAvailable || !await _owner._driveAvailabilityService.DirectoryExistsAsync(normalizedPath))
                 {
+                    await _owner.ClearWorkspacePaneAfterFolderLoadFailureAsync(pane, normalizedPath, "workspace-pane-navigation-precheck");
                     pane.FileList.StatusText = _owner._text.Format("PathNotFound", path);
                     _owner.StatusText.Text = _owner._text.Format("PathNotFound", path);
                     _owner._performanceLogger.Write($"folder-pane-navigation-failed paneId={pane.Id} path=\"{normalizedPath}\" root=\"{availability.RootPath}\" exists={availability.RootExists} ready={availability.IsReady} error=\"{availability.Error}\"");

@@ -539,7 +539,10 @@ public partial class MainWindow : Window
             _performanceLogger,
             _devListPerfOptions,
             () => _settingsService.Settings.SortFoldersFirst,
-            ShouldLoadExtraColumns);
+            ShouldLoadExtraColumns,
+            (pane, state) => FindSessionContainingPane(pane) is { } session
+                && _workspaceSessions.Contains(session)
+                && ReferenceEquals(pane.ActiveTabState, state));
         _workspacePaneUiController = new WorkspacePaneUiController(
             _workspacePaneGroups,
             _folderPaneController,
@@ -768,12 +771,15 @@ public partial class MainWindow : Window
         var availability = await _driveAvailabilityService.CheckAsync(path);
         if (!availability.IsAvailable)
         {
+            await ClearNormalFolderLoadFailureAsync(loadTab, path, "load-availability", null);
             MarkActiveLocationDisconnected(availability, "load");
             return;
         }
 
         if (!await _driveAvailabilityService.DirectoryExistsAsync(path))
         {
+            await ClearNormalFolderLoadFailureAsync(loadTab, path, "load-directory-not-found", null);
+            SetNormalStatusText(_text.Format("PathNotFound", path));
             return;
         }
 
@@ -932,6 +938,10 @@ public partial class MainWindow : Window
             if (IsLoadCurrentForState(loadId, loadState))
             {
                 stopwatch.Stop();
+                if (IsDeterministicFolderLoadFailure(ex))
+                {
+                    await ClearNormalFolderLoadFailureAsync(loadTab, path, "load-enumeration-failed", ex);
+                }
                 SetNormalStatusText(ex.Message);
                 _performanceLogger.Write($"load-failed id={loadId} elapsedMs={stopwatch.ElapsedMilliseconds} error=\"{ex.Message}\"");
                 MessageBox.Show(this, ex.Message, _text.Get("OpenFolderFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -949,6 +959,57 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    internal async Task ClearNormalFolderLoadFailureAsync(
+        FolderTab targetTab,
+        string requestedPath,
+        string source,
+        Exception? exception)
+    {
+        var state = targetTab.State;
+        var ownerValid = ReferenceEquals(targetTab, ActiveTab)
+            && string.Equals(_activeStateId, state.Id, StringComparison.Ordinal);
+        if (!ownerValid)
+        {
+            _performanceLogger.Write($"folder-load-failure-skip source={source} stateId={state.Id} requestedPath=\"{requestedPath}\" generation={_loadGeneration} exceptionType={exception?.GetType().FullName ?? "none"} ownerValid=false generationValid=false skipReason=owner-mismatch");
+            return;
+        }
+
+        _loadCancellation?.Cancel();
+        var generation = _loadController.IncrementLoadGeneration();
+        MutateItemsForLoad(() => _items.Clear());
+        ItemsList.SelectedItems.Clear();
+        FindItemsScrollViewer()?.ScrollToVerticalOffset(0);
+        state.ClearItems();
+        state.ClearPendingExternalChange();
+        if (ActiveSession is { } session && GetNormalFolderPane() is { } normalPane)
+        {
+            DiscardPendingFolderWatchRefreshesForFailedPane(session, normalPane, state);
+        }
+        if (GetNormalFolderPane() is { } pane)
+        {
+            pane.FileList.ClearItemsAfterLoadFailure(requestedPath);
+        }
+
+        _itemsOwnerStateId = state.Id;
+        _statusSummaryCoordinator.StatusMessagePrefix = null;
+        _activeStateId = state.Id;
+        _loadingStateId = null;
+        _isLoading = false;
+        _currentLoadPath = null;
+        LoadingProgress.Visibility = Visibility.Collapsed;
+        await CancelAndClearPreviewAsync("folder-load-failure");
+        _performanceLogger.Write($"folder-load-failure-cleared source={source} sessionId={ActiveSession?.Id ?? "null"} paneId={state.PaneId} stateId={state.Id} requestedPath=\"{requestedPath}\" generation={generation} exceptionType={exception?.GetType().FullName ?? "none"} ownerValid=true generationValid=true listCleared=true previewCleared=true");
+    }
+
+    private static bool IsDeterministicFolderLoadFailure(Exception exception) =>
+        exception is DirectoryNotFoundException
+            or DriveNotFoundException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException
+            or PathTooLongException
+            or IOException;
 
     private async Task LoadThisPcAsync(string path, FolderTab loadTab)
     {

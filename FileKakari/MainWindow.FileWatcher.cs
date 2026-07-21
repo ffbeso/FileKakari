@@ -620,6 +620,45 @@ public partial class MainWindow
             $"normalRemoved={normalKeys.Count} workspaceRemoved={workspaceKeys.Count}");
     }
 
+    private void DiscardPendingFolderWatchRefreshesForFailedPane(
+        WorkspaceSession session,
+        FolderPane pane,
+        WorkspaceTabState state)
+    {
+        var workspaceKeys = _pendingWorkspacePaneWatchRefreshes.Values
+            .Where(pending => string.Equals(pending.SessionId, session.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(pending.PaneId, pane.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(pending.StateId, state.Id, StringComparison.Ordinal))
+            .Select(pending => pending.Key)
+            .ToList();
+        foreach (var key in workspaceKeys)
+        {
+            _pendingWorkspacePaneWatchRefreshes.Remove(key);
+        }
+
+        var normalKeys = _pendingNormalRefreshes.Values
+            .Where(pending => string.Equals(pending.SessionId, session.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(pending.StateId, state.Id, StringComparison.Ordinal))
+            .Select(pending => pending.Key)
+            .ToList();
+        foreach (var key in normalKeys)
+        {
+            _pendingNormalRefreshes.Remove(key);
+        }
+
+        var metadataPendingCleared = false;
+        if (ReferenceEquals(pane, GetNormalFolderPane()) && _pendingFolderWatchMetadataPaths.Count > 0)
+        {
+            _pendingFolderWatchMetadataPaths.Clear();
+            metadataPendingCleared = true;
+        }
+
+        if (workspaceKeys.Count > 0 || normalKeys.Count > 0 || metadataPendingCleared)
+        {
+            _performanceLogger.Write($"folder-watch-pending-discarded reason=folder-load-failure sessionId={session.Id} paneId={pane.Id} stateId={state.Id} workspacePending={workspaceKeys.Count} normalPending={normalKeys.Count} metadataPendingCleared={metadataPendingCleared}");
+        }
+    }
+
     private void ScheduleDelayedFolderWatchRefresh(TimeSpan remaining, string reason)
     {
         var interval = remaining > TimeSpan.FromMilliseconds(25) ? remaining : TimeSpan.FromMilliseconds(25);

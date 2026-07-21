@@ -1391,6 +1391,47 @@ public partial class MainWindow
         return LoadFolderPaneItemsAsync(pane, CancellationToken.None, policy, restoreTrigger, 0);
     }
 
+    internal async Task ClearWorkspacePaneAfterFolderLoadFailureAsync(
+        FolderPane pane,
+        string requestedPath,
+        string source,
+        Exception? exception = null)
+    {
+        var state = pane.ActiveTabState;
+        var session = FindSessionContainingPane(pane);
+        if (state is null || session is null || !_workspaceSessions.Contains(session))
+        {
+            _performanceLogger.Write($"folder-pane-load-failure-skip source={source} paneId={pane.Id} requestedPath=\"{requestedPath}\" skipReason=owner-missing");
+            return;
+        }
+
+        var generation = pane.FileList.BeginLoad(state.Id, requestedPath);
+        if (!ReferenceEquals(pane.ActiveTabState, state) || !pane.FileList.IsLoadCurrent(generation, state.Id, requestedPath))
+        {
+            _performanceLogger.Write($"folder-pane-load-failure-skip source={source} sessionId={session.Id} paneId={pane.Id} stateId={state.Id} requestedPath=\"{requestedPath}\" generation={generation} skipReason=owner-or-generation-mismatch");
+            return;
+        }
+
+        pane.FileList.ClearItemsAfterLoadFailure(requestedPath);
+        pane.FileList.StatusText = exception?.Message ?? _text.Format("PathNotFound", requestedPath);
+        pane.FileList.IsLoading = false;
+        state.ClearItems();
+        state.ClearPendingExternalChange();
+        DiscardPendingFolderWatchRefreshesForFailedPane(session, pane, state);
+        GetFolderPaneListView(pane)?.SelectedItems.Clear();
+        await RestoreWorkspacePaneScrollOffsetAsync(pane, 0);
+        pane.RefreshDisplay();
+
+        var previewCleared = false;
+        if (IsCurrentActiveSessionAndPane(session, out _, pane))
+        {
+            await CancelAndClearPreviewAsync("workspace-pane-navigation-failure");
+            previewCleared = true;
+        }
+
+        _performanceLogger.Write($"folder-pane-load-failure-cleared source={source} sessionId={session.Id} paneId={pane.Id} stateId={state.Id} requestedPath=\"{requestedPath}\" generation={generation} exceptionType={exception?.GetType().FullName ?? "none"} ownerValid=true generationValid=true listCleared=true previewCleared={previewCleared}");
+    }
+
     private async Task LoadFolderPaneItemsAsync(
         FolderPane pane,
         CancellationToken cancellationToken,
@@ -1404,6 +1445,18 @@ public partial class MainWindow
         {
             ApplyColumnWidthsToWorkspacePane(pane);
             await _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
+
+            var failedState = pane.ActiveTabState;
+            if (failedState is not null
+                && pane.FileList.HasCurrentLoadFailure(failedState.Id, failedState.CurrentPath)
+                && FindSessionContainingPane(pane) is { } failureSession
+                && IsCurrentActiveSessionAndPane(failureSession, out _, pane))
+            {
+                await CancelAndClearPreviewAsync("workspace-pane-folder-load-failure");
+                _performanceLogger.Write(
+                    $"folder-pane-load-failure-preview-cleared sessionId={failureSession.Id} " +
+                    $"paneId={pane.Id} stateId={failedState.Id} requestedPath=\"{failedState.CurrentPath}\"");
+            }
             
             cancellationToken.ThrowIfCancellationRequested();
 

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Threading;
 
 namespace FileKakari;
@@ -16,6 +17,7 @@ sealed class FolderPaneController
     private readonly DevListPerfOptions _devListPerfOptions;
     private readonly Func<bool> _sortFoldersFirst;
     private readonly Func<string, bool> _shouldLoadExtraColumns;
+    private readonly Func<FolderPane, WorkspaceTabState, bool> _isCurrentPaneOwner;
     private int _statusVersion;
 
     internal FolderPaneController(
@@ -28,7 +30,8 @@ sealed class FolderPaneController
         PerformanceLogger performanceLogger,
         DevListPerfOptions devListPerfOptions,
         Func<bool> sortFoldersFirst,
-        Func<string, bool> shouldLoadExtraColumns)
+        Func<string, bool> shouldLoadExtraColumns,
+        Func<FolderPane, WorkspaceTabState, bool> isCurrentPaneOwner)
     {
         _displayPanes = displayPanes;
         _fileService = fileService;
@@ -40,6 +43,7 @@ sealed class FolderPaneController
         _devListPerfOptions = devListPerfOptions;
         _sortFoldersFirst = sortFoldersFirst;
         _shouldLoadExtraColumns = shouldLoadExtraColumns;
+        _isCurrentPaneOwner = isCurrentPaneOwner;
     }
 
     internal void ClearDisplayPanes()
@@ -87,11 +91,6 @@ sealed class FolderPaneController
 
     internal async Task LoadPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken)
     {
-        if (pane.IsLoading)
-        {
-            return;
-        }
-
         var targetState = pane.ActiveTabState;
         if (targetState is null)
         {
@@ -100,10 +99,13 @@ sealed class FolderPaneController
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var requestedPath = targetState.CurrentPath;
+        var loadGeneration = pane.FileList.BeginLoad(targetState.Id, requestedPath);
+        var enumerationCompleted = false;
 
         if (SpecialLocationService.IsSpecialUri(targetState.CurrentPath))
         {
-            await LoadSpecialLocationItemsAsync(pane, targetState, cancellationToken);
+            await LoadSpecialLocationItemsAsync(pane, targetState, cancellationToken, loadGeneration);
             return;
         }
 
@@ -144,7 +146,11 @@ sealed class FolderPaneController
         if (!await _driveAvailabilityService.DirectoryExistsAsync(targetState.CurrentPath))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            pane.FileList.StatusText = _text.Format("PathNotFound", targetState.CurrentPath);
+            ClearPaneAfterLoadFailure(pane, targetState, requestedPath, loadGeneration, "directory-not-found", null);
+            if (pane.FileList.IsLoadCurrent(loadGeneration, targetState.Id, requestedPath))
+            {
+                pane.IsLoading = false;
+            }
             return;
         }
 
@@ -173,6 +179,7 @@ sealed class FolderPaneController
                     sortFoldersFirst,
                     extraColumnsEnabled,
                     cancellationToken).ToList();
+                enumerationCompleted = true;
 
                 if (_devListPerfOptions.ShellIconsEnabled)
                 {
@@ -191,6 +198,12 @@ sealed class FolderPaneController
             }, cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration))
+            {
+                LogLoadFailureSkip(pane, targetState, requestedPath, loadGeneration, "owner-or-generation-mismatch", null);
+                return;
+            }
 
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
@@ -211,14 +224,59 @@ sealed class FolderPaneController
         }
         catch (Exception ex)
         {
-            pane.FileList.StatusText = ex.Message;
-            _performanceLogger.Write($"folder-pane-load-failed paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" type={ex.GetType().FullName} message=\"{ex.Message}\"");
+            if (!enumerationCompleted && IsDeterministicFolderLoadFailure(ex))
+            {
+                ClearPaneAfterLoadFailure(pane, targetState, requestedPath, loadGeneration, "enumeration-failed", ex);
+            }
+            else
+            {
+                pane.FileList.StatusText = ex.Message;
+                _performanceLogger.Write($"folder-pane-load-failed paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" type={ex.GetType().FullName} message=\"{ex.Message}\"");
+            }
         }
         finally
         {
-            pane.IsLoading = false;
+            if (pane.FileList.IsLoadCurrent(loadGeneration, targetState.Id, requestedPath))
+            {
+                pane.IsLoading = false;
+            }
         }
     }
+
+    private bool IsCurrentPaneLoadOwner(FolderPane pane, WorkspaceTabState state, string path, long generation) =>
+        pane.FileList.IsLoadCurrent(generation, state.Id, path)
+        && ReferenceEquals(pane.ActiveTabState, state)
+        && _isCurrentPaneOwner(pane, state);
+
+    private void ClearPaneAfterLoadFailure(FolderPane pane, WorkspaceTabState state, string path, long generation, string reason, Exception? exception)
+    {
+        if (!IsCurrentPaneLoadOwner(pane, state, path, generation))
+        {
+            LogLoadFailureSkip(pane, state, path, generation, "owner-or-generation-mismatch", exception);
+            return;
+        }
+
+        pane.FileList.ClearItemsAfterLoadFailure(path);
+        state.ClearItems();
+        state.ClearPendingExternalChange();
+        pane.RefreshDisplay();
+        pane.FileList.StatusText = exception is null ? _text.Format("PathNotFound", path) : exception.Message;
+        _performanceLogger.Write($"folder-pane-load-failure-cleared source={reason} paneId={pane.Id} stateId={state.Id} requestedPath=\"{path}\" generation={generation} exceptionType={exception?.GetType().FullName ?? "none"} ownerValid=true generationValid=true listCleared=true");
+    }
+
+    private void LogLoadFailureSkip(FolderPane pane, WorkspaceTabState state, string path, long generation, string skipReason, Exception? exception)
+    {
+        _performanceLogger.Write($"folder-pane-load-failure-skip paneId={pane.Id} stateId={state.Id} requestedPath=\"{path}\" generation={generation} exceptionType={exception?.GetType().FullName ?? "none"} ownerValid={_isCurrentPaneOwner(pane, state)} generationValid={pane.FileList.IsLoadCurrent(generation, state.Id, path)} skipReason={skipReason}");
+    }
+
+    private static bool IsDeterministicFolderLoadFailure(Exception exception) =>
+        exception is DirectoryNotFoundException
+            or DriveNotFoundException
+            or UnauthorizedAccessException
+            or ArgumentException
+            or NotSupportedException
+            or PathTooLongException
+            or IOException;
 
     internal void ApplyFilter(FolderPane pane, string filter)
     {
@@ -322,7 +380,7 @@ sealed class FolderPaneController
             isSpecialLocation: pane.ActiveTabState is { } state && SpecialLocationService.IsSpecialUri(state.CurrentPath));
     }
 
-    private async Task LoadSpecialLocationItemsAsync(FolderPane pane, WorkspaceTabState targetState, CancellationToken cancellationToken)
+    private async Task LoadSpecialLocationItemsAsync(FolderPane pane, WorkspaceTabState targetState, CancellationToken cancellationToken, long loadGeneration)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         if (CanRestorePaneCache(pane, targetState)
@@ -341,6 +399,11 @@ sealed class FolderPaneController
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            if (!IsCurrentPaneLoadOwner(pane, targetState, targetState.CurrentPath, loadGeneration))
+            {
+                LogLoadFailureSkip(pane, targetState, targetState.CurrentPath, loadGeneration, "owner-or-generation-mismatch", null);
+                return;
+            }
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
@@ -396,7 +459,10 @@ sealed class FolderPaneController
         }
         finally
         {
-            pane.IsLoading = false;
+            if (pane.FileList.IsLoadCurrent(loadGeneration, targetState.Id, targetState.CurrentPath))
+            {
+                pane.IsLoading = false;
+            }
         }
     }
 

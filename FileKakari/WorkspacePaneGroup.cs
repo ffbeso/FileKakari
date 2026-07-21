@@ -21,6 +21,10 @@ public sealed class FileListState : INotifyPropertyChanged
     private bool _displaySortAscending;
     private bool _displaySortFoldersFirst;
     private string _displayFilterText = "";
+    private long _loadGeneration;
+    private long _failedLoadGeneration;
+    private string? _loadStateId;
+    private string? _loadPath;
 
     public FileListState()
     {
@@ -190,6 +194,38 @@ public sealed class FileListState : INotifyPropertyChanged
         return LastLoadedAt is not null
             && string.Equals(LoadedStateId, stateId, StringComparison.Ordinal)
             && string.Equals(LoadedPath, path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public long BeginLoad(string stateId, string path)
+    {
+        _loadGeneration++;
+        _loadStateId = stateId;
+        _loadPath = path;
+        return _loadGeneration;
+    }
+
+    public bool IsLoadCurrent(long generation, string stateId, string path)
+    {
+        return generation == _loadGeneration
+            && string.Equals(_loadStateId, stateId, StringComparison.Ordinal)
+            && string.Equals(_loadPath, path, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool HasCurrentLoadFailure(string stateId, string path) =>
+        _failedLoadGeneration == _loadGeneration && IsLoadCurrent(_loadGeneration, stateId, path);
+
+    public void ClearItemsAfterLoadFailure(string path)
+    {
+        Items.Clear();
+        ItemsView.Refresh();
+        CurrentPath = path;
+        LastLoadedAt = null;
+        LoadedPath = null;
+        LoadedStateId = null;
+        LastExternalChangeAt = null;
+        SelectedPaths = [];
+        ScrollOffset = 0;
+        _failedLoadGeneration = _loadGeneration;
     }
 
     public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null, string? loadedStateId = null)

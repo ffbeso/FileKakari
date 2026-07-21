@@ -14,6 +14,7 @@ sealed class WorkspaceSessionFactory
         var rootPath = workspace.RootPath
             ?? workspace.Tabs.FirstOrDefault()?.BasePath
             ?? workspace.SourceDirectory;
+        var layoutRoot = CloneLayoutRoot(workspace.Layout);
 
         var session = new WorkspaceSession(
             rootPath,
@@ -25,7 +26,7 @@ sealed class WorkspaceSessionFactory
             IsLocked = workspace.IsWorkspaceLocked,
             ColumnWidths = null,
             PaneSplitOrientation = ResolvePaneSplitOrientation(workspace.Layout),
-            LayoutRoot = workspace.Layout
+            LayoutRoot = layoutRoot
         };
 
         foreach (var paneGroupDefinition in workspace.PaneGroups)
@@ -43,8 +44,43 @@ sealed class WorkspaceSessionFactory
             ?? session.PaneGroups[0];
         session.SelectedTabIndex = activePaneGroup.SelectedTabIndex;
         session.ActivePaneGroup = activePaneGroup;
+        session.DisplayLayoutRoot = CreateDisplayLayoutRoot(session.LayoutRoot);
+
+        PerfLog.WriteVerbose(
+            $"workspace-layout-initialized source=session-factory sessionId={session.Id} " +
+            $"paneCount={session.PaneGroups.Count} orientation={session.PaneSplitOrientation} " +
+            $"layoutRoot={session.LayoutRoot?.GetType().Name ?? "null"} " +
+            $"displayLayoutRoot={session.DisplayLayoutRoot?.GetType().Name ?? "null"} " +
+            $"sharedReference={ReferenceEquals(session.LayoutRoot, session.DisplayLayoutRoot)}");
 
         return session;
+    }
+
+    internal static WorkspaceLayoutNodeDefinition? CreateDisplayLayoutRoot(
+        WorkspaceLayoutNodeDefinition? layoutRoot)
+    {
+        return layoutRoot is null ? null : CloneLayoutRoot(layoutRoot);
+    }
+
+    private static WorkspaceLayoutNodeDefinition CloneLayoutRoot(WorkspaceLayoutNodeDefinition layoutRoot)
+    {
+        return layoutRoot switch
+        {
+            WorkspaceSplitNodeDefinition split => new WorkspaceSplitNodeDefinition(
+                split.Id,
+                split.Orientation,
+                split.Ratio,
+                CloneLayoutRoot(split.First),
+                CloneLayoutRoot(split.Second)),
+            WorkspacePaneGroupDefinition pane => new WorkspacePaneGroupDefinition(
+                pane.Id,
+                pane.SelectedTabIndex,
+                pane.Tabs.ToArray())
+            {
+                SelectedTabId = pane.SelectedTabId
+            },
+            _ => throw new InvalidOperationException($"Unsupported workspace layout node: {layoutRoot.GetType().FullName}")
+        };
     }
 
     private static WorkspaceSplitOrientation ResolvePaneSplitOrientation(WorkspaceLayoutNodeDefinition layout)

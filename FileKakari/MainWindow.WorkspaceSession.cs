@@ -1507,17 +1507,15 @@ public partial class MainWindow
 
     private void EnsureWorkspaceDisplayLayoutRoot(WorkspaceSession session)
     {
-        if (session.DisplayLayoutRoot is not null)
+        if (session.DisplayLayoutRoot is null)
         {
-            return;
+            session.DisplayLayoutRoot = BuildDisplayLayoutRoot(session);
         }
-
-        session.DisplayLayoutRoot = BuildDisplayLayoutRoot(session);
     }
 
     private WorkspaceLayoutNodeDefinition? BuildDisplayLayoutRoot(WorkspaceSession session)
     {
-        return session.LayoutRoot;
+        return WorkspaceSessionFactory.CreateDisplayLayoutRoot(session.LayoutRoot);
     }
 
     private static WorkspaceLayoutNodeDefinition? BuildLayoutRootFromPaneGroups(

@@ -42,6 +42,7 @@ internal class WorkspaceController
         session.PaneGroups.Add(primaryPane);
         session.ActivePaneGroup = primaryPane;
         session.LayoutRoot = new WorkspacePaneGroupDefinition(primaryPane.Id, primaryPane.SelectedTabIndex, []);
+        session.DisplayLayoutRoot = WorkspaceSessionFactory.CreateDisplayLayoutRoot(session.LayoutRoot);
         return session;
     }
 

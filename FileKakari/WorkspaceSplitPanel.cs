@@ -26,6 +26,9 @@ public sealed class WorkspaceSplitPanel : Panel
     private readonly List<WorkspaceSplitterElement> _splitterElementList = [];
     private string? _draggingSplitId;
     private double _draggingRatio;
+    private WorkspaceLayoutNodeDefinition? _lastFlatFallbackLayoutRoot;
+    private string? _lastFlatFallbackReason;
+    private int _lastFlatFallbackChildCount = -1;
 
     public static readonly DependencyProperty LayoutRootProperty =
         DependencyProperty.Register(
@@ -33,6 +36,13 @@ public sealed class WorkspaceSplitPanel : Panel
             typeof(WorkspaceLayoutNodeDefinition),
             typeof(WorkspaceSplitPanel),
             new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+
+    public static readonly DependencyProperty SessionIdProperty =
+        DependencyProperty.Register(
+            nameof(SessionId),
+            typeof(string),
+            typeof(WorkspaceSplitPanel),
+            new PropertyMetadata(""));
 
     public static readonly RoutedEvent SplitRatioChangedEvent =
         EventManager.RegisterRoutedEvent(
@@ -56,6 +66,12 @@ public sealed class WorkspaceSplitPanel : Panel
     {
         get => (WorkspaceLayoutNodeDefinition?)GetValue(LayoutRootProperty);
         set => SetValue(LayoutRootProperty, value);
+    }
+
+    public string SessionId
+    {
+        get => (string)GetValue(SessionIdProperty);
+        set => SetValue(SessionIdProperty, value);
     }
 
     protected override int VisualChildrenCount => base.VisualChildrenCount + _splitterElementList.Count;
@@ -120,6 +136,7 @@ public sealed class WorkspaceSplitPanel : Panel
 
         if (LayoutRoot is null || layoutPaneIds.Count == 0)
         {
+            LogArrangeFlatFallback(LayoutRoot is null ? "layout-root-null" : "layout-pane-ids-empty");
             ArrangeFlat(InternalChildren.Cast<UIElement>().ToList(), new Rect(finalSize), arranged);
             foreach (var splitter in _splitterElementList)
             {
@@ -153,6 +170,24 @@ public sealed class WorkspaceSplitPanel : Panel
 
         InvalidateVisual();
         return finalSize;
+    }
+
+    private void LogArrangeFlatFallback(string reason)
+    {
+        if (ReferenceEquals(_lastFlatFallbackLayoutRoot, LayoutRoot)
+            && string.Equals(_lastFlatFallbackReason, reason, StringComparison.Ordinal)
+            && _lastFlatFallbackChildCount == InternalChildren.Count)
+        {
+            return;
+        }
+
+        _lastFlatFallbackLayoutRoot = LayoutRoot;
+        _lastFlatFallbackReason = reason;
+        _lastFlatFallbackChildCount = InternalChildren.Count;
+        PerfLog.WriteVerbose(
+            $"workspace-split-panel-arrange-flat-fallback sessionId={SessionId} " +
+            $"reason={reason} layoutRoot={LayoutRoot?.GetType().Name ?? "null"} " +
+            $"childCount={InternalChildren.Count}");
     }
 
     protected override void OnRender(DrawingContext drawingContext)
@@ -519,4 +554,8 @@ public sealed class WorkspaceSplitPanel : Panel
         Rect Bounds,
         Rect VisualRect,
         Rect HitRect);
+}
+
+public sealed class WorkspacePaneGroupsHost : ItemsControl
+{
 }

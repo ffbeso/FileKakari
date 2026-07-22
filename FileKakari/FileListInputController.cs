@@ -116,6 +116,11 @@ public partial class MainWindow
                 var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
                 var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
                 var clickedEntry = GetFileEntryFromItemHitTarget(source);
+                if (clickedEntry is not null && _owner.GetNormalFolderPane() is { } previewPane)
+                {
+                    _owner.MarkPreviewExplicitSelectionIntent(previewPane, "mouse-click");
+                    _owner.RequestPreviewForExplicitMouseSelectionWhenStillPending(previewPane, clickedEntry);
+                }
                 _owner._fileDragStartPoint = null;
                 _owner._fileDragStartEntry = null;
                 _owner._fileDragStartPane = null;

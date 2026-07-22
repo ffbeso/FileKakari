@@ -53,7 +53,8 @@ public partial class MainWindow
     private bool _previewPaneWasVisibleBeforeSettings;
     private int _suppressPreviewForProgrammaticSelection;
     private readonly Stack<string> _programmaticSelectionOrigins = new();
-    private bool _previewAwaitingExplicitSelection = true;
+    private PreviewAwaitState? _previewAwaitState;
+    private PreviewExplicitSelectionIntent? _previewExplicitSelectionIntent;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -189,6 +190,24 @@ public partial class MainWindow
             Key.PageDown => MoveActivePreviewSelectionPage(1),
             _ => false
         };
+    }
+
+    private void MarkPreviewExplicitSelectionIntentForKeyboardNavigation(Key key)
+    {
+        if (key is not (Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+            || Keyboard.Modifiers != ModifierKeys.None
+            || Keyboard.FocusedElement is not DependencyObject focused
+            || GetActivePreviewListView() is not { } activeListView)
+        {
+            return;
+        }
+
+        var focusedListView = focused as ListView ?? FindVisualParent<ListView>(focused);
+        if (ReferenceEquals(focusedListView, activeListView)
+            && GetActiveFolderPane() is { } pane)
+        {
+            MarkPreviewExplicitSelectionIntent(pane, "keyboard-navigation");
+        }
     }
 
     private void SetPreviewPaneVisibleByUser(bool isVisible)
@@ -476,17 +495,22 @@ public partial class MainWindow
             return;
         }
 
-        if (_previewAwaitingExplicitSelection && !explicitlyRequested)
+        var activePane = GetActiveFolderPane();
+        if (!explicitlyRequested
+            && activePane is not null
+            && IsPreviewAwaitingExplicitSelection(activePane, out var awaitSource))
         {
             PreviewDiagnostics.Info(
                 "Preview",
-                $"RefreshPreviewForActiveSelection skipped source=\"{source}\" reason=\"awaiting-explicit-selection\" sessionId=\"{_activeWorkspaceSession?.Id ?? "null"}\" paneId=\"{GetActiveFolderPane()?.Id ?? "null"}\"");
+                $"RefreshPreviewForActiveSelection skipped source=\"{source}\" reason=\"awaiting-explicit-selection\" " +
+                $"sessionId=\"{FindSessionContainingPane(activePane)?.Id ?? "null"}\" paneId=\"{activePane.Id}\" " +
+                $"previewAwaitSource=\"{awaitSource}\"");
             return;
         }
 
         if (explicitlyRequested)
         {
-            _previewAwaitingExplicitSelection = false;
+            EndPreviewAwaitingExplicitSelection(activePane, $"explicit-request:{source}");
         }
 
         SchedulePreview(GetSelectedEntries(), source);
@@ -507,18 +531,145 @@ public partial class MainWindow
         return _suppressPreviewForProgrammaticSelection > 0 || _listViewRestore.IsRestoring;
     }
 
-    private void BeginPreviewAwaitingExplicitSelection(string source)
+    private void BeginPreviewAwaitingExplicitSelection(
+        string source,
+        WorkspaceSession? targetSession = null,
+        FolderPane? targetPane = null)
     {
-        _previewAwaitingExplicitSelection = true;
+        targetPane ??= targetSession?.ActivePaneGroup ?? GetActiveFolderPane();
+        var targetState = targetPane?.ActiveTabState;
+        targetSession ??= targetPane is null ? _activeWorkspaceSession : FindSessionContainingPane(targetPane);
+        _previewAwaitState = targetPane is null
+            ? null
+            : new PreviewAwaitState(
+                targetSession?.Id,
+                targetPane.Id,
+                targetState?.Id,
+                _previewGeneration,
+                source);
+        _previewExplicitSelectionIntent = null;
+
+        PerfLog.WriteVerbose(
+            $"preview-await source={source} sessionId={targetSession?.Id ?? "null"} paneId={targetPane?.Id ?? "null"} " +
+            $"stateId={targetState?.Id ?? "null"} selectedItemExists={GetSelectedEntries().Count > 0} " +
+            $"previewCleared={IsPreviewPaneActuallyVisible} previewAwaitingExplicitSelection={_previewAwaitState is not null}");
         if (IsPreviewPaneActuallyVisible)
         {
             _ = CancelAndClearPreviewAsync($"selection-restore:{source}");
         }
     }
 
+    private bool IsPreviewAwaitingExplicitSelection(FolderPane pane, out string source)
+    {
+        if (_previewAwaitState is { } awaitState && DoesPreviewOwnerMatch(awaitState, pane))
+        {
+            source = awaitState.Source;
+            return true;
+        }
+
+        source = "";
+        return false;
+    }
+
+    private void MarkPreviewExplicitSelectionIntent(FolderPane pane, string source)
+    {
+        if (!IsPreviewAwaitingExplicitSelection(pane, out _))
+        {
+            return;
+        }
+
+        var state = pane.ActiveTabState;
+        _previewExplicitSelectionIntent = new PreviewExplicitSelectionIntent(
+            FindSessionContainingPane(pane)?.Id,
+            pane.Id,
+            state?.Id,
+            source);
+        PerfLog.WriteVerbose(
+            $"preview-explicit-selection-intent source={source} sessionId={_previewExplicitSelectionIntent.SessionId ?? "null"} " +
+            $"paneId={pane.Id} stateId={state?.Id ?? "null"}");
+    }
+
+    private void RequestPreviewForExplicitMouseSelectionWhenStillPending(FolderPane pane, FileEntry entry)
+    {
+        _ = Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+            new Action(() =>
+            {
+                if (_previewExplicitSelectionIntent is not { } intent
+                    || !DoesPreviewOwnerMatch(intent, pane))
+                {
+                    return;
+                }
+
+                if (!ReferenceEquals(pane, GetActiveFolderPane())
+                    || GetFolderPaneListView(pane) is not { } listView)
+                {
+                    PerfLog.WriteVerbose(
+                        $"preview-explicit-selection-skip source=mouse-click paneId={pane.Id} " +
+                        "previewRequested=false skipReason=inactive-or-unresolved-pane");
+                    return;
+                }
+
+                var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
+                if (!selectedEntries.Contains(entry))
+                {
+                    PerfLog.WriteVerbose(
+                        $"preview-explicit-selection-skip source=mouse-click paneId={pane.Id} " +
+                        "previewRequested=false skipReason=clicked-entry-not-selected");
+                    return;
+                }
+
+                if (!TryConsumePreviewExplicitSelectionIntent(pane, out var source))
+                {
+                    return;
+                }
+
+                RequestPreviewFromUserSelection(pane, selectedEntries, $"explicit-mouse-click:{source}");
+            }));
+    }
+
+    private bool TryConsumePreviewExplicitSelectionIntent(FolderPane pane, out string source)
+    {
+        source = "";
+        if (_previewExplicitSelectionIntent is not { } intent
+            || !DoesPreviewOwnerMatch(intent, pane))
+        {
+            return false;
+        }
+
+        _previewExplicitSelectionIntent = null;
+        _previewAwaitState = null;
+        source = intent.Source;
+        PerfLog.WriteVerbose(
+            $"preview-await-released source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} " +
+            $"paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} previewAwaitingExplicitSelection=false");
+        return true;
+    }
+
+    private void EndPreviewAwaitingExplicitSelection(FolderPane? pane, string source)
+    {
+        if (pane is null || !IsPreviewAwaitingExplicitSelection(pane, out _))
+        {
+            return;
+        }
+
+        _previewAwaitState = null;
+        _previewExplicitSelectionIntent = null;
+        PerfLog.WriteVerbose(
+            $"preview-await-released source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} " +
+            $"paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} previewAwaitingExplicitSelection=false");
+    }
+
+    private bool DoesPreviewOwnerMatch(PreviewOwnerState owner, FolderPane pane)
+    {
+        var state = pane.ActiveTabState;
+        return string.Equals(owner.SessionId, FindSessionContainingPane(pane)?.Id, StringComparison.Ordinal)
+            && string.Equals(owner.PaneId, pane.Id, StringComparison.Ordinal)
+            && string.Equals(owner.StateId, state?.Id, StringComparison.Ordinal);
+    }
+
     private void RequestPreviewFromUserSelection(FolderPane pane, IReadOnlyList<FileEntry> selectedEntries, string source)
     {
-        _previewAwaitingExplicitSelection = false;
         PerfLog.WriteVerbose(
             $"preview-selection source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} paneId={pane.Id} " +
             $"selectedPath=\"{Path.GetFileName(selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "")}\" " +
@@ -567,6 +718,21 @@ public partial class MainWindow
             _owner._suppressPreviewForProgrammaticSelection = Math.Max(0, _owner._suppressPreviewForProgrammaticSelection - 1);
         }
     }
+
+    private abstract record PreviewOwnerState(string? SessionId, string PaneId, string? StateId);
+
+    private sealed record PreviewAwaitState(
+        string? SessionId,
+        string PaneId,
+        string? StateId,
+        int Generation,
+        string Source) : PreviewOwnerState(SessionId, PaneId, StateId);
+
+    private sealed record PreviewExplicitSelectionIntent(
+        string? SessionId,
+        string PaneId,
+        string? StateId,
+        string Source) : PreviewOwnerState(SessionId, PaneId, StateId);
 
     private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
     {
@@ -634,7 +800,8 @@ public partial class MainWindow
             return;
         }
 
-        if (_previewAwaitingExplicitSelection)
+        if (GetActiveFolderPane() is { } activePane
+            && IsPreviewAwaitingExplicitSelection(activePane, out _))
         {
             PreviewDiagnostics.Info("Preview", $"ShowNoSelectionDelayedAsync skipped requestId=\"{requestId}\" source=\"{source}\" reason=\"awaiting-explicit-selection\"");
             PreviewTitleText.Text = "";

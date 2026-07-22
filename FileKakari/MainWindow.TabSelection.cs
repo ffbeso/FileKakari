@@ -363,7 +363,16 @@ public partial class MainWindow
         }
 
         _workspaceLocalState.Capture(markDirty: true, reason: "selected-tab");
-        BeginPreviewAwaitingExplicitSelection("main-tab-switch");
+        BeginPreviewAwaitingExplicitSelection(
+            "main-tab-switch",
+            selectedSession,
+            selectedSession.ActivePaneGroup);
+        PerfLog.WriteVerbose(
+            $"tab-preview-switch source=tabs-selection-changed previousSessionId={oldSession?.Id ?? "null"} " +
+            $"newSessionId={selectedSession.Id} paneId={selectedSession.ActivePaneGroup?.Id ?? "null"} " +
+            $"selectedItemExists={selectedSession.ActivePaneGroup?.SelectedPaths.Count > 0} " +
+            $"previewCleared={IsPreviewPaneActuallyVisible} previewAwaitingExplicitSelection=true " +
+            "previewRequestSource=none previewRequested=false");
         CancelActiveLoadForWorkspaceSwitch(selectedSession, "workspace-switch");
         ApplyWorkspaceSessionToFolderTabs();
         try

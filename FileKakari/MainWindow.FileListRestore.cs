@@ -967,6 +967,11 @@ public partial class MainWindow
         var targetLayoutRoot = requestedSession.LayoutRoot;
         var targetDisplayLayoutRoot = requestedSession.DisplayLayoutRoot;
 
+        BeginPreviewAwaitingExplicitSelection(
+            "workspace-tab-restore",
+            requestedSession,
+            requestedSession.ActivePaneGroup);
+
         WriteWorkspaceSwitchLog("workspace-switch-request", switchId, requestedSessionId, "selection-requested");
 
         if (previousCancellation is not null)

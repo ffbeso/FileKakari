@@ -81,7 +81,20 @@ public partial class MainWindow
                 return;
             }
 
-            RequestPreviewFromUserSelection(pane, selectedEntries, "workspace-pane-selection-changed");
+            var explicitSource = "";
+            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource)
+                && !TryConsumePreviewExplicitSelectionIntent(pane, out explicitSource))
+            {
+                LogPreviewSelectionSuppressed(pane, selectedEntries, "workspace-pane-selection-changed", "restore", $"awaiting-explicit-selection:{awaitSource}");
+                return;
+            }
+
+            RequestPreviewFromUserSelection(
+                pane,
+                selectedEntries,
+                string.IsNullOrEmpty(explicitSource)
+                    ? "workspace-pane-selection-changed"
+                    : $"workspace-pane-selection-changed:{explicitSource}");
         }
     }
 
@@ -179,7 +192,20 @@ public partial class MainWindow
                 return;
             }
 
-            RequestPreviewFromUserSelection(pane, selectedEntries, "normal-pane-selection-changed");
+            var explicitSource = "";
+            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource)
+                && !TryConsumePreviewExplicitSelectionIntent(pane, out explicitSource))
+            {
+                LogPreviewSelectionSuppressed(pane, selectedEntries, "normal-pane-selection-changed", "restore", $"awaiting-explicit-selection:{awaitSource}");
+                return;
+            }
+
+            RequestPreviewFromUserSelection(
+                pane,
+                selectedEntries,
+                string.IsNullOrEmpty(explicitSource)
+                    ? "normal-pane-selection-changed"
+                    : $"normal-pane-selection-changed:{explicitSource}");
         }
     }
 

@@ -1654,6 +1654,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        MarkPreviewExplicitSelectionIntentForKeyboardNavigation(e.Key);
         if (HandlePreviewNavigationKey(e.Key))
         {
             e.Handled = true;
@@ -2943,6 +2944,11 @@ public partial class MainWindow : Window
         var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
         var clickedEntry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
+        if (clickedEntry is not null)
+        {
+            MarkPreviewExplicitSelectionIntent(pane, "mouse-click");
+            RequestPreviewForExplicitMouseSelectionWhenStillPending(pane, clickedEntry);
+        }
         var dragEntry = GetWorkspacePaneDragEntryFromTextHitTarget(source);
         ClearFileDragStart();
 
@@ -5705,7 +5711,10 @@ public partial class MainWindow : Window
         var isSessionChange = !IsSameWorkspaceSession(previousSession, session);
         if (isSessionChange)
         {
-            BeginPreviewAwaitingExplicitSelection("workspace-active-session-switch");
+            BeginPreviewAwaitingExplicitSelection(
+                "workspace-active-session-switch",
+                session,
+                session.ActivePaneGroup);
         }
 
         bool focusRestoreRequested = focusStrategy != FocusRestoreStrategy.None;

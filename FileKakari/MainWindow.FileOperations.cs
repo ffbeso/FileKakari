@@ -589,6 +589,7 @@ public partial class MainWindow
 
         IReadOnlyList<FileTransferItem> operationItems;
         PendingFileOperationKind operationKind;
+        ShellVirtualClipboardExtraction? virtualExtraction = null;
 
         if (IsInternalClipboardValid())
         {
@@ -610,40 +611,62 @@ public partial class MainWindow
         else
         {
             var externalItems = TryGetExternalClipboardItems();
-            if (externalItems is null)
+            if (externalItems is not null)
+            {
+                foreach (var item in externalItems)
+                {
+                    if (!File.Exists(item.SourcePath) && !Directory.Exists(item.SourcePath))
+                    {
+                        SetFileOperationStatus(context, _text.Get("PasteFailedSourceMissing"));
+                        return;
+                    }
+                }
+
+                PerfLog.WriteVerbose($"clipboard-paste sourceType=file-drop clipboardFormats=\"{ShellVirtualFileClipboard.GetAvailableFormatsForLog()}\" itemCount={externalItems.Count} pasteTarget=\"{Path.GetFileName(context.CurrentPath)}\"");
+                operationItems = externalItems;
+                operationKind = GetExternalPreferredDropEffect();
+            }
+            else if (ShellVirtualFileClipboard.ContainsVirtualFiles())
+            {
+                if (!ShellVirtualFileClipboard.TryExtract(out virtualExtraction, out var error) || virtualExtraction is null)
+                {
+                    var message = _text.Format("PasteFailedPrefix", error);
+                    SetFileOperationStatus(context, message);
+                    MessageBox.Show(this, error, _text.Get("PasteFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                _performanceLogger.Write($"clipboard-paste sourceType=shell-virtual clipboardFormats=\"{ShellVirtualFileClipboard.GetAvailableFormatsForLog()}\" descriptorCount={virtualExtraction.DescriptorCount} extractedCount={virtualExtraction.ExtractedCount} tempRoot=\"{Path.GetFileName(virtualExtraction.TempRoot)}\" pasteTarget=\"{Path.GetFileName(context.CurrentPath)}\"");
+                operationItems = virtualExtraction.Items;
+                operationKind = PendingFileOperationKind.Copy;
+            }
+            else
             {
                 SetFileOperationStatus(context, _text.Get("PasteFailedNoPending"));
                 return;
             }
-
-            foreach (var item in externalItems)
-            {
-                if (!File.Exists(item.SourcePath) && !Directory.Exists(item.SourcePath))
-                {
-                    SetFileOperationStatus(context, _text.Get("PasteFailedSourceMissing"));
-                    return;
-                }
-            }
-            operationItems = externalItems;
-            operationKind = GetExternalPreferredDropEffect();
         }
 
-        var completedPaths = await ExecuteFileTransferAsync(
-            operationItems,
-            context.CurrentPath,
-            operationKind,
-            refreshActiveFolder: true,
-            refreshTab: context.Tab,
-            statusContext: context,
-            refreshPane: context.Pane);
-
-        var completed = completedPaths.Count > 0;
-        if (completed && operationKind == PendingFileOperationKind.Move)
+        try
         {
-            if (_pendingFileOperation is not null)
+            var completedPaths = await ExecuteFileTransferAsync(
+                operationItems,
+                context.CurrentPath,
+                operationKind,
+                refreshActiveFolder: true,
+                refreshTab: context.Tab,
+                statusContext: context,
+                refreshPane: context.Pane);
+
+            var completed = completedPaths.Count > 0;
+            if (completed && operationKind == PendingFileOperationKind.Move && _pendingFileOperation is not null)
             {
                 _pendingFileOperation = null;
             }
+        }
+        finally
+        {
+            virtualExtraction?.Dispose();
         }
     }
 

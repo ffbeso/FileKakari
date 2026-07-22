@@ -33,7 +33,7 @@ public partial class MainWindow
         var isSpecialView = SpecialLocationService.IsSpecialUri(navigation.CurrentPath);
         var isDisconnected = activeTab.IsDisconnected;
         var canOperateInFolder = !isSpecialView && !isDisconnected;
-        var canPaste = (IsInternalClipboardValid() || ClipboardContainsFileDropList()) && canOperateInFolder;
+        var canPaste = (IsInternalClipboardValid() || ClipboardContainsExternalFileTransfer()) && canOperateInFolder;
         var menu = new ContextMenu
         {
             PlacementTarget = ItemsList
@@ -197,7 +197,7 @@ public partial class MainWindow
         var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
         var isSpecialView = SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath);
         var canOperateInFolder = !isSpecialView && !tab.IsDisconnected;
-        var canPaste = (IsInternalClipboardValid() || ClipboardContainsFileDropList()) && canOperateInFolder;
+        var canPaste = (IsInternalClipboardValid() || ClipboardContainsExternalFileTransfer()) && canOperateInFolder;
         var menu = new ContextMenu
         {
             PlacementTarget = listView
@@ -509,7 +509,7 @@ public partial class MainWindow
 
         if (GetClipboardSequenceNumber() != _internalClipboardSequence)
         {
-            if (ClipboardContainsFileDropList())
+            if (ClipboardContainsExternalFileTransfer())
             {
                 _pendingFileOperation = null;
                 return false;
@@ -530,5 +530,8 @@ public partial class MainWindow
             return false;
         }
     }
+
+    private bool ClipboardContainsExternalFileTransfer() =>
+        ClipboardContainsFileDropList() || ShellVirtualFileClipboard.ContainsVirtualFiles();
 
 }

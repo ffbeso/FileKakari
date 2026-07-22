@@ -347,6 +347,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _settingsService = settingsService;
         _sessionStateService = sessionStateService;
+        ShellVirtualFileClipboard.CleanupStaleExtractions();
         _userCommandService = new UserCommandService();
         _userCommandService.Load();
 

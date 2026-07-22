@@ -363,10 +363,17 @@ public partial class MainWindow
             return;
         }
 
-        RefreshCurrentFolderSummary();
-        if (selectedChanged)
+        if (GetNormalFolderPane() is { } normalPane)
         {
-            UpdateSelectedItemStatus();
+            RefreshPaneItemsPreservingFilter(normalPane, "watcher-metadata");
+        }
+        else
+        {
+            RefreshCurrentFolderSummary();
+            if (selectedChanged)
+            {
+                UpdateSelectedItemStatus();
+            }
         }
 
         activeTab.StoreItems(navigation.CurrentPath, _items.ToList());
@@ -790,6 +797,7 @@ public partial class MainWindow
                 var preservedState = CaptureWorkspacePanePreservedState(pane);
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
                 await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
+                RefreshPaneItemsPreservingFilter(pane, "watcher-full");
                 pane.ActiveTabState?.ClearPendingExternalChange();
                 _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
                 success = true;

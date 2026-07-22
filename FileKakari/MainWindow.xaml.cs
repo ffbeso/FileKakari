@@ -901,6 +901,10 @@ public partial class MainWindow : Window
             if (loadId == _loadGeneration)
             {
                 ApplyTabSort(loadState);
+                if (GetNormalFolderPane() is { } normalPane)
+                {
+                    RefreshPaneItemsPreservingFilter(normalPane, "normal-load-complete");
+                }
                 stopwatch.Stop();
                 _statusSummaryCoordinator.StatusMessagePrefix = _text.Format("ItemsLoaded", _items.Count, stopwatch.ElapsedMilliseconds);
                 RefreshCurrentFolderSummary();
@@ -1078,6 +1082,10 @@ public partial class MainWindow : Window
             if (loadId == _loadGeneration)
             {
                 ApplyTabSort(loadState);
+                if (GetNormalFolderPane() is { } normalPane)
+                {
+                    RefreshPaneItemsPreservingFilter(normalPane, "normal-special-load-complete");
+                }
                 stopwatch.Stop();
                 _statusSummaryCoordinator.StatusMessagePrefix = _text.Format("DrivesLoaded", _items.Count, stopwatch.ElapsedMilliseconds);
                 RefreshCurrentFolderSummary();

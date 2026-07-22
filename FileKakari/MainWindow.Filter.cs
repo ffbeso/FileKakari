@@ -46,7 +46,7 @@ public partial class MainWindow
         }
     }
 
-    private bool FilterEntry(object item)
+    private bool FilterEntry(object item, string filter)
     {
         _filterPredicateCount++;
         if (item is not FileEntry entry)
@@ -54,21 +54,31 @@ public partial class MainWindow
             return false;
         }
 
-        var filter = FilterBox?.Text;
         return string.IsNullOrWhiteSpace(filter)
             || entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase);
     }
 
     private bool UpdateItemsFilter(string filter)
     {
+        filter ??= string.Empty;
         var shouldEnableFilter = !string.IsNullOrWhiteSpace(filter);
-        if (_itemsFilterEnabled == shouldEnableFilter)
+        if (!shouldEnableFilter)
         {
-            return false;
+            if (!_itemsFilterEnabled)
+            {
+                return false;
+            }
+
+            ItemsView.Filter = null;
+            _itemsFilterEnabled = false;
+            return true;
         }
 
-        ItemsView.Filter = shouldEnableFilter ? FilterEntry : null;
-        _itemsFilterEnabled = shouldEnableFilter;
+        // Keep the predicate bound to the tab state supplied by the caller.
+        // FilterBox is only the editor for the active pane and must not decide
+        // how a reload or watcher update filters its collection.
+        ItemsView.Filter = item => FilterEntry(item, filter);
+        _itemsFilterEnabled = true;
         return true;
     }
 
@@ -126,14 +136,33 @@ public partial class MainWindow
 
     private bool ClearNormalPaneFilterIfNeeded(string reason, string? caller)
     {
-        if (string.IsNullOrEmpty(FilterBox.Text))
+        var state = ActiveTabState;
+        var currentFilter = state?.FilterText ?? FilterBox.Text;
+        if (string.IsNullOrEmpty(currentFilter))
         {
             return false;
         }
 
         CancelPendingFilterApply();
-        LogFilterClear(GetNormalFolderPane(), ActiveTabState, FilterBox.Text, caller ?? "unknown", reason);
-        FilterBox.Text = "";
+        LogFilterClear(GetNormalFolderPane(), state, currentFilter, caller ?? "unknown", reason);
+        if (state is not null)
+        {
+            state.FilterText = "";
+        }
+
+        _isSyncingPaneFilter = true;
+        try
+        {
+            FilterBox.Text = "";
+            if (NormalPaneFilterBox is not null)
+            {
+                NormalPaneFilterBox.Text = "";
+            }
+        }
+        finally
+        {
+            _isSyncingPaneFilter = false;
+        }
         ApplyNormalFilterNow("", reason);
         return true;
     }
@@ -177,8 +206,27 @@ public partial class MainWindow
 
     private void SaveCurrentFilterToState(WorkspaceTabState targetState, [CallerMemberName] string? caller = null)
     {
-        LogFilterTextChanged(GetNormalFolderPane(), targetState, targetState.FilterText, FilterBox.Text, caller ?? "unknown", "save-current-filter-to-state");
-        targetState.FilterText = FilterBox.Text;
+        // TextChanged writes the user's edit to the active tab immediately.
+        // Do not overwrite a pane-owned value from the shared editor during a
+        // reload, watcher refresh, or tab switch.
+        var filter = targetState.FilterText ?? string.Empty;
+        if (ReferenceEquals(targetState, ActiveTabState)
+            && !string.Equals(FilterBox.Text, filter, StringComparison.Ordinal))
+        {
+            _isSyncingPaneFilter = true;
+            try
+            {
+                FilterBox.Text = filter;
+                if (NormalPaneFilterBox is not null)
+                {
+                    NormalPaneFilterBox.Text = filter;
+                }
+            }
+            finally
+            {
+                _isSyncingPaneFilter = false;
+            }
+        }
     }
 
     private void RestoreFilterFromState(WorkspaceTabState targetState, [CallerMemberName] string? caller = null)
@@ -309,7 +357,7 @@ public partial class MainWindow
             return;
         }
 
-        ApplyNormalFilterNow(FilterBox.Text, reason);
+        ApplyNormalFilterNow(ActiveTabState?.FilterText ?? FilterBox.Text, reason);
     }
 
     private void ApplyNormalFilterNow(string filter, string reason)
@@ -323,6 +371,71 @@ public partial class MainWindow
         RefreshCurrentFolderSummary();
         UpdateSelectedItemStatus();
         LogFilterApply(GetNormalFolderPane(), state, filter, _items.Count, CountVisibleItems(ItemsView), stopwatch.ElapsedMilliseconds, reason);
+    }
+
+    private void RefreshPaneItemsPreservingFilter(
+        FolderPane pane,
+        string source,
+        bool preserveSelection = true,
+        bool preserveScroll = true)
+    {
+        if (pane.ActiveTabState is not { } state)
+        {
+            _performanceLogger.Write($"pane-filter-refresh source={source} paneId={pane.Id} filterPreserved=false collectionViewRefreshed=false skipReason=no-active-state");
+            return;
+        }
+
+        var session = FindSessionContainingPane(pane);
+        var filter = state.FilterText ?? string.Empty;
+        var items = GetPaneItems(pane);
+        var itemCountBefore = items.Count;
+        var visibleCountBefore = IsWorkspaceDisplayPane(pane)
+            ? CountVisibleItems(pane.FileList.ItemsView)
+            : CountVisibleItems(ItemsView);
+
+        if (IsWorkspaceDisplayPane(pane))
+        {
+            _folderPaneController.ApplyFilter(pane, filter);
+            _folderPaneController.UpdateStatus(pane);
+        }
+        else
+        {
+            if (ReferenceEquals(pane, GetNormalFolderPane())
+                && !string.Equals(FilterBox.Text, filter, StringComparison.Ordinal))
+            {
+                _isSyncingPaneFilter = true;
+                try
+                {
+                    FilterBox.Text = filter;
+                    if (NormalPaneFilterBox is not null)
+                    {
+                        NormalPaneFilterBox.Text = filter;
+                    }
+                }
+                finally
+                {
+                    _isSyncingPaneFilter = false;
+                }
+            }
+
+            UpdateItemsFilter(filter);
+            RefreshItemsView($"pane-filter-refresh-{source}");
+            if (ReferenceEquals(pane, GetNormalFolderPane()))
+            {
+                RefreshCurrentFolderSummary();
+                UpdateSelectedItemStatus();
+            }
+        }
+
+        var visibleCountAfter = IsWorkspaceDisplayPane(pane)
+            ? CountVisibleItems(pane.FileList.ItemsView)
+            : CountVisibleItems(ItemsView);
+        _performanceLogger.Write(
+            $"pane-filter-refresh source={source} sessionId={session?.Id ?? "unknown"} paneId={pane.Id} " +
+            $"path=\"{System.IO.Path.GetFileName(state.CurrentPath)}\" filterTextLength={filter.Length} filterPreserved=true " +
+            $"itemCountBefore={itemCountBefore} itemCountAfter={items.Count} " +
+            $"visibleCountBefore={visibleCountBefore} visibleCountAfter={visibleCountAfter} " +
+            $"collectionViewRefreshed=true preserveSelection={preserveSelection} preserveScroll={preserveScroll}");
     }
 
     private void ApplyWorkspacePaneFilterNow(FolderPane pane, WorkspaceTabState state, string filter, string reason)

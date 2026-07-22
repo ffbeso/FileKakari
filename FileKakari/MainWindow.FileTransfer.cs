@@ -272,6 +272,15 @@ public partial class MainWindow
                     includeSourceDirectories: operationKind == PendingFileOperationKind.Move);
                 var revealTargets = reloadPlan.RevealTargetPaths;
 
+                if (operationKind == PendingFileOperationKind.Move && !userAborted)
+                {
+                    SynchronizeMovedSourcePaneItems(sourcePaths, reloadPlan.TargetDirectory);
+                }
+
+                _performanceLogger.Write(
+                    $"file-transfer-refresh-plan operationKind={operationKind} sourceRefreshRequested={operationKind == PendingFileOperationKind.Move} " +
+                    $"targetRefreshRequested=true reloadPathCount={reloadPlan.ReloadPaths.Count}");
+
                 bool revealAndSelectExecuted = false;
                 foreach (var path in reloadPlan.ReloadPaths)
                 {
@@ -356,6 +365,76 @@ public partial class MainWindow
             _isFileOperationInProgress = false;
             await ProcessPendingFolderWatchRefreshAsync();
             await ProcessPendingDriveListRefreshAsync();
+        }
+    }
+
+    private void SynchronizeMovedSourcePaneItems(IReadOnlyList<string> sourcePaths, string targetDirectory)
+    {
+        var sourcePathSet = sourcePaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (sourcePathSet.Count == 0)
+        {
+            return;
+        }
+
+        var targetPath = NormalizePathForComparison(targetDirectory);
+        var panes = GetDisplayedWorkspacePanes()
+            .Append(_primaryPaneGroup)
+            .Distinct()
+            .ToList();
+
+        foreach (var pane in panes)
+        {
+            if (pane.ActiveTabState is not { } state
+                || string.Equals(NormalizePathForComparison(state.CurrentPath), targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var paneItems = GetPaneItems(pane);
+            var itemsToRemove = paneItems
+                .Where(entry => sourcePathSet.Contains(entry.FullPath)
+                    && string.Equals(
+                        NormalizePathForComparison(Path.GetDirectoryName(entry.FullPath)),
+                        NormalizePathForComparison(state.CurrentPath),
+                        StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (itemsToRemove.Count == 0)
+            {
+                continue;
+            }
+
+            var itemCountBefore = paneItems.Count;
+            var visibleCountBefore = IsWorkspaceDisplayPane(pane)
+                ? CountVisibleItems(pane.FileList.ItemsView)
+                : CountVisibleItems(ItemsView);
+            foreach (var entry in itemsToRemove)
+            {
+                paneItems.Remove(entry);
+            }
+
+            var remainingSelectedPaths = state.SelectedPaths
+                .Where(path => paneItems.Any(entry => string.Equals(entry.FullPath, path, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            state.SelectedPaths = remainingSelectedPaths;
+            if (IsWorkspaceDisplayPane(pane))
+            {
+                pane.SelectedPaths = remainingSelectedPaths;
+            }
+
+            state.StoreItems(state.CurrentPath, paneItems.ToList());
+            RefreshPaneItemsPreservingFilter(pane, "file-transfer-source-move");
+            RestorePaneSelectionWithoutFocus(pane, remainingSelectedPaths);
+
+            var session = FindSessionContainingPane(pane);
+            var visibleCountAfter = IsWorkspaceDisplayPane(pane)
+                ? CountVisibleItems(pane.FileList.ItemsView)
+                : CountVisibleItems(ItemsView);
+            _performanceLogger.Write(
+                $"file-transfer-source-synchronized sessionId={session?.Id ?? "unknown"} paneId={pane.Id} " +
+                $"path=\"{Path.GetFileName(state.CurrentPath)}\" filterTextLength={(state.FilterText ?? string.Empty).Length} filterPreserved=true " +
+                $"itemCountBefore={itemCountBefore} itemCountAfter={paneItems.Count} " +
+                $"visibleCountBefore={visibleCountBefore} visibleCountAfter={visibleCountAfter} " +
+                $"collectionViewRefreshed=true sourceRefreshRequested=true targetRefreshRequested=true removedCount={itemsToRemove.Count}");
         }
     }
 

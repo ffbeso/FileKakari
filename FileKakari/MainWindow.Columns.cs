@@ -402,6 +402,7 @@ public partial class MainWindow
 
     private void ApplyTabSort(WorkspaceTabState targetState, Dictionary<string, int>? currentOrder = null)
     {
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection("reload");
         if (!_devListPerfOptions.SortEnabled)
         {
             _performanceLogger.Write($"sort-skip reason=dev-flag loadId={_diagnosticLoadId} isLoading={_isLoading} path=\"{targetState.CurrentPath}\" stateId={targetState.Id}");

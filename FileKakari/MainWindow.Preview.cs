@@ -51,6 +51,9 @@ public partial class MainWindow
     private bool _isClearingWebView;
     private bool _isPreviewPaneTemporarilySuppressedForSettings;
     private bool _previewPaneWasVisibleBeforeSettings;
+    private int _suppressPreviewForProgrammaticSelection;
+    private readonly Stack<string> _programmaticSelectionOrigins = new();
+    private bool _previewAwaitingExplicitSelection = true;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -210,7 +213,7 @@ public partial class MainWindow
         PreviewPane.Visibility = Visibility.Visible;
         PreviewGridSplitter.Visibility = Visibility.Visible;
         ApplyPreviewPanePlacement(isVisible: true);
-        RefreshPreviewForActiveSelection("preview-pane-opened");
+        RefreshPreviewForActiveSelection("preview-pane-opened", explicitlyRequested: true);
     }
 
     private void InitializePreviewPaneVisibilityFromSettings()
@@ -457,7 +460,7 @@ public partial class MainWindow
         return fallback;
     }
 
-    private void RefreshPreviewForActiveSelection(string source = "refresh-active-selection")
+    private void RefreshPreviewForActiveSelection(string source = "refresh-active-selection", bool explicitlyRequested = false)
     {
         if (!IsPreviewPaneActuallyVisible || InternalPageHost.Visibility == Visibility.Visible)
         {
@@ -473,7 +476,96 @@ public partial class MainWindow
             return;
         }
 
+        if (_previewAwaitingExplicitSelection && !explicitlyRequested)
+        {
+            PreviewDiagnostics.Info(
+                "Preview",
+                $"RefreshPreviewForActiveSelection skipped source=\"{source}\" reason=\"awaiting-explicit-selection\" sessionId=\"{_activeWorkspaceSession?.Id ?? "null"}\" paneId=\"{GetActiveFolderPane()?.Id ?? "null"}\"");
+            return;
+        }
+
+        if (explicitlyRequested)
+        {
+            _previewAwaitingExplicitSelection = false;
+        }
+
         SchedulePreview(GetSelectedEntries(), source);
+    }
+
+    private IDisposable SuppressPreviewForProgrammaticSelection(string origin)
+    {
+        _suppressPreviewForProgrammaticSelection++;
+        _programmaticSelectionOrigins.Push(origin);
+        return new PreviewSelectionSuppressionScope(this, origin);
+    }
+
+    private bool IsPreviewSuppressedForProgrammaticSelection(out string origin)
+    {
+        origin = _programmaticSelectionOrigins.TryPeek(out var currentOrigin)
+            ? currentOrigin
+            : "programmatic";
+        return _suppressPreviewForProgrammaticSelection > 0 || _listViewRestore.IsRestoring;
+    }
+
+    private void BeginPreviewAwaitingExplicitSelection(string source)
+    {
+        _previewAwaitingExplicitSelection = true;
+        if (IsPreviewPaneActuallyVisible)
+        {
+            _ = CancelAndClearPreviewAsync($"selection-restore:{source}");
+        }
+    }
+
+    private void RequestPreviewFromUserSelection(FolderPane pane, IReadOnlyList<FileEntry> selectedEntries, string source)
+    {
+        _previewAwaitingExplicitSelection = false;
+        PerfLog.WriteVerbose(
+            $"preview-selection source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} paneId={pane.Id} " +
+            $"selectedPath=\"{Path.GetFileName(selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "")}\" " +
+            "selectionChangeOrigin=user previewSuppressed=false previewRequested=true");
+        SchedulePreview(selectedEntries, source);
+    }
+
+    private void LogPreviewSelectionSuppressed(FolderPane pane, IReadOnlyList<FileEntry> selectedEntries, string source, string origin, string skipReason)
+    {
+        PerfLog.WriteVerbose(
+            $"preview-selection source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} paneId={pane.Id} " +
+            $"selectedPath=\"{Path.GetFileName(selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "")}\" " +
+            $"selectionChangeOrigin={origin} previewSuppressed=true previewRequested=false skipReason={skipReason}");
+    }
+
+    private sealed class PreviewSelectionSuppressionScope : IDisposable
+    {
+        private readonly MainWindow _owner;
+        private readonly string _origin;
+        private bool _disposed;
+
+        public PreviewSelectionSuppressionScope(MainWindow owner, string origin)
+        {
+            _owner = owner;
+            _origin = origin;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            if (_owner._programmaticSelectionOrigins.Count > 0
+                && string.Equals(_owner._programmaticSelectionOrigins.Peek(), _origin, StringComparison.Ordinal))
+            {
+                _owner._programmaticSelectionOrigins.Pop();
+            }
+            else
+            {
+                _owner._programmaticSelectionOrigins.Clear();
+            }
+
+            _owner._suppressPreviewForProgrammaticSelection = Math.Max(0, _owner._suppressPreviewForProgrammaticSelection - 1);
+        }
     }
 
     private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
@@ -539,6 +631,14 @@ public partial class MainWindow
             PreviewDiagnostics.Info(
                 "Preview",
                 $"ShowNoSelectionDelayedAsync skipped requestId=\"{requestId}\" source=\"{source}\" reason=\"state-changed\" requested={generation} current={_previewGeneration} visible={IsPreviewPaneActuallyVisible} internalPageVisible={InternalPageHost.Visibility == Visibility.Visible}");
+            return;
+        }
+
+        if (_previewAwaitingExplicitSelection)
+        {
+            PreviewDiagnostics.Info("Preview", $"ShowNoSelectionDelayedAsync skipped requestId=\"{requestId}\" source=\"{source}\" reason=\"awaiting-explicit-selection\"");
+            PreviewTitleText.Text = "";
+            ReplacePreviewWithMessage(_text.Get("PreviewSelectFile"));
             return;
         }
 

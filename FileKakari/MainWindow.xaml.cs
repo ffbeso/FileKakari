@@ -743,6 +743,7 @@ public partial class MainWindow : Window
         FolderTab? targetTab = null,
         FileListRestorePolicy policy = FileListRestorePolicy.ExactRestore)
     {
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection("reload");
         var loadTab = targetTab ?? ActiveTab;
         if (loadTab is null)
         {
@@ -2767,8 +2768,11 @@ public partial class MainWindow : Window
         var listView = GetFolderPaneListView(pane);
         if (listView is not null)
         {
-            listView.SelectedItem = item;
-            listView.ScrollIntoView(item);
+            using (SuppressPreviewForProgrammaticSelection("programmatic"))
+            {
+                listView.SelectedItem = item;
+                listView.ScrollIntoView(item);
+            }
             if (focus)
             {
                 bool shouldFocus = true;
@@ -2861,7 +2865,10 @@ public partial class MainWindow : Window
 
         if (needsReload)
         {
-            ItemsList.SelectedItems.Clear();
+            using (SuppressPreviewForProgrammaticSelection("reload"))
+            {
+                ItemsList.SelectedItems.Clear();
+            }
             await RefreshItemsViewLayoutAsync();
             _performanceLogger.Write($"settings-apply-updates beforeReload updates={GetUpdateDiagnosticsStatus()}");
             await LoadFolderAsync(navigation.CurrentPath, targetTab: activeTab);
@@ -4193,7 +4200,7 @@ public partial class MainWindow : Window
             paneGroup.RefreshDisplay();
             if (activePaneChanged)
             {
-                RefreshPreviewForActiveSelection("active-workspace-pane-changed");
+                BeginPreviewAwaitingExplicitSelection("active-workspace-pane-changed");
                 ScheduleSessionSave("active-pane");
             }
             else
@@ -5302,6 +5309,7 @@ public partial class MainWindow : Window
 
     private void RestoreSelection(IReadOnlyList<string> paths)
     {
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection("restore");
         _suppressSelectionStatusUpdates = true;
         try
         {
@@ -5687,6 +5695,10 @@ public partial class MainWindow : Window
 
         var previousSession = _activeWorkspaceSession;
         var isSessionChange = !IsSameWorkspaceSession(previousSession, session);
+        if (isSessionChange)
+        {
+            BeginPreviewAwaitingExplicitSelection("workspace-active-session-switch");
+        }
 
         bool focusRestoreRequested = focusStrategy != FocusRestoreStrategy.None;
         bool focusRestoreExecuted = false;

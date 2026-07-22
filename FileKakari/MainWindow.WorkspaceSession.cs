@@ -261,7 +261,7 @@ public partial class MainWindow
         paneGroup.RefreshDisplay();
         RefreshWorkspaceDisplayPanes();
         UpdateWindowTitle();
-        RefreshPreviewForActiveSelection("workspace-session-ui-applied");
+        BeginPreviewAwaitingExplicitSelection("workspace-pane-activate");
     }
 
     private void EnsureWorkspacePaneHasFallbackTab(WorkspacePaneGroup paneGroup)
@@ -544,11 +544,14 @@ public partial class MainWindow
             targetState.SortAscending = true;
         }
 
-        pane.FileList.ApplySort(
-            targetState.SortColumn,
-            targetState.SortAscending,
-            _settingsService.Settings.SortFoldersFirst,
-            currentOrder);
+        using (SuppressPreviewForProgrammaticSelection("reload"))
+        {
+            pane.FileList.ApplySort(
+                targetState.SortColumn,
+                targetState.SortAscending,
+                _settingsService.Settings.SortFoldersFirst,
+                currentOrder);
+        }
 
         _folderPaneController.UpdateStatus(pane);
         pane.RefreshDisplay();
@@ -1439,6 +1442,14 @@ public partial class MainWindow
         string restoreTrigger = "pane-load-complete",
         int workspaceSwitchId = 0)
     {
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection(restoreTrigger);
+        if (restoreTrigger is "workspace-switch" or "subtab-selection-changed" or "active-pane-change" or "viewstate-restore"
+            && FindSessionContainingPane(pane) is { } previewSession
+            && IsCurrentActiveSessionAndPane(previewSession, out _, pane))
+        {
+            BeginPreviewAwaitingExplicitSelection(restoreTrigger);
+        }
+
         _suppressWorkspaceSelectionSync = true;
         _suppressWorkspaceScrollSync = true;
         try
@@ -2478,6 +2489,7 @@ public partial class MainWindow
 
             if (pane.ActiveTab is { } activeTab)
             {
+                BeginPreviewAwaitingExplicitSelection("workspace-subtab-switch");
                 if (_activeWorkspaceSession is not null)
                 {
                     _ = ActivateWorkspacePaneFromSenderAsync(listBox);

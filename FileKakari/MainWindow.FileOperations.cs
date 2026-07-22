@@ -116,8 +116,11 @@ public partial class MainWindow
         var listView = GetFolderPaneListView(pane);
         if (listView is not null)
         {
-            listView.SelectedItem = entry;
-            listView.ScrollIntoView(entry);
+            using (SuppressPreviewForProgrammaticSelection("programmatic"))
+            {
+                listView.SelectedItem = entry;
+                listView.ScrollIntoView(entry);
+            }
             await _renameFocus.FocusRenameTextBoxAsync(listView, entry);
         }
     }
@@ -239,8 +242,11 @@ public partial class MainWindow
                     var listView = GetFolderPaneListView(pane);
                     if (listView is not null)
                     {
-                        listView.SelectedItem = entry;
-                        listView.ScrollIntoView(entry);
+                        using (SuppressPreviewForProgrammaticSelection("programmatic"))
+                        {
+                            listView.SelectedItem = entry;
+                            listView.ScrollIntoView(entry);
+                        }
                     }
                 }
 

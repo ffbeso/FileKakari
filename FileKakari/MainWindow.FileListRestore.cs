@@ -19,6 +19,7 @@ public partial class MainWindow
             return [];
         }
 
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection("restore");
         var pathSet = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         listView.SelectedItems.Clear();
 
@@ -91,6 +92,7 @@ public partial class MainWindow
             return;
         }
 
+        using var previewSuppression = SuppressPreviewForProgrammaticSelection("restore");
         var pathSet = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
         listView.SelectedItems.Clear();
 
@@ -197,20 +199,24 @@ public partial class MainWindow
             };
         }
 
-        var result = await _listViewRestore.RestoreAsync(
-            state!,
-            loadTab,
-            loadId,
-            ItemsList,
-            _items,
-            FindItemsScrollViewer,
-            () => _loadGeneration,
-            () => ActiveTab,
-            () => _selectionUserVersion,
-            () => _scrollUserVersion,
-            UpdateSelectedItemStatus,
-            Dispatcher,
-            _loadCancellation?.Token ?? CancellationToken.None);
+        ListViewRestoreResult result;
+        using (SuppressPreviewForProgrammaticSelection("restore"))
+        {
+            result = await _listViewRestore.RestoreAsync(
+                state!,
+                loadTab,
+                loadId,
+                ItemsList,
+                _items,
+                FindItemsScrollViewer,
+                () => _loadGeneration,
+                () => ActiveTab,
+                () => _selectionUserVersion,
+                () => _scrollUserVersion,
+                UpdateSelectedItemStatus,
+                Dispatcher,
+                _loadCancellation?.Token ?? CancellationToken.None);
+        }
 
         if (policy == FileListRestorePolicy.ExactRestore || policy == FileListRestorePolicy.ScrollOnly)
         {
@@ -708,6 +714,7 @@ public partial class MainWindow
 
             if (GetFolderPaneListView(pane) is { } listView)
             {
+                using var previewSuppression = SuppressPreviewForProgrammaticSelection("restore");
                 listView.SelectedItems.Clear();
             }
         }, DispatcherPriority.Send);

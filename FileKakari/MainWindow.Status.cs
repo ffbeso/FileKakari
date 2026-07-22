@@ -74,7 +74,14 @@ public partial class MainWindow
         SyncPaneSelectionFromListView(pane, listView);
         if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
         {
-            SchedulePreview(listView.SelectedItems.OfType<FileEntry>().ToList(), "workspace-pane-selection-changed");
+            var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
+            if (IsPreviewSuppressedForProgrammaticSelection(out var origin))
+            {
+                LogPreviewSelectionSuppressed(pane, selectedEntries, "workspace-pane-selection-changed", origin, "programmatic-selection");
+                return;
+            }
+
+            RequestPreviewFromUserSelection(pane, selectedEntries, "workspace-pane-selection-changed");
         }
     }
 
@@ -164,7 +171,15 @@ public partial class MainWindow
         if (WorkspaceSplitGrid.Visibility != Visibility.Visible
             && InternalPageHost.Visibility != Visibility.Visible)
         {
-            SchedulePreview(ItemsList.SelectedItems.OfType<FileEntry>().ToList(), "normal-pane-selection-changed");
+            var pane = GetNormalFolderPane() ?? _primaryPaneGroup;
+            var selectedEntries = ItemsList.SelectedItems.OfType<FileEntry>().ToList();
+            if (IsPreviewSuppressedForProgrammaticSelection(out var origin))
+            {
+                LogPreviewSelectionSuppressed(pane, selectedEntries, "normal-pane-selection-changed", origin, "programmatic-selection");
+                return;
+            }
+
+            RequestPreviewFromUserSelection(pane, selectedEntries, "normal-pane-selection-changed");
         }
     }
 

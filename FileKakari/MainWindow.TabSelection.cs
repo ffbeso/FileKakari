@@ -363,6 +363,7 @@ public partial class MainWindow
         }
 
         _workspaceLocalState.Capture(markDirty: true, reason: "selected-tab");
+        BeginPreviewAwaitingExplicitSelection("main-tab-switch");
         CancelActiveLoadForWorkspaceSwitch(selectedSession, "workspace-switch");
         ApplyWorkspaceSessionToFolderTabs();
         try

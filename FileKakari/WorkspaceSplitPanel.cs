@@ -16,8 +16,8 @@ public sealed class WorkspaceSplitPanel : Panel
 {
     private const double SplitterVisualThickness = 1;
     private const double SplitterHitThickness = 12;
-    private const double MinimumPaneWidth = 130;
-    private const double MinimumPaneHeight = 96;
+    private const double MinimumPaneWidth = 110;
+    private const double MinimumPaneHeight = 84;
     private const double MinimumRatio = 0.1;
     private const double MaximumRatio = 0.9;
 

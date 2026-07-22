@@ -7,7 +7,7 @@
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
         Title="FileKakari" Height="680" Width="1024"
-        MinHeight="400" MinWidth="640">
+        MinHeight="400" MinWidth="520">
     <Window.Resources>
         <local:PaneCountToColumnsConverter x:Key="PaneCountToColumnsConverter" />
         <DataTemplate x:Key="ListDisplayTemplate">
@@ -15,7 +15,7 @@
                   Height="24">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="24" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
                 </Grid.ColumnDefinitions>
                 <Border Tag="FileNameHitTarget"
                         Background="Transparent"
@@ -132,7 +132,7 @@
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" MinWidth="0" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
@@ -340,6 +340,7 @@
                         Grid.Row="1"
                         Grid.Column="1"
                          Height="26"
+                         MinWidth="0"
                          Margin="4,0,4,0"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
@@ -367,12 +368,13 @@
                     </Grid>
                 </Border>
                 <Grid Grid.Row="1"
-                      Grid.Column="2"
-                       Height="26"
-                       MinWidth="88"
-                       MaxWidth="160"
+                       Grid.Column="2"
+                        Height="26"
+                        MinWidth="64"
+                        MaxWidth="110"
                       Visibility="Collapsed">
                     <TextBox x:Name="FilterBox"
+                             MinWidth="0"
                              VerticalContentAlignment="Center"
                              Padding="4,0"
                              TextChanged="FilterBox_TextChanged" />
@@ -570,10 +572,11 @@
                         <Grid Grid.Row="1"
                                Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="4*" />
-                                <ColumnDefinition Width="1.1*" MinWidth="88" MaxWidth="156" />
+                                <ColumnDefinition Width="*" MinWidth="0" />
+                                <ColumnDefinition Width="0.8*" MinWidth="64" MaxWidth="110" />
                             </Grid.ColumnDefinitions>
                             <Border Height="24"
+                                    MinWidth="0"
                                     Tag="True"
                                     Style="{StaticResource FileKakariPanePathBorderStyle}"
                                     PreviewMouseLeftButtonDown="NormalPanePathBar_PreviewMouseLeftButtonDown">
@@ -581,6 +584,7 @@
                                     <ScrollViewer x:Name="NormalPaneBreadcrumbScroller"
                                                   HorizontalScrollBarVisibility="Disabled"
                                                   VerticalScrollBarVisibility="Disabled"
+                                                  MinWidth="0"
                                                    Margin="3,0">
                                         <ItemsControl ItemsSource="{Binding NormalPaneBreadcrumbSegments, RelativeSource={RelativeSource AncestorType=Window}}"
                                                       AlternationCount="1000">
@@ -609,8 +613,10 @@
                                                         </TextBlock>
                                                         <Button Content="{Binding Text}"
                                                                 Tag="{Binding TargetPath}"
-                                                                                     Padding="2,0"
-                                                                                     MinHeight="20"
+                                                                MaxWidth="120"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                Padding="2,0"
+                                                                MinHeight="20"
                                                                 BorderThickness="0"
                                                                 Background="Transparent"
                                                                 PreviewMouseLeftButtonDown="BreadcrumbButton_PreviewMouseLeftButtonDown"
@@ -626,14 +632,21 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Button.Style>
+                                                            <Button.ContentTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding}"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                </DataTemplate>
+                                                            </Button.ContentTemplate>
                                                         </Button>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                     </ScrollViewer>
-                                    <TextBox x:Name="NormalPanePathBox"
-                                             Tag="PanePathBox"
+                                <TextBox x:Name="NormalPanePathBox"
+                                          Tag="PanePathBox"
+                                         MinWidth="0"
                                              Visibility="Collapsed"
                                              BorderThickness="0"
                                              VerticalContentAlignment="Center"
@@ -643,13 +656,15 @@
                                 </Grid>
                             </Border>
                             <Border Grid.Column="1"
-                                    Height="24"
+                                     Height="24"
+                                     MinWidth="0"
                                     Margin="4,0,0,0"
                                     Tag="True"
                                     Style="{StaticResource FileKakariPaneInputBorderStyle}">
                                 <Grid>
                                 <TextBox x:Name="NormalPaneFilterBox"
                                           Tag="PaneFilterBox"
+                                          MinWidth="0"
                                           VerticalContentAlignment="Center"
                                           Padding="{DynamicResource PaneInputTextPadding}"
                                           BorderThickness="0"
@@ -989,9 +1004,11 @@
             </Grid>
             <Grid x:Name="WorkspaceSplitGrid"
                   Grid.Row="0"
+                  MinWidth="0"
                   Visibility="Collapsed"
                   PreviewMouseDown="WorkspaceSplitGrid_PreviewMouseDown">
                 <ItemsControl x:Name="WorkspaceSessionsHost"
+                              MinWidth="0"
                               ItemsSource="{Binding WorkspaceSessions, RelativeSource={RelativeSource AncestorType=Window}}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -1005,19 +1022,23 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type local:WorkspaceSession}">
-                            <Grid x:Name="WorkspaceSessionRootGrid">
+                            <Grid x:Name="WorkspaceSessionRootGrid"
+                                  MinWidth="0">
                                 <!-- Workspace 内容 (押し下げ一切なし) -->
-                                <local:WorkspacePaneGroupsHost ItemsSource="{Binding PaneGroups}">
+                            <local:WorkspacePaneGroupsHost ItemsSource="{Binding PaneGroups}"
+                                                           MinWidth="0">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <local:WorkspaceSplitPanel LayoutRoot="{Binding DataContext.DisplayLayoutRoot, RelativeSource={RelativeSource AncestorType={x:Type local:WorkspacePaneGroupsHost}}}"
+                                            <local:WorkspaceSplitPanel MinWidth="0"
+                                                                       LayoutRoot="{Binding DataContext.DisplayLayoutRoot, RelativeSource={RelativeSource AncestorType={x:Type local:WorkspacePaneGroupsHost}}}"
                                                                        SessionId="{Binding DataContext.Id, RelativeSource={RelativeSource AncestorType={x:Type local:WorkspacePaneGroupsHost}}}"
                                                                        SplitRatioChanged="WorkspaceSplitPanel_SplitRatioChanged" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type local:FolderPane}">
-                            <Border BorderBrush="{DynamicResource BorderBrush}"
+                            <Border MinWidth="0"
+                                    BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="0,0,1,0"
                                     Background="{DynamicResource AppBackgroundBrush}">
                                 <Grid>
@@ -1309,16 +1330,18 @@
                                             <Grid Grid.Row="2"
                                                   Margin="0,2,0,0">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="4*" />
-                                                    <ColumnDefinition Width="1*" MinWidth="84" MaxWidth="140" />
+                                                    <ColumnDefinition Width="*" MinWidth="0" />
+                                                    <ColumnDefinition Width="0.8*" MinWidth="64" MaxWidth="110" />
                                                 </Grid.ColumnDefinitions>
                                                 <Border Height="24"
+                                                        MinWidth="0"
                                                         Tag="{Binding IsActive}"
                                                         Style="{StaticResource FileKakariPanePathBorderStyle}"
                                                         PreviewMouseLeftButtonDown="WorkspacePanePathBar_PreviewMouseLeftButtonDown">
                                                     <Grid>
                                                         <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                                       VerticalScrollBarVisibility="Disabled"
+                                                                      MinWidth="0"
                                                                       Margin="3,0">
                                                             <ItemsControl ItemsSource="{Binding BreadcrumbSegments}"
                                                                           AlternationCount="1000">
@@ -1347,8 +1370,10 @@
                                                                             </TextBlock>
                                                                             <Button Content="{Binding Text}"
                                                                                     Tag="{Binding TargetPath}"
-                                                                 Padding="2,0"
-                                                                 MinHeight="20"
+                                                                                    MaxWidth="120"
+                                                                                    HorizontalContentAlignment="Stretch"
+                                                                                    Padding="2,0"
+                                                                                    MinHeight="20"
                                                                                     BorderThickness="0"
                                                                                     Background="Transparent"
                                                                                     PreviewMouseLeftButtonDown="BreadcrumbButton_PreviewMouseLeftButtonDown"
@@ -1364,6 +1389,12 @@
                                                                                         </Style.Triggers>
                                                                                     </Style>
                                                                                 </Button.Style>
+                                                                                <Button.ContentTemplate>
+                                                                                    <DataTemplate>
+                                                                                        <TextBlock Text="{Binding}"
+                                                                                                   TextTrimming="CharacterEllipsis" />
+                                                                                    </DataTemplate>
+                                                                                </Button.ContentTemplate>
                                                                             </Button>
                                                                         </StackPanel>
                                                                     </DataTemplate>
@@ -1371,6 +1402,7 @@
                                                             </ItemsControl>
                                                         </ScrollViewer>
                                                         <TextBox Tag="PanePathBox"
+                                                                 MinWidth="0"
                                                                  Visibility="Collapsed"
                                                                  BorderThickness="0"
                                                                  VerticalContentAlignment="Center"
@@ -1382,13 +1414,15 @@
                                                     </Grid>
                                                 </Border>
                                                 <Border Grid.Column="1"
-                                    Height="24"
+                                     Height="24"
+                                                        MinWidth="0"
                                                         Margin="4,0,0,0"
                                                         Tag="{Binding IsActive}"
                                                         Style="{StaticResource FileKakariPaneInputBorderStyle}">
                                                     <Grid>
                                                     <TextBox x:Name="WorkspacePaneFilterTextBox"
                                                              Tag="PaneFilterBox"
+                                                             MinWidth="0"
                                                              VerticalContentAlignment="Center"
                                                              Padding="{DynamicResource PaneInputTextPadding}"
                                                              BorderThickness="0"

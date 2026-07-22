@@ -2946,8 +2946,7 @@ public partial class MainWindow : Window
         var clickedEntry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
         if (clickedEntry is not null)
         {
-            MarkPreviewExplicitSelectionIntent(pane, "mouse-click");
-            RequestPreviewForExplicitMouseSelectionWhenStillPending(pane, clickedEntry);
+            BeginPreviewExplicitSelectionInput(pane, "mouse-click");
         }
         var dragEntry = GetWorkspacePaneDragEntryFromTextHitTarget(source);
         ClearFileDragStart();

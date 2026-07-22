@@ -75,26 +75,24 @@ public partial class MainWindow
         if (ReferenceEquals(pane, _activeWorkspaceSession.ActivePaneGroup))
         {
             var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
+            if (TryRecordPreviewExplicitSelectionChanged(pane))
+            {
+                return;
+            }
+
             if (IsPreviewSuppressedForProgrammaticSelection(out var origin))
             {
                 LogPreviewSelectionSuppressed(pane, selectedEntries, "workspace-pane-selection-changed", origin, "programmatic-selection");
                 return;
             }
 
-            var explicitSource = "";
-            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource)
-                && !TryConsumePreviewExplicitSelectionIntent(pane, out explicitSource))
+            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource))
             {
                 LogPreviewSelectionSuppressed(pane, selectedEntries, "workspace-pane-selection-changed", "restore", $"awaiting-explicit-selection:{awaitSource}");
                 return;
             }
 
-            RequestPreviewFromUserSelection(
-                pane,
-                selectedEntries,
-                string.IsNullOrEmpty(explicitSource)
-                    ? "workspace-pane-selection-changed"
-                    : $"workspace-pane-selection-changed:{explicitSource}");
+            RequestPreviewFromUserSelection(pane, selectedEntries, "workspace-pane-selection-changed");
         }
     }
 
@@ -186,26 +184,24 @@ public partial class MainWindow
         {
             var pane = GetNormalFolderPane() ?? _primaryPaneGroup;
             var selectedEntries = ItemsList.SelectedItems.OfType<FileEntry>().ToList();
+            if (TryRecordPreviewExplicitSelectionChanged(pane))
+            {
+                return;
+            }
+
             if (IsPreviewSuppressedForProgrammaticSelection(out var origin))
             {
                 LogPreviewSelectionSuppressed(pane, selectedEntries, "normal-pane-selection-changed", origin, "programmatic-selection");
                 return;
             }
 
-            var explicitSource = "";
-            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource)
-                && !TryConsumePreviewExplicitSelectionIntent(pane, out explicitSource))
+            if (IsPreviewAwaitingExplicitSelection(pane, out var awaitSource))
             {
                 LogPreviewSelectionSuppressed(pane, selectedEntries, "normal-pane-selection-changed", "restore", $"awaiting-explicit-selection:{awaitSource}");
                 return;
             }
 
-            RequestPreviewFromUserSelection(
-                pane,
-                selectedEntries,
-                string.IsNullOrEmpty(explicitSource)
-                    ? "normal-pane-selection-changed"
-                    : $"normal-pane-selection-changed:{explicitSource}");
+            RequestPreviewFromUserSelection(pane, selectedEntries, "normal-pane-selection-changed");
         }
     }
 

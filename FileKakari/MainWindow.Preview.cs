@@ -55,6 +55,7 @@ public partial class MainWindow
     private readonly Stack<string> _programmaticSelectionOrigins = new();
     private PreviewAwaitState? _previewAwaitState;
     private PreviewExplicitSelectionIntent? _previewExplicitSelectionIntent;
+    private long _nextPreviewExplicitInputSequenceId;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
@@ -206,7 +207,7 @@ public partial class MainWindow
         if (ReferenceEquals(focusedListView, activeListView)
             && GetActiveFolderPane() is { } pane)
         {
-            MarkPreviewExplicitSelectionIntent(pane, "keyboard-navigation");
+            BeginPreviewExplicitSelectionInput(pane, "keyboard-navigation");
         }
     }
 
@@ -571,78 +572,84 @@ public partial class MainWindow
         return false;
     }
 
-    private void MarkPreviewExplicitSelectionIntent(FolderPane pane, string source)
+    private void BeginPreviewExplicitSelectionInput(FolderPane pane, string source)
     {
-        if (!IsPreviewAwaitingExplicitSelection(pane, out _))
-        {
-            return;
-        }
-
         var state = pane.ActiveTabState;
+        var inputSequenceId = Interlocked.Increment(ref _nextPreviewExplicitInputSequenceId);
+        var awaitStateMatched = IsPreviewAwaitingExplicitSelection(pane, out _);
         _previewExplicitSelectionIntent = new PreviewExplicitSelectionIntent(
             FindSessionContainingPane(pane)?.Id,
             pane.Id,
             state?.Id,
-            source);
-        PerfLog.WriteVerbose(
-            $"preview-explicit-selection-intent source={source} sessionId={_previewExplicitSelectionIntent.SessionId ?? "null"} " +
-            $"paneId={pane.Id} stateId={state?.Id ?? "null"}");
-    }
+            inputSequenceId,
+            source,
+            SelectionChangedRaised: false);
 
-    private void RequestPreviewForExplicitMouseSelectionWhenStillPending(FolderPane pane, FileEntry entry)
-    {
+        PerfLog.WriteVerbose(
+            $"preview-explicit-input inputSequenceId={inputSequenceId} source={source} " +
+            $"sessionId={_previewExplicitSelectionIntent.SessionId ?? "null"} paneId={pane.Id} stateId={state?.Id ?? "null"} " +
+            $"awaitStateMatched={awaitStateMatched} awaitStateCleared=false selectionChangedRaised=false " +
+            "explicitPreviewRequested=false duplicateSuppressed=false");
+
         _ = Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.ApplicationIdle,
-            new Action(() =>
-            {
-                if (_previewExplicitSelectionIntent is not { } intent
-                    || !DoesPreviewOwnerMatch(intent, pane))
-                {
-                    return;
-                }
-
-                if (!ReferenceEquals(pane, GetActiveFolderPane())
-                    || GetFolderPaneListView(pane) is not { } listView)
-                {
-                    PerfLog.WriteVerbose(
-                        $"preview-explicit-selection-skip source=mouse-click paneId={pane.Id} " +
-                        "previewRequested=false skipReason=inactive-or-unresolved-pane");
-                    return;
-                }
-
-                var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
-                if (!selectedEntries.Contains(entry))
-                {
-                    PerfLog.WriteVerbose(
-                        $"preview-explicit-selection-skip source=mouse-click paneId={pane.Id} " +
-                        "previewRequested=false skipReason=clicked-entry-not-selected");
-                    return;
-                }
-
-                if (!TryConsumePreviewExplicitSelectionIntent(pane, out var source))
-                {
-                    return;
-                }
-
-                RequestPreviewFromUserSelection(pane, selectedEntries, $"explicit-mouse-click:{source}");
-            }));
+            new Action(() => CompletePreviewExplicitSelectionInput(pane, inputSequenceId)));
     }
 
-    private bool TryConsumePreviewExplicitSelectionIntent(FolderPane pane, out string source)
+    private void CompletePreviewExplicitSelectionInput(FolderPane pane, long inputSequenceId)
     {
-        source = "";
+        if (_previewExplicitSelectionIntent is not { } intent
+            || intent.InputSequenceId != inputSequenceId
+            || !DoesPreviewOwnerMatch(intent, pane))
+        {
+            PerfLog.WriteVerbose(
+                $"preview-explicit-input inputSequenceId={inputSequenceId} source=dispatcher " +
+                "explicitPreviewRequested=false duplicateSuppressed=true skipReason=superseded-or-owner-changed");
+            return;
+        }
+
+        _previewExplicitSelectionIntent = null;
+        var awaitStateMatched = IsPreviewAwaitingExplicitSelection(pane, out var awaitSource);
+        if (awaitStateMatched)
+        {
+            _previewAwaitState = null;
+        }
+
+        if (!ReferenceEquals(pane, GetActiveFolderPane())
+            || GetFolderPaneListView(pane) is not { } listView)
+        {
+            PerfLog.WriteVerbose(
+                $"preview-explicit-input inputSequenceId={inputSequenceId} source={intent.Source} " +
+                $"sessionId={intent.SessionId ?? "null"} paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} " +
+                $"awaitStateMatched={awaitStateMatched} awaitStateCleared={awaitStateMatched} " +
+                $"selectionChangedRaised={intent.SelectionChangedRaised} explicitPreviewRequested=false duplicateSuppressed=false " +
+                "skipReason=inactive-or-unresolved-pane");
+            return;
+        }
+
+        var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
+        PerfLog.WriteVerbose(
+            $"preview-explicit-input inputSequenceId={inputSequenceId} source={intent.Source} " +
+            $"sessionId={intent.SessionId ?? "null"} paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} " +
+            $"awaitStateMatched={awaitStateMatched} awaitStateCleared={awaitStateMatched} " +
+            $"selectionChangedRaised={intent.SelectionChangedRaised} explicitPreviewRequested=true duplicateSuppressed=false " +
+            $"awaitSource={awaitSource}");
+        RequestPreviewFromUserSelection(pane, selectedEntries, $"explicit-input:{intent.Source}:{inputSequenceId}");
+    }
+
+    private bool TryRecordPreviewExplicitSelectionChanged(FolderPane pane)
+    {
         if (_previewExplicitSelectionIntent is not { } intent
             || !DoesPreviewOwnerMatch(intent, pane))
         {
             return false;
         }
 
-        _previewExplicitSelectionIntent = null;
-        _previewAwaitState = null;
-        source = intent.Source;
+        _previewExplicitSelectionIntent = intent with { SelectionChangedRaised = true };
         PerfLog.WriteVerbose(
-            $"preview-await-released source={source} sessionId={FindSessionContainingPane(pane)?.Id ?? "null"} " +
-            $"paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} previewAwaitingExplicitSelection=false");
+            $"preview-explicit-input inputSequenceId={intent.InputSequenceId} source={intent.Source} " +
+            $"sessionId={intent.SessionId ?? "null"} paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} " +
+            "selectionChangedRaised=true explicitPreviewRequested=false duplicateSuppressed=true");
         return true;
     }
 
@@ -732,7 +739,9 @@ public partial class MainWindow
         string? SessionId,
         string PaneId,
         string? StateId,
-        string Source) : PreviewOwnerState(SessionId, PaneId, StateId);
+        long InputSequenceId,
+        string Source,
+        bool SelectionChangedRaised) : PreviewOwnerState(SessionId, PaneId, StateId);
 
     private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
     {
@@ -749,7 +758,7 @@ public partial class MainWindow
         var selectedPath = selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "";
         PreviewDiagnostics.Info(
             "Preview",
-            $"SchedulePreview requestId=\"{requestId}\" source=\"{source}\" selectedCount={selectedEntries.Count} path=\"{selectedPath}\" generation={generation} previousGeneration={generation - 1}");
+            $"SchedulePreview requestId=\"{requestId}\" source=\"{source}\" selectedCount={selectedEntries.Count} path=\"{selectedPath}\" generation={generation} previousGeneration={generation - 1} initializationPending={!_isWebViewInitialized}");
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;

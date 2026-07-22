@@ -7,7 +7,7 @@
     <SolidColorBrush x:Key="InactivePaneAccentBrush" Color="{DynamicResource BorderColor}" />
     <SolidColorBrush x:Key="MenuIconColumnBackgroundBrush" Color="{DynamicResource MenuIconColumnBackgroundColor}" />
     <Thickness x:Key="PaneInputBorderThickness">1</Thickness>
-    <Thickness x:Key="PaneInputTextPadding">6,0</Thickness>
+    <Thickness x:Key="PaneInputTextPadding">4,0</Thickness>
 
     <Style x:Key="FileKakariPaneChromeOverlayStyle" TargetType="Border">
         <Setter Property="Background" Value="Transparent" />
@@ -78,8 +78,8 @@
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="8,4" />
-        <Setter Property="Margin" Value="1,0" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="Margin" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -222,7 +222,7 @@
         <Setter Property="Background" Value="{DynamicResource TabBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource TabSeparatorBrush}" />
-        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="Padding" Value="9,3" />
         <Setter Property="Margin" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
@@ -422,7 +422,7 @@
     <Style TargetType="ComboBoxItem">
         <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Padding" Value="6,3" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">

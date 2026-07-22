@@ -6,8 +6,8 @@
         xmlns:local="clr-namespace:FileKakari"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
-        Title="FileKakari" Height="720" Width="1080"
-        MinHeight="420" MinWidth="720">
+        Title="FileKakari" Height="680" Width="1024"
+        MinHeight="400" MinWidth="640">
     <Window.Resources>
         <local:PaneCountToColumnsConverter x:Key="PaneCountToColumnsConverter" />
         <DataTemplate x:Key="ListDisplayTemplate">
@@ -124,7 +124,7 @@
         </DataTemplate>
     </Window.Resources>
     <DockPanel Background="{DynamicResource AppBackgroundBrush}">
-        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="6">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -140,7 +140,7 @@
                             Grid.Row="0"
                             Grid.Column="0"
                             Grid.ColumnSpan="2"
-                            Margin="0,0,0,6"
+                             Margin="0,0,0,4"
                             AllowDrop="True"
                             PreviewMouseDown="TabsControl_PreviewMouseDown"
                             PreviewMouseLeftButtonDown="TabsControl_PreviewMouseLeftButtonDown"
@@ -228,12 +228,14 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <Grid MinWidth="24"
+                                      MaxWidth="180"
                                       Height="18"
                                       VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Header}"
                                                Tag="WorkspaceTabTitle"
                                                Margin="2,0"
-                                               VerticalAlignment="Center">
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -295,8 +297,8 @@
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top">
                     <Button x:Name="InternalPageMenuButton"
-                            Width="32"
-                            Height="28"
+                             Width="28"
+                             Height="26"
                             Padding="0"
                             Margin="4,0,0,0"
                             ToolTip="内部ページ"
@@ -337,8 +339,8 @@
                 <Border x:Name="PathBarHost"
                         Grid.Row="1"
                         Grid.Column="1"
-                        Height="28"
-                        Margin="6,0,6,0"
+                         Height="26"
+                         Margin="4,0,4,0"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
                         Background="{DynamicResource ControlBackgroundBrush}"
@@ -349,13 +351,13 @@
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Disabled"
                                       VerticalAlignment="Center"
-                                      Margin="4,0">
+                                                                       Margin="3,0">
                             <StackPanel x:Name="BreadcrumbPanel"
                                         Orientation="Horizontal"
                                         VerticalAlignment="Center" />
                         </ScrollViewer>
                         <TextBox x:Name="PathBox"
-                                 Height="28"
+                                  Height="26"
                                  BorderThickness="0"
                                  VerticalContentAlignment="Center"
                                  Padding="4,0"
@@ -366,14 +368,16 @@
                 </Border>
                 <Grid Grid.Row="1"
                       Grid.Column="2"
-                      Height="28"
+                       Height="26"
+                       MinWidth="88"
+                       MaxWidth="160"
                       Visibility="Collapsed">
                     <TextBox x:Name="FilterBox"
                              VerticalContentAlignment="Center"
                              Padding="4,0"
                              TextChanged="FilterBox_TextChanged" />
                     <TextBlock x:Name="FilterPlaceholder"
-                               Margin="8,0,4,0"
+                                Margin="6,0,3,0"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SubtleTextBrush}"
                                IsHitTestVisible="False">
@@ -403,7 +407,7 @@
             </Grid.ColumnDefinitions>
             <Border x:Name="WorkspacePaneRail"
                     Grid.Column="0"
-                    Width="180"
+                    Width="160"
                     Background="{DynamicResource PanelBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,1,0"
@@ -465,8 +469,8 @@
                 <Border Grid.RowSpan="3"
                         Tag="True"
                         Style="{StaticResource FileKakariPaneChromeOverlayStyle}" />
-                <Border MinHeight="44"
-                        Padding="8,6"
+                <Border MinHeight="36"
+                        Padding="6,4"
                         Tag="True"
                         Style="{StaticResource FileKakariPaneHeaderBorderStyle}">
                     <Grid>
@@ -481,42 +485,42 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Orientation="Horizontal">
                                 <Button x:Name="NormalPaneBackButton"
-                                        Width="26"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
                                         Margin="0,0,2,0"
                                         ToolTip="戻る"
                                         Content="⬅️"
                                         Click="BackButton_Click" />
                                 <Button x:Name="NormalPaneForwardButton"
-                                        Width="26"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
                                         Margin="0,0,2,0"
                                         ToolTip="進む"
                                         Content="➡️"
                                         Click="ForwardButton_Click" />
                                 <Button x:Name="NormalPaneUpButton"
-                                        Width="26"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
                                         Margin="0,0,2,0"
                                         ToolTip="親フォルダへ移動"
                                         Content="⬆️"
                                         Click="UpButton_Click" />
                                 <Button x:Name="NormalPaneRefreshButton"
-                                        Width="26"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
-                                        Margin="0,0,6,0"
+                                        Margin="0,0,4,0"
                                         ToolTip="再読み込み"
                                         Content="🔄"
                                         Click="RefreshButton_Click" />
                                 <Button x:Name="NormalPanePreviewButton"
-                                        Width="28"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
-                                        Margin="0,0,6,0"
+                                        Margin="0,0,4,0"
                                         FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                         Content="&#xE721;"
                                         ToolTip="プレビュー"
@@ -524,8 +528,8 @@
                                         Loaded="PreviewToolbarButton_Loaded"
                                         Click="PreviewToggleButton_Click" />
                                 <Button x:Name="NormalPanePlacesButton"
-                                        Width="28"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
                                         Margin="0,0,2,0"
                                         ToolTip="場所"
@@ -533,26 +537,26 @@
                                         Content="&#xE734;"
                                         Click="NormalPanePlacesButton_Click" />
                                 <Button x:Name="NormalPaneViewModeButton"
-                                        Width="28"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
-                                        Margin="0,0,6,0"
+                                        Margin="0,0,4,0"
                                         ToolTip="表示モード"
                                         Content="▦"
                                         Click="ViewModeButton_Click" />
                                 <Button x:Name="NormalPaneNewFolderButton"
-                                        Width="28"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
                                         Margin="0,0,2,0"
                                         ToolTip="新しいフォルダ"
                                         Content="📁"
                                         Click="NewFolderButton_Click" />
                                 <Button x:Name="NormalPaneNewFileButton"
-                                        Width="28"
-                                        Height="24"
+                                        Width="24"
+                                        Height="22"
                                         Padding="0"
-                                        Margin="0,0,6,0"
+                                        Margin="0,0,4,0"
                                         ToolTip="新しいファイル"
                                         Content="📄"
                                         Click="NewFileButton_Click" />
@@ -564,12 +568,12 @@
                                        VerticalAlignment="Center" />
                         </Grid>
                         <Grid Grid.Row="1"
-                              Margin="0,4,0,0">
+                               Margin="0,2,0,0">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="160" />
+                                <ColumnDefinition Width="4*" />
+                                <ColumnDefinition Width="1.1*" MinWidth="88" MaxWidth="156" />
                             </Grid.ColumnDefinitions>
-                            <Border Height="26"
+                            <Border Height="24"
                                     Tag="True"
                                     Style="{StaticResource FileKakariPanePathBorderStyle}"
                                     PreviewMouseLeftButtonDown="NormalPanePathBar_PreviewMouseLeftButtonDown">
@@ -577,7 +581,7 @@
                                     <ScrollViewer x:Name="NormalPaneBreadcrumbScroller"
                                                   HorizontalScrollBarVisibility="Disabled"
                                                   VerticalScrollBarVisibility="Disabled"
-                                                  Margin="4,0">
+                                                   Margin="3,0">
                                         <ItemsControl ItemsSource="{Binding NormalPaneBreadcrumbSegments, RelativeSource={RelativeSource AncestorType=Window}}"
                                                       AlternationCount="1000">
                                             <ItemsControl.ItemsPanel>
@@ -605,8 +609,8 @@
                                                         </TextBlock>
                                                         <Button Content="{Binding Text}"
                                                                 Tag="{Binding TargetPath}"
-                                                                Padding="3,0"
-                                                                MinHeight="22"
+                                                                                     Padding="2,0"
+                                                                                     MinHeight="20"
                                                                 BorderThickness="0"
                                                                 Background="Transparent"
                                                                 PreviewMouseLeftButtonDown="BreadcrumbButton_PreviewMouseLeftButtonDown"
@@ -633,14 +637,14 @@
                                              Visibility="Collapsed"
                                              BorderThickness="0"
                                              VerticalContentAlignment="Center"
-                                             Padding="6,0"
+                                                                  Padding="4,0"
                                              KeyDown="NormalPanePathBox_KeyDown"
                                              LostKeyboardFocus="NormalPanePathBox_LostKeyboardFocus" />
                                 </Grid>
                             </Border>
                             <Border Grid.Column="1"
-                                    Height="26"
-                                    Margin="6,0,0,0"
+                                    Height="24"
+                                    Margin="4,0,0,0"
                                     Tag="True"
                                     Style="{StaticResource FileKakariPaneInputBorderStyle}">
                                 <Grid>
@@ -653,7 +657,7 @@
                                           ToolTip="フィルター"
                                           TextChanged="NormalPaneFilterBox_TextChanged" />
                                 <TextBlock Text="フィルター"
-                                           Margin="8,0,4,0"
+                                           Margin="6,0,3,0"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource SubtleTextBrush}"
                                            IsHitTestVisible="False">
@@ -963,17 +967,17 @@
                 </Canvas>
             </Canvas>
             <Border Grid.Row="2"
-                    MinHeight="24"
-                    Padding="8,2"
+                    MinHeight="22"
+                    Padding="6,1"
                     Background="{DynamicResource StatusBarBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,1,0,0">
                 <DockPanel LastChildFill="True">
                     <ProgressBar x:Name="LoadingProgress"
                                  DockPanel.Dock="Left"
-                                 Width="120"
-                                 Height="14"
-                                 Margin="0,0,8,0"
+                                 Width="104"
+                                 Height="12"
+                                 Margin="0,0,6,0"
                                  IsIndeterminate="True"
                                  Visibility="Collapsed" />
                     <TextBlock x:Name="StatusText"
@@ -1026,8 +1030,8 @@
                                             Tag="{Binding IsActive}"
                                             Style="{StaticResource FileKakariPaneChromeOverlayStyle}" />
                                     <Border Grid.Row="0"
-                                             MinHeight="44"
-                                             Padding="8,6"
+                                             MinHeight="36"
+                                             Padding="6,4"
                                              Tag="{Binding IsActive}"
                                              Style="{StaticResource FileKakariPaneHeaderBorderStyle}">
                                         <Grid>
@@ -1038,7 +1042,7 @@
                                             </Grid.RowDefinitions>
 
                                             <!-- Row 0: Sub-Tab Bar -->
-                                            <Grid Grid.Row="0" Margin="0,0,0,4">
+                                            <Grid Grid.Row="0" Margin="0,0,0,2">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
@@ -1073,8 +1077,8 @@
                                                             <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
                                                             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
                                                             <Setter Property="BorderThickness" Value="1" />
-                                                            <Setter Property="Padding" Value="5,3" />
-                                                            <Setter Property="Margin" Value="0,0,2,0" />
+                                                            <Setter Property="Padding" Value="4,2" />
+                                                            <Setter Property="Margin" Value="0,0,1,0" />
                                                             <Setter Property="Template">
                                                                 <Setter.Value>
                                                                     <ControlTemplate TargetType="ListBoxItem">
@@ -1150,7 +1154,9 @@
                                                                 </TextBlock>
                                                                 <TextBlock Text="{Binding Header}"
                                                                            Foreground="{DynamicResource TextBrush}"
-                                                                           Margin="0,0,4,0"
+                                                                           Margin="0,0,3,0"
+                                                                           MaxWidth="120"
+                                                                           TextTrimming="CharacterEllipsis"
                                                                            VerticalAlignment="Center"/>
                                                                 <Button Content="×"
                                                                         Width="14"
@@ -1218,39 +1224,39 @@
                                                     </Button.ContextMenu>
                                                 </Button>
                                                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                                                    <Button Width="26"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="戻る"
                                                             Content="⬅️"
                                                             IsEnabled="{Binding CanGoBack}"
                                                             Click="WorkspacePaneBackButton_Click" />
-                                                    <Button Width="26"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="進む"
                                                             Content="➡️"
                                                             IsEnabled="{Binding CanGoForward}"
                                                             Click="WorkspacePaneForwardButton_Click" />
-                                                    <Button Width="26"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="親フォルダへ移動"
                                                             Content="⬆️"
                                                             IsEnabled="{Binding CanGoUp}"
                                                             Click="WorkspacePaneUpButton_Click" />
-                                                     <Button Width="26"
-                                                            Height="24"
+                                                     <Button Width="24"
+                                                             Height="22"
                                                             Padding="0"
                                                             Margin="0,0,6,0"
                                                             ToolTip="再読み込み"
                                                             Content="🔄"
                                                             Click="WorkspacePaneRefreshButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,6,0"
                                                             FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
@@ -1259,37 +1265,37 @@
                                                             Foreground="{DynamicResource TextBrush}"
                                                             Loaded="PreviewToolbarButton_Loaded"
                                                             Click="PreviewToggleButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="場所"
                                                             FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                                             Content="&#xE734;"
                                                             Click="WorkspacePanePlacesButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,6,0"
                                                             ToolTip="表示モード"
                                                             Content="▦"
                                                             Click="WorkspacePaneViewModeButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="新しいフォルダ"
                                                             Content="📁"
                                                             Click="WorkspacePaneNewFolderButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,2,0"
                                                             ToolTip="新しいファイル"
                                                             Content="📄"
                                                             Click="WorkspacePaneNewFileButton_Click" />
-                                                    <Button Width="28"
-                                                            Height="24"
+                                                    <Button Width="24"
+                                                            Height="22"
                                                             Padding="0"
                                                             Margin="0,0,6,0"
                                                             ToolTip="削除"
@@ -1301,19 +1307,19 @@
 
                                             <!-- Row 2: Breadcrumb / Filter Bar -->
                                             <Grid Grid.Row="2"
-                                                  Margin="0,4,0,0">
+                                                  Margin="0,2,0,0">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="140" />
+                                                    <ColumnDefinition Width="4*" />
+                                                    <ColumnDefinition Width="1*" MinWidth="84" MaxWidth="140" />
                                                 </Grid.ColumnDefinitions>
-                                                <Border Height="26"
+                                                <Border Height="24"
                                                         Tag="{Binding IsActive}"
                                                         Style="{StaticResource FileKakariPanePathBorderStyle}"
                                                         PreviewMouseLeftButtonDown="WorkspacePanePathBar_PreviewMouseLeftButtonDown">
                                                     <Grid>
                                                         <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                                       VerticalScrollBarVisibility="Disabled"
-                                                                      Margin="4,0">
+                                                                      Margin="3,0">
                                                             <ItemsControl ItemsSource="{Binding BreadcrumbSegments}"
                                                                           AlternationCount="1000">
                                                                 <ItemsControl.ItemsPanel>
@@ -1341,8 +1347,8 @@
                                                                             </TextBlock>
                                                                             <Button Content="{Binding Text}"
                                                                                     Tag="{Binding TargetPath}"
-                                                                                    Padding="3,0"
-                                                                                    MinHeight="22"
+                                                                 Padding="2,0"
+                                                                 MinHeight="20"
                                                                                     BorderThickness="0"
                                                                                     Background="Transparent"
                                                                                     PreviewMouseLeftButtonDown="BreadcrumbButton_PreviewMouseLeftButtonDown"
@@ -1368,7 +1374,7 @@
                                                                  Visibility="Collapsed"
                                                                  BorderThickness="0"
                                                                  VerticalContentAlignment="Center"
-                                                                 Padding="6,0"
+                                              Padding="4,0"
                                                                  Text="{Binding CurrentPath, Mode=OneWay}"
                                                                  KeyDown="WorkspacePanePathBox_KeyDown"
                                                                  LostKeyboardFocus="WorkspacePanePathBox_LostKeyboardFocus"
@@ -1376,8 +1382,8 @@
                                                     </Grid>
                                                 </Border>
                                                 <Border Grid.Column="1"
-                                                        Height="26"
-                                                        Margin="6,0,0,0"
+                                    Height="24"
+                                                        Margin="4,0,0,0"
                                                         Tag="{Binding IsActive}"
                                                         Style="{StaticResource FileKakariPaneInputBorderStyle}">
                                                     <Grid>
@@ -1392,7 +1398,7 @@
                                                              TextChanged="WorkspacePaneFilterBox_TextChanged"
                                                              PreviewMouseLeftButtonDown="WorkspacePaneTextBox_PreviewMouseLeftButtonDown" />
                                                     <TextBlock Text="フィルター"
-                                                               Margin="8,0,4,0"
+                                            Margin="6,0,3,0"
                                                                VerticalAlignment="Center"
                                                                Foreground="{DynamicResource SubtleTextBrush}"
                                                                IsHitTestVisible="False">
@@ -1482,16 +1488,16 @@
                                         </ListView.View>
                                     </ListView>
                                     <Border Grid.Row="2"
-                                            MinHeight="24"
-                                            Padding="8,2"
+                                            MinHeight="22"
+                                            Padding="6,1"
                                             Background="{DynamicResource StatusBarBackgroundBrush}"
                                             BorderBrush="{DynamicResource BorderBrush}"
                                             BorderThickness="0,1,0,0">
                                         <DockPanel LastChildFill="True">
                                             <ProgressBar DockPanel.Dock="Left"
-                                                         Width="96"
-                                                         Height="14"
-                                                         Margin="0,0,8,0"
+                                                         Width="84"
+                                                         Height="12"
+                                                         Margin="0,0,6,0"
                                                          IsIndeterminate="True">
                                                 <ProgressBar.Style>
                                                     <Style TargetType="ProgressBar">
@@ -1550,7 +1556,7 @@
 
                 <!-- オーバーレイ 上端3pxアクセントライン (Panel.ZIndex=20) -->
                 <Border x:Name="WorkspaceTopAccentLine"
-                        Height="3"
+                         Height="2"
                         VerticalAlignment="Top"
                         HorizontalAlignment="Stretch"
                         IsHitTestVisible="False"
@@ -1580,7 +1586,7 @@
     </ItemsControl.ItemTemplate>
 </ItemsControl>
                 <Border x:Name="WorkspaceSideBySideDivider"
-                        Width="2"
+                    Width="1"
                         HorizontalAlignment="Center"
                         Background="{DynamicResource ActivePaneBorderBrush}"
                         IsHitTestVisible="False"
@@ -1609,26 +1615,26 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Border Padding="10,8"
+                    <Border Padding="6,4"
                             Background="{DynamicResource ControlBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,0,0,1">
                         <DockPanel LastChildFill="True">
                             <Button x:Name="PreviewCloseButton"
                                     DockPanel.Dock="Right"
-                                    Width="28"
-                                    Height="24"
+                                    Width="24"
+                                    Height="22"
                                     Padding="0"
-                                    Margin="8,0,0,0"
+                                    Margin="4,0,0,0"
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                     Content="&#xE711;"
                                     Click="PreviewCloseButton_Click" />
                             <Button x:Name="PreviewMaximizeButton"
                                     DockPanel.Dock="Right"
-                                    Width="28"
-                                    Height="24"
+                                    Width="24"
+                                    Height="22"
                                     Padding="0"
-                                    Margin="8,0,0,0"
+                                    Margin="4,0,0,0"
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                     Content="&#xE922;"
                                     Click="PreviewMaximizeButton_Click" />
@@ -1636,7 +1642,7 @@
                                          DockPanel.Dock="Right"
                                          Width="64"
                                          Height="12"
-                                         Margin="8,0,0,0"
+                                         Margin="4,0,0,0"
                                          IsIndeterminate="True"
                                          Visibility="Collapsed" />
                             <StackPanel>

@@ -37,8 +37,8 @@ public partial class MainWindow
     private bool _currentWebViewMediaAutoPlayAudioSetting;
     private bool _currentWebViewMediaEffectiveAutoPlay;
     private bool _currentWebViewMediaEffectiveMuted;
-    private GridLength _previewPaneHeight = new(240);
-    private GridLength _previewPaneWidth = new(320);
+    private GridLength _previewPaneHeight = new(210);
+    private GridLength _previewPaneWidth = new(280);
     private bool _isWebViewInitialized;
     private string? _currentWebViewUri;
     private string _currentWebViewRequestId = "";
@@ -59,9 +59,9 @@ public partial class MainWindow
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
     private GridLength _previousPreviewColumnWidth;
-    private const double DefaultPreviewPaneWidth = 320;
-    private const double DefaultPreviewPaneHeight = 240;
-    private const double MinPreviewPaneSize = 120;
+    private const double DefaultPreviewPaneWidth = 280;
+    private const double DefaultPreviewPaneHeight = 210;
+    private const double MinPreviewPaneSize = 100;
     private const double MinFileListPaneSize = 180;
     private const double PreviewSplitterSize = 5;
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");

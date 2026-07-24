@@ -1048,13 +1048,186 @@
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <Border Grid.ColumnSpan="2" Grid.RowSpan="3"
+                                    <Border Grid.ColumnSpan="2" Grid.RowSpan="4"
                                             Tag="{Binding IsActive}"
                                             Style="{StaticResource FileKakariPaneChromeOverlayStyle}" />
-                                    <Border Grid.Column="1" Grid.Row="0"
+
+                                    <!-- Sub-Tab Bar Container -->
+                                    <Grid>
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Grid.Column" Value="1" />
+                                                <Setter Property="Grid.Row" Value="0" />
+                                                <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                <Setter Property="Grid.RowSpan" Value="1" />
+                                                <Setter Property="Margin" Value="0,0,0,2" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
+                                                        <Setter Property="Grid.Column" Value="0" />
+                                                        <Setter Property="Grid.Row" Value="0" />
+                                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                        <Setter Property="Grid.RowSpan" Value="4" />
+                                                        <Setter Property="Width" Value="140" />
+                                                        <Setter Property="Margin" Value="0,0,2,0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.ColumnSpan="2"
+                                                Tag="{Binding IsActive}"
+                                                Style="{StaticResource FileKakariPaneAccentLineStyle}" />
+
+                                        <ListBox ItemsSource="{Binding Tabs}"
+                                                 SelectedValue="{Binding SelectedTabId, Mode=TwoWay}"
+                                                 SelectedValuePath="Id"
+                                                 AllowDrop="True"
+                                                 SelectionChanged="WorkspacePaneSubTabBar_SelectionChanged"
+                                                 PreviewMouseDown="WorkspacePaneSubTabBar_PreviewMouseDown"
+                                                 PreviewMouseMove="WorkspacePaneSubTabBar_PreviewMouseMove"
+                                                 PreviewMouseWheel="WorkspacePaneSubTabBar_PreviewMouseWheel"
+                                                 PreviewMouseRightButtonUp="WorkspacePaneSubTabBar_PreviewMouseRightButtonUp"
+                                                 DragOver="WorkspacePaneSubTabBar_DragOver"
+                                                 DragLeave="WorkspacePaneSubTabBar_DragLeave"
+                                                 Drop="WorkspacePaneSubTabBar_Drop"
+                                                 BorderThickness="0"
+                                                 Background="Transparent">
+                                            <ListBox.Style>
+                                                <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
+                                                    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Hidden" />
+                                                    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
+                                                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                                                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ListBox.Style>
+                                            <ListBox.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="{Binding DataContext.CurrentSubTabWpfOrientation, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                                </ItemsPanelTemplate>
+                                            </ListBox.ItemsPanel>
+                                            <ListBox.ItemContainerStyle>
+                                                <Style TargetType="ListBoxItem">
+                                                    <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                                                    <Setter Property="BorderThickness" Value="1" />
+                                                    <Setter Property="Padding" Value="4,2" />
+                                                    <Setter Property="Margin" Value="0,0,1,0" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="ListBoxItem">
+                                                                <Grid>
+                                                                    <Border x:Name="Root"
+                                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                                        Background="{TemplateBinding Background}"
+                                                                        Padding="{TemplateBinding Padding}"
+                                                                        CornerRadius="3,3,0,0">
+                                                                        <ContentPresenter />
+                                                                    </Border>
+                                                                    <Border x:Name="SelectedTabAccentLine"
+                                                                            Height="2"
+                                                                            VerticalAlignment="Bottom"
+                                                                            Background="Transparent"
+                                                                            IsHitTestVisible="False" />
+                                                                </Grid>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsSelected" Value="True">
+                                                                        <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
+                                                                        <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.65" />
+                                                                    </Trigger>
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                            <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                                                                        </MultiDataTrigger.Conditions>
+                                                                        <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
+                                                                        <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.9" />
+                                                                    </MultiDataTrigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </ListBox.ItemContainerStyle>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type local:FolderTab}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="🔒"
+                                                                   Margin="0,0,3,0"
+                                                                   FontSize="11"
+                                                                   VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsFolderLocked}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding Header}"
+                                                                   Foreground="{DynamicResource TextBrush}"
+                                                                   Margin="0,0,3,0"
+                                                                   MaxWidth="120"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center"/>
+                                                        <Button Content="×"
+                                                                Width="14"
+                                                                Height="14"
+                                                                Padding="0"
+                                                                FontSize="10"
+                                                                Background="Transparent"
+                                                                BorderThickness="0"
+                                                                Foreground="{DynamicResource SubtleTextBrush}"
+                                                                ToolTip="タブを閉じる"
+                                                                PreviewMouseLeftButtonDown="WorkspacePaneSubTabClose_PreviewMouseLeftButtonDown"
+                                                                Click="WorkspacePaneSubTabClose_Click"
+                                                                VerticalAlignment="Center">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Trigger.Setters>
+                                                                                <Setter Property="Foreground" Value="Red" />
+                                                                            </Trigger.Setters>
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                        <Button Grid.Column="1"
+                                                Content="＋"
+                                                Width="22"
+                                                Height="22"
+                                                Padding="0"
+                                                Margin="2,0,0,0"
+                                                ToolTip="新しいサブタブ"
+                                                Style="{StaticResource FileKakariButtonStyle}"
+                                                Click="WorkspacePaneNewSubTabButton_Click"
+                                                AllowDrop="True"
+                                                DragOver="WorkspacePaneSubTabAddTarget_DragOver"
+                                                Drop="WorkspacePaneSubTabAddTarget_Drop" />
+                                    </Grid>
+
+                                    <!-- Header Border -->
+                                    <Border Grid.Column="1" Grid.Row="1"
                                              MinHeight="36"
                                              Padding="6,4"
                                              Tag="{Binding IsActive}"
@@ -1063,197 +1236,7 @@
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
-
-                                            <!-- Row 0: Sub-Tab Bar -->
-                                            <Grid Grid.Row="0">
-                                                <Grid.Style>
-                                                    <Style TargetType="Grid">
-                                                        <Setter Property="Grid.Column" Value="1" />
-                                                        <Setter Property="Grid.Row" Value="0" />
-                                                        <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                        <Setter Property="Grid.RowSpan" Value="1" />
-                                                        <Setter Property="Margin" Value="0,0,0,2" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
-                                                                <Setter Property="Grid.Column" Value="0" />
-                                                                <Setter Property="Grid.Row" Value="0" />
-                                                                <Setter Property="Grid.ColumnSpan" Value="1" />
-                                                                <Setter Property="Grid.RowSpan" Value="3" />
-                                                                <Setter Property="Width" Value="140" />
-                                                                <Setter Property="Margin" Value="0,0,2,0" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Grid.Style>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.ColumnSpan="2"
-                                                        Tag="{Binding IsActive}"
-                                                        Style="{StaticResource FileKakariPaneAccentLineStyle}" />
-
-                                                <ListBox ItemsSource="{Binding Tabs}"
-                                                         SelectedValue="{Binding SelectedTabId, Mode=TwoWay}"
-                                                         SelectedValuePath="Id"
-                                                         AllowDrop="True"
-                                                         SelectionChanged="WorkspacePaneSubTabBar_SelectionChanged"
-                                                         PreviewMouseDown="WorkspacePaneSubTabBar_PreviewMouseDown"
-                                                         PreviewMouseMove="WorkspacePaneSubTabBar_PreviewMouseMove"
-                                                         PreviewMouseWheel="WorkspacePaneSubTabBar_PreviewMouseWheel"
-                                                         PreviewMouseRightButtonUp="WorkspacePaneSubTabBar_PreviewMouseRightButtonUp"
-                                                         DragOver="WorkspacePaneSubTabBar_DragOver"
-                                                         DragLeave="WorkspacePaneSubTabBar_DragLeave"
-                                                         Drop="WorkspacePaneSubTabBar_Drop"
-                                                         BorderThickness="0"
-                                                         Background="Transparent">
-                                                    <ListBox.Style>
-                                                        <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
-                                                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Hidden" />
-                                                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
-                                                                    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-                                                                    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </ListBox.Style>
-                                                    <ListBox.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="{Binding DataContext.CurrentSubTabWpfOrientation, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                                        </ItemsPanelTemplate>
-                                                    </ListBox.ItemsPanel>
-                                                    <ListBox.ItemContainerStyle>
-                                                        <Style TargetType="ListBoxItem">
-                                                            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}" />
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-                                                            <Setter Property="BorderThickness" Value="1" />
-                                                            <Setter Property="Padding" Value="4,2" />
-                                                            <Setter Property="Margin" Value="0,0,1,0" />
-                                                            <Setter Property="Template">
-                                                                <Setter.Value>
-                                                                    <ControlTemplate TargetType="ListBoxItem">
-                                                                        <Grid>
-                                                                            <Border x:Name="Root"
-                                                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                                                Background="{TemplateBinding Background}"
-                                                                                Padding="{TemplateBinding Padding}"
-                                                                                CornerRadius="3,3,0,0">
-                                                                                <ContentPresenter />
-                                                                            </Border>
-                                                                            <Border x:Name="SelectedTabAccentLine"
-                                                                                    Height="2"
-                                                                                    VerticalAlignment="Bottom"
-                                                                                    Background="Transparent"
-                                                                                    IsHitTestVisible="False" />
-                                                                        </Grid>
-                                                                        <ControlTemplate.Triggers>
-                                                                            <Trigger Property="IsSelected" Value="True">
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.65" />
-                                                                            </Trigger>
-                                                                            <MultiDataTrigger>
-                                                                                <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
-                                                                                    <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
-                                                                                </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.9" />
-                                                                            </MultiDataTrigger>
-                                                                        </ControlTemplate.Triggers>
-                                                                    </ControlTemplate>
-                                                                </Setter.Value>
-                                                            </Setter>
-                                                            <Style.Triggers>
-                                                                <Trigger Property="IsSelected" Value="True">
-                                                                    <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource InactivePaneAccentBrush}" />
-                                                                </Trigger>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter Property="Background" Value="{DynamicResource HoverBackgroundBrush}" />
-                                                                </Trigger>
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
-                                                                        <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource ActivePaneAccentBrush}" />
-                                                                </MultiDataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </ListBox.ItemContainerStyle>
-                                                    <ListBox.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <TextBlock FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                                           FontSize="10"
-                                                                           Text="&#xE72E;"
-                                                                           Margin="0,0,3,0"
-                                                                           Foreground="{DynamicResource SubtleTextBrush}"
-                                                                           VerticalAlignment="Center">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsFolderLocked}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                                <TextBlock Text="{Binding Header}"
-                                                                           Foreground="{DynamicResource TextBrush}"
-                                                                           Margin="0,0,3,0"
-                                                                           MaxWidth="120"
-                                                                           TextTrimming="CharacterEllipsis"
-                                                                           VerticalAlignment="Center"/>
-                                                                <Button Content="×"
-                                                                        Width="14"
-                                                                        Height="14"
-                                                                        Padding="0"
-                                                                        FontSize="10"
-                                                                        Background="Transparent"
-                                                                        BorderThickness="0"
-                                                                        Foreground="{DynamicResource SubtleTextBrush}"
-                                                                        ToolTip="タブを閉じる"
-                                                                        PreviewMouseLeftButtonDown="WorkspacePaneSubTabClose_PreviewMouseLeftButtonDown"
-                                                                        Click="WorkspacePaneSubTabClose_Click"
-                                                                        VerticalAlignment="Center">
-                                                                    <Button.Style>
-                                                                        <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
-                                                                            <Style.Triggers>
-                                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                                    <Trigger.Setters>
-                                                                                        <Setter Property="Foreground" Value="Red" />
-                                                                                    </Trigger.Setters>
-                                                                                </Trigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </Button.Style>
-                                                                </Button>
-                                                            </StackPanel>
-                                                        </DataTemplate>
-                                                    </ListBox.ItemTemplate>
-                                                </ListBox>
-
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <Button Width="20"
-                                                            Height="20"
-                                                            Padding="0"
-                                                            Margin="2,0,0,0"
-                                                            ToolTip="新しいサブタブ"
-                                                            Content="＋"
-                                                            AllowDrop="True"
-                                                            DragOver="WorkspacePaneSubTabAddTarget_DragOver"
-                                                            Drop="WorkspacePaneSubTabAddTarget_Drop"
-                                                            Click="WorkspacePaneNewSubTabButton_Click" />
-                                                </StackPanel>
-                                            </Grid>
 
                                             <!-- Row 1: Action Toolbar -->
                                             <Border Grid.Row="1"
@@ -1359,8 +1342,8 @@
                                             </DockPanel>
                                             </Border>
 
-                                            <!-- Row 2: Breadcrumb / Filter Bar -->
-                                            <Grid Grid.Row="2"
+                                            <!-- Row 1: Breadcrumb / Filter Bar -->
+                                            <Grid Grid.Row="1"
                                                   Margin="0,2,0,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" MinWidth="0" />
@@ -1490,7 +1473,7 @@
                                         </Grid>
                                     </Border>
                                     <ListView ItemsSource="{Binding FileList.ItemsView}"
-                                              Grid.Row="1"
+                                              Grid.Row="2"
                                               Grid.Column="1"
                                               SelectionMode="Extended"
                                               SnapsToDevicePixels="True"

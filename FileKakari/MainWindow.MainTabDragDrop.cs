@@ -467,20 +467,20 @@ public partial class MainWindow
         return null;
     }
 
-    internal enum TabStripOrientation
+    public enum TabStripOrientation
     {
         Horizontal,
         Vertical
     }
 
-    internal enum TabDropZone
+    public enum TabDropZone
     {
         Before,
         Center,
         After
     }
 
-    internal readonly record struct TabInsertDropTarget(
+    public readonly record struct TabInsertDropTarget(
         bool IsInsert,
         int InsertIndex,
         TabDropZone Zone,

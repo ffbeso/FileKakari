@@ -1197,7 +1197,8 @@ public partial class MainWindow
                     true,
                     pane.Tabs.Count,
                     TabDropZone.After,
-                    GetLastSubTabItem(listBox, pane));
+                    GetLastSubTabItem(listBox, pane),
+                    CurrentSubTabDragOrientation);
                 ShowTabInsertIndicator(listBox, insertTarget);
             }
             else

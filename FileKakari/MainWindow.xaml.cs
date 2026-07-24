@@ -347,6 +347,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _settingsService = settingsService;
         _sessionStateService = sessionStateService;
+        CurrentSubTabPlacement = _settingsService.Settings.SubTabPlacement;
         ShellVirtualFileClipboard.CleanupStaleExtractions();
         _userCommandService = new UserCommandService();
         _userCommandService.Load();
@@ -2855,6 +2856,7 @@ public partial class MainWindow : Window
             || transitionToExtra;
 
         await _settingsService.SaveAsync(settings);
+        CurrentSubTabPlacement = _settingsService.Settings.SubTabPlacement;
         _columnLayout.UpdateSettings(_settingsService.Settings);
         AppStrings.Configure(_settingsService.Settings.Language);
         ApplyFontSettings();
@@ -3635,6 +3637,7 @@ public partial class MainWindow : Window
         FolderPane pane,
         DragEventArgs e)
     {
+        var orientation = CurrentSubTabDragOrientation;
         var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
         if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
         {
@@ -3644,17 +3647,17 @@ public partial class MainWindow : Window
                 return TabInsertDropTarget.None;
             }
 
-            var zone = GetTabDropZone(targetItem, e.GetPosition(targetItem));
+            var zone = GetTabDropZone(targetItem, e.GetPosition(targetItem), orientation);
             if (zone == TabDropZone.Center)
             {
-                return new TabInsertDropTarget(false, targetIndex, zone, targetItem);
+                return new TabInsertDropTarget(false, targetIndex, zone, targetItem, orientation);
             }
 
             var insertIndex = zone == TabDropZone.Before ? targetIndex : targetIndex + 1;
-            return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
+            return new TabInsertDropTarget(true, insertIndex, zone, targetItem, orientation);
         }
 
-        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane));
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane), orientation);
     }
 
     private TabInsertDropTarget GetWorkspacePaneSubTabDragInsertDropTarget(
@@ -3662,6 +3665,7 @@ public partial class MainWindow : Window
         FolderPane pane,
         DragEventArgs e)
     {
+        var orientation = CurrentSubTabDragOrientation;
         var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
         if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
         {
@@ -3671,15 +3675,16 @@ public partial class MainWindow : Window
                 return TabInsertDropTarget.None;
             }
 
-            var insertAfterTarget = IsMouseAfterMiddle(targetItem, e.GetPosition(targetItem));
+            var insertAfterTarget = IsMouseAfterMiddle(targetItem, e.GetPosition(targetItem), orientation);
             return new TabInsertDropTarget(
                 true,
                 insertAfterTarget ? targetIndex + 1 : targetIndex,
                 insertAfterTarget ? TabDropZone.After : TabDropZone.Before,
-                targetItem);
+                targetItem,
+                orientation);
         }
 
-        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane));
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane), orientation);
     }
 
     private static FrameworkElement? GetLastSubTabItem(ListBox listBox, FolderPane pane)
@@ -5519,6 +5524,58 @@ public partial class MainWindow : Window
     {
         get => (bool)GetValue(IsSideBySideDisplayActiveProperty);
         set => SetValue(IsSideBySideDisplayActiveProperty, value);
+    }
+
+    public static readonly DependencyProperty CurrentSubTabPlacementProperty =
+        DependencyProperty.Register(
+            nameof(CurrentSubTabPlacement),
+            typeof(SubTabPlacement),
+            typeof(MainWindow),
+            new PropertyMetadata(SubTabPlacement.Horizontal, OnCurrentSubTabPlacementChanged));
+
+    public static readonly DependencyProperty CurrentSubTabWpfOrientationProperty =
+        DependencyProperty.Register(
+            nameof(CurrentSubTabWpfOrientation),
+            typeof(System.Windows.Controls.Orientation),
+            typeof(MainWindow),
+            new PropertyMetadata(System.Windows.Controls.Orientation.Horizontal));
+
+    public static readonly DependencyProperty CurrentSubTabDragOrientationProperty =
+        DependencyProperty.Register(
+            nameof(CurrentSubTabDragOrientation),
+            typeof(TabStripOrientation),
+            typeof(MainWindow),
+            new PropertyMetadata(TabStripOrientation.Horizontal));
+
+    public SubTabPlacement CurrentSubTabPlacement
+    {
+        get => (SubTabPlacement)GetValue(CurrentSubTabPlacementProperty);
+        set => SetValue(CurrentSubTabPlacementProperty, value);
+    }
+
+    public System.Windows.Controls.Orientation CurrentSubTabWpfOrientation
+    {
+        get => (System.Windows.Controls.Orientation)GetValue(CurrentSubTabWpfOrientationProperty);
+        private set => SetValue(CurrentSubTabWpfOrientationProperty, value);
+    }
+
+    public TabStripOrientation CurrentSubTabDragOrientation
+    {
+        get => (TabStripOrientation)GetValue(CurrentSubTabDragOrientationProperty);
+        private set => SetValue(CurrentSubTabDragOrientationProperty, value);
+    }
+
+    private static void OnCurrentSubTabPlacementChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MainWindow window && e.NewValue is SubTabPlacement placement)
+        {
+            window.CurrentSubTabWpfOrientation = placement == SubTabPlacement.Vertical
+                ? System.Windows.Controls.Orientation.Vertical
+                : System.Windows.Controls.Orientation.Horizontal;
+            window.CurrentSubTabDragOrientation = placement == SubTabPlacement.Vertical
+                ? TabStripOrientation.Vertical
+                : TabStripOrientation.Horizontal;
+        }
     }
 
     private FrameworkElement? GetWorkspaceSessionHostContainer(WorkspaceSession session)

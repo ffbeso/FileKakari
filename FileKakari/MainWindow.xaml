@@ -1042,15 +1042,19 @@
                                     BorderThickness="0,0,1,0"
                                     Background="{DynamicResource AppBackgroundBrush}">
                                 <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <Border Grid.RowSpan="3"
+                                    <Border Grid.ColumnSpan="2" Grid.RowSpan="3"
                                             Tag="{Binding IsActive}"
                                             Style="{StaticResource FileKakariPaneChromeOverlayStyle}" />
-                                    <Border Grid.Row="0"
+                                    <Border Grid.Column="1" Grid.Row="0"
                                              MinHeight="36"
                                              Padding="6,4"
                                              Tag="{Binding IsActive}"
@@ -1063,7 +1067,26 @@
                                             </Grid.RowDefinitions>
 
                                             <!-- Row 0: Sub-Tab Bar -->
-                                            <Grid Grid.Row="0" Margin="0,0,0,2">
+                                            <Grid Grid.Row="0">
+                                                <Grid.Style>
+                                                    <Style TargetType="Grid">
+                                                        <Setter Property="Grid.Column" Value="1" />
+                                                        <Setter Property="Grid.Row" Value="0" />
+                                                        <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                        <Setter Property="Grid.RowSpan" Value="1" />
+                                                        <Setter Property="Margin" Value="0,0,0,2" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
+                                                                <Setter Property="Grid.Column" Value="0" />
+                                                                <Setter Property="Grid.Row" Value="0" />
+                                                                <Setter Property="Grid.ColumnSpan" Value="1" />
+                                                                <Setter Property="Grid.RowSpan" Value="3" />
+                                                                <Setter Property="Width" Value="140" />
+                                                                <Setter Property="Margin" Value="0,0,2,0" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Grid.Style>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
@@ -1085,12 +1108,22 @@
                                                          DragLeave="WorkspacePaneSubTabBar_DragLeave"
                                                          Drop="WorkspacePaneSubTabBar_Drop"
                                                          BorderThickness="0"
-                                                         Background="Transparent"
-                                                         ScrollViewer.HorizontalScrollBarVisibility="Hidden"
-                                                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                         Background="Transparent">
+                                                    <ListBox.Style>
+                                                        <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
+                                                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Hidden" />
+                                                            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding DataContext.CurrentSubTabPlacement, RelativeSource={RelativeSource AncestorType=Window}}" Value="Vertical">
+                                                                    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+                                                                    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ListBox.Style>
                                                     <ListBox.ItemsPanel>
                                                         <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="Horizontal" />
+                                                            <StackPanel Orientation="{Binding DataContext.CurrentSubTabWpfOrientation, RelativeSource={RelativeSource AncestorType=Window}}" />
                                                         </ItemsPanelTemplate>
                                                     </ListBox.ItemsPanel>
                                                     <ListBox.ItemContainerStyle>
@@ -1458,6 +1491,7 @@
                                     </Border>
                                     <ListView ItemsSource="{Binding FileList.ItemsView}"
                                               Grid.Row="1"
+                                              Grid.Column="1"
                                               SelectionMode="Extended"
                                               SnapsToDevicePixels="True"
                                               UseLayoutRounding="True"
@@ -1521,7 +1555,8 @@
                                             </GridView>
                                         </ListView.View>
                                     </ListView>
-                                    <Border Grid.Row="2"
+                                    <Border Grid.Column="1"
+                                            Grid.Row="2"
                                             MinHeight="22"
                                             Padding="6,1"
                                             Background="{DynamicResource StatusBarBackgroundBrush}"

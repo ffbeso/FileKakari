@@ -57,6 +57,8 @@ public sealed class AppSettings
 
     public FileDisplayMode DisplayMode { get; set; } = FileDisplayMode.Details;
 
+    public SubTabPlacement SubTabPlacement { get; set; } = SubTabPlacement.Horizontal;
+
     public string FontFamily { get; set; } = DefaultFontFamily;
 
     public double FontSize { get; set; } = DefaultFontSize;
@@ -91,6 +93,7 @@ public sealed class AppSettings
             PreviewPaneHeight = PreviewPaneHeight,
             IsPreviewPaneVisible = IsPreviewPaneVisible,
             DisplayMode = DisplayMode,
+            SubTabPlacement = SubTabPlacement,
             FontFamily = FontFamily,
             FontSize = FontSize,
             RowHeight = RowHeight
@@ -105,12 +108,11 @@ public sealed class AppSettings
         FontSize = IsFiniteInRange(FontSize, MinFontSize, MaxFontSize) ? FontSize : DefaultFontSize;
         RowHeight = IsFiniteInRange(RowHeight, MinRowHeight, MaxRowHeight) ? RowHeight : DefaultRowHeight;
         DisplayMode = NormalizeDisplayMode(DisplayMode);
+        SubTabPlacement = NormalizeSubTabPlacement(SubTabPlacement);
         AutoPlayAudioPreview ??= AutoPlayVideoPreview;
         PreviewPanePlacement = NormalizePreviewPanePlacement(PreviewPanePlacement);
         PreviewPaneWidth = IsPositiveFinite(PreviewPaneWidth) ? PreviewPaneWidth : null;
         PreviewPaneHeight = IsPositiveFinite(PreviewPaneHeight) ? PreviewPaneHeight : null;
-
-        // Migrate visible columns
         if (VisibleColumns is not null)
         {
             for (int i = 0; i < VisibleColumns.Count; i++)
@@ -203,6 +205,13 @@ public sealed class AppSettings
         return Enum.IsDefined(placement)
             ? placement
             : PreviewPanePlacement.Right;
+    }
+
+    public static SubTabPlacement NormalizeSubTabPlacement(SubTabPlacement placement)
+    {
+        return Enum.IsDefined(placement)
+            ? placement
+            : SubTabPlacement.Horizontal;
     }
 }
 

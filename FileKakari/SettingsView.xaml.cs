@@ -60,6 +60,7 @@ public partial class SettingsView : UserControl
         ShowSystemFilesCheckBox.Content = _text.Get("SettingsShowSystemFiles");
         SortFoldersFirstCheckBox.Content = _text.Get("SettingsSortFoldersFirst");
         PreviewPanePlacementLabel.Text = _text.Get("SettingsPreviewPanePlacement");
+        SubTabPlacementLabel.Text = _text.Get("SettingsSubTabPlacement");
         AutoPlayVideoPreviewCheckBox.Content = _text.Get("SettingsAutoPlayVideoPreview");
         AutoPlayVideoPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayVideoPreviewDescription");
         AutoPlayAudioPreviewCheckBox.Content = _text.Get("SettingsAutoPlayAudioPreview");
@@ -109,6 +110,11 @@ public partial class SettingsView : UserControl
             new SettingsChoice<PreviewPanePlacement>(_text.Get("SettingsPreviewPanePlacementRight"), PreviewPanePlacement.Right),
             new SettingsChoice<PreviewPanePlacement>(_text.Get("SettingsPreviewPanePlacementBottom"), PreviewPanePlacement.Bottom)
         };
+        SubTabPlacementComboBox.ItemsSource = new[]
+        {
+            new SettingsChoice<SubTabPlacement>(_text.Get("SettingsPlacementHorizontal"), SubTabPlacement.Horizontal),
+            new SettingsChoice<SubTabPlacement>(_text.Get("SettingsPlacementVertical"), SubTabPlacement.Vertical)
+        };
         FontFamilyComboBox.ItemsSource = GetFontFamilyChoices();
     }
 
@@ -120,6 +126,7 @@ public partial class SettingsView : UserControl
         ShowSystemFilesCheckBox.IsChecked = Result.ShowSystemFiles;
         SortFoldersFirstCheckBox.IsChecked = Result.SortFoldersFirst;
         PreviewPanePlacementComboBox.SelectedValue = Result.PreviewPanePlacement;
+        SubTabPlacementComboBox.SelectedValue = Result.SubTabPlacement;
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
         AutoPlayAudioPreviewCheckBox.IsChecked = Result.AutoPlayAudioPreview ?? Result.AutoPlayVideoPreview;
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
@@ -207,6 +214,9 @@ public partial class SettingsView : UserControl
         Result.PreviewPanePlacement = PreviewPanePlacementComboBox.SelectedValue is PreviewPanePlacement previewPanePlacement
             ? previewPanePlacement
             : PreviewPanePlacement.Right;
+        Result.SubTabPlacement = SubTabPlacementComboBox.SelectedValue is SubTabPlacement subTabPlacement
+            ? subTabPlacement
+            : SubTabPlacement.Horizontal;
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
         Result.AutoPlayAudioPreview = AutoPlayAudioPreviewCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;

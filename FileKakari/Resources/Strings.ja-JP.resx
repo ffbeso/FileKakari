@@ -292,4 +292,7 @@
   <data name="PreviewOfficeFailedHint" xml:space="preserve"><value>インターネットからダウンロードした文書の場合、Officeの保護ビューによりプレビューできないことがあります。
 Word / Excel / PowerPointで一度開き、「編集を有効にする」またはファイルのブロック解除を行うと、プレビューできる場合があります。</value></data>
   <data name="PreviewBinaryFileError" xml:space="preserve"><value>このファイルはテキストとしてプレビューできません。バイナリデータを含んでいる可能性があります。</value></data>
+  <data name="SettingsSubTabPlacement" xml:space="preserve"><value>サブタブ配置</value></data>
+  <data name="SettingsPlacementHorizontal" xml:space="preserve"><value>横（上部）</value></data>
+  <data name="SettingsPlacementVertical" xml:space="preserve"><value>縦（左側）</value></data>
 </root>

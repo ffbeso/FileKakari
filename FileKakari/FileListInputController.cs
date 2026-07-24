@@ -116,10 +116,6 @@ public partial class MainWindow
                 var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
                 var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
                 var clickedEntry = GetFileEntryFromItemHitTarget(source);
-                if (clickedEntry is not null && _owner.GetNormalFolderPane() is { } previewPane)
-                {
-                    _owner.BeginPreviewExplicitSelectionInput(previewPane, "mouse-click");
-                }
                 _owner._fileDragStartPoint = null;
                 _owner._fileDragStartEntry = null;
                 _owner._fileDragStartPane = null;
@@ -132,6 +128,18 @@ public partial class MainWindow
                 _owner.CancelPendingRenameClick();
 
                 var dragEntry = _owner.GetFileEntryFromNameHitTarget(source);
+                if (clickedEntry is not null
+                    && !_owner.IsInsideRenameTextBox(source)
+                    && _owner.GetNormalFolderPane() is { } previewPane)
+                {
+                    _owner.BeginPreviewExplicitMouseSelectionCandidate(
+                        _owner.ItemsList,
+                        previewPane,
+                        clickedEntry,
+                        position,
+                        dragEntry is not null);
+                }
+
                 if (dragEntry is null && clickedEntry is not null && !_owner.IsInsideRenameTextBox(source))
                 {
                     if (e.ClickCount == 1)
@@ -297,6 +305,15 @@ public partial class MainWindow
 
         public void HandlePreviewMouseMove(MouseEventArgs e)
         {
+            if (_owner.GetNormalFolderPane() is { } previewPane)
+            {
+                _owner.CancelPreviewExplicitMouseSelectionCandidateForDrag(
+                    _owner.ItemsList,
+                    previewPane,
+                    e,
+                    "normal-pane-mouse-move");
+            }
+
             if (_owner._selectionInteraction.HandlePreviewMouseMove(e.GetPosition(_owner.ItemsList)))
             {
                 e.Handled = true;
@@ -485,6 +502,14 @@ public partial class MainWindow
 
                 _owner.ItemsList.Focus();
                 _owner.UpdateSelectedItemStatus();
+                if (_owner.GetNormalFolderPane() is { } previewPane)
+                {
+                    _owner.CompletePreviewExplicitMouseSelectionCandidate(
+                        _owner.ItemsList,
+                        previewPane,
+                        e,
+                        "normal-pane-mouse-up-range-selection");
+                }
                 e.Handled = true;
                 return;
             }
@@ -507,6 +532,7 @@ public partial class MainWindow
 
             if (_owner._renameInteraction.PendingClickEntry is { } renameEntry)
             {
+                _owner.CancelPreviewExplicitMouseSelectionCandidate("rename-pending");
                 var currentPoint = e.GetPosition(_owner.ItemsList);
                 var startPoint = _owner._renameInteraction.PendingClickPoint;
                 _owner.ClearPendingRenameClick();
@@ -527,6 +553,14 @@ public partial class MainWindow
 
             if (TryApplyPendingSingleSelectionClick(e))
             {
+                if (_owner.GetNormalFolderPane() is { } previewPane)
+                {
+                    _owner.CompletePreviewExplicitMouseSelectionCandidate(
+                        _owner.ItemsList,
+                        previewPane,
+                        e,
+                        "normal-pane-mouse-up-pending-selection");
+                }
                 e.Handled = true;
                 return;
             }
@@ -534,6 +568,14 @@ public partial class MainWindow
             if (!_owner._selectionInteraction.IsSelecting)
             {
                 _owner.ClearRangeSelectionStart();
+                if (_owner.GetNormalFolderPane() is { } previewPane)
+                {
+                    _owner.CompletePreviewExplicitMouseSelectionCandidate(
+                        _owner.ItemsList,
+                        previewPane,
+                        e,
+                        "normal-pane-mouse-up");
+                }
                 return;
             }
 

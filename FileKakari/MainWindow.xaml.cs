@@ -2528,6 +2528,12 @@ public partial class MainWindow : Window
             return false;
         }
 
+        CancelPreviewExplicitMouseSelectionCandidateForDrag(
+            sourceListView,
+            pane,
+            e,
+            "file-drag-threshold");
+
         var isNormalPane = ReferenceEquals(pane, GetNormalFolderPane());
         if ((isNormalPane && _isLoading)
             || pane.IsLoading
@@ -2561,6 +2567,10 @@ public partial class MainWindow : Window
     {
         try
         {
+            PerfLog.WriteVerbose(
+                $"file-drag-input inputSequenceId=none source=file-drag paneId={_fileDragStartPane?.Id ?? "null"} " +
+                $"mouseDown=true dragCandidateCreated=true dragThresholdExceeded=true dragStarted=true " +
+                $"explicitClickCanceled=true mouseUp=false previewRequested=false duplicateSuppressed=false handled=false itemCount={dragItems.Count}");
             var data = new DataObject(FileDragFormat, dragItems);
             if (!dragItems.Any(item => item.IsTabOnly))
             {
@@ -2944,12 +2954,17 @@ public partial class MainWindow : Window
         var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         var hasShift = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
         var clickedEntry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
-        if (clickedEntry is not null)
-        {
-            BeginPreviewExplicitSelectionInput(pane, "mouse-click");
-        }
         var dragEntry = GetWorkspacePaneDragEntryFromTextHitTarget(source);
         ClearFileDragStart();
+        if (clickedEntry is not null && !IsInsideRenameTextBox(source))
+        {
+            BeginPreviewExplicitMouseSelectionCandidate(
+                listView,
+                pane,
+                clickedEntry,
+                position,
+                dragEntry is not null);
+        }
 
         if (clickedEntry is null)
         {
@@ -3111,6 +3126,16 @@ public partial class MainWindow : Window
 
     private void WorkspacePaneFileList_PreviewMouseMove(object sender, MouseEventArgs e)
     {
+        if (sender is ListView previewListView
+            && previewListView.DataContext is FolderPane previewPane)
+        {
+            CancelPreviewExplicitMouseSelectionCandidateForDrag(
+                previewListView,
+                previewPane,
+                e,
+                "workspace-pane-mouse-move");
+        }
+
         if (HandleWorkspacePaneRangeSelectionMove(sender, e))
         {
             e.Handled = true;

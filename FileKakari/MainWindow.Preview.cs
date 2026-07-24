@@ -55,6 +55,7 @@ public partial class MainWindow
     private readonly Stack<string> _programmaticSelectionOrigins = new();
     private PreviewAwaitState? _previewAwaitState;
     private PreviewExplicitSelectionIntent? _previewExplicitSelectionIntent;
+    private PreviewExplicitMouseSelectionCandidate? _previewExplicitMouseSelectionCandidate;
     private long _nextPreviewExplicitInputSequenceId;
     private bool _isPreviewMaximized;
     private GridLength _previousPreviewRowHeight;
@@ -540,6 +541,11 @@ public partial class MainWindow
         targetPane ??= targetSession?.ActivePaneGroup ?? GetActiveFolderPane();
         var targetState = targetPane?.ActiveTabState;
         targetSession ??= targetPane is null ? _activeWorkspaceSession : FindSessionContainingPane(targetPane);
+        var preserveMouseClickIntent = targetPane is not null
+            && _previewExplicitMouseSelectionCandidate is { } mouseCandidate
+            && _previewExplicitSelectionIntent is { } existingIntent
+            && mouseCandidate.InputSequenceId == existingIntent.InputSequenceId
+            && DoesPreviewOwnerMatch(mouseCandidate, targetPane);
         _previewAwaitState = targetPane is null
             ? null
             : new PreviewAwaitState(
@@ -548,7 +554,10 @@ public partial class MainWindow
                 targetState?.Id,
                 _previewGeneration,
                 source);
-        _previewExplicitSelectionIntent = null;
+        if (!preserveMouseClickIntent)
+        {
+            _previewExplicitSelectionIntent = null;
+        }
 
         PerfLog.WriteVerbose(
             $"preview-await source={source} sessionId={targetSession?.Id ?? "null"} paneId={targetPane?.Id ?? "null"} " +
@@ -572,10 +581,15 @@ public partial class MainWindow
         return false;
     }
 
-    private void BeginPreviewExplicitSelectionInput(FolderPane pane, string source)
+    private void BeginPreviewExplicitSelectionInput(
+        FolderPane pane,
+        string source,
+        long? existingInputSequenceId = null,
+        bool deferCompletion = false)
     {
         var state = pane.ActiveTabState;
-        var inputSequenceId = Interlocked.Increment(ref _nextPreviewExplicitInputSequenceId);
+        var inputSequenceId = existingInputSequenceId
+            ?? Interlocked.Increment(ref _nextPreviewExplicitInputSequenceId);
         var awaitStateMatched = IsPreviewAwaitingExplicitSelection(pane, out _);
         _previewExplicitSelectionIntent = new PreviewExplicitSelectionIntent(
             FindSessionContainingPane(pane)?.Id,
@@ -591,6 +605,137 @@ public partial class MainWindow
             $"awaitStateMatched={awaitStateMatched} awaitStateCleared=false selectionChangedRaised=false " +
             "explicitPreviewRequested=false duplicateSuppressed=false");
 
+        if (!deferCompletion)
+        {
+            QueuePreviewExplicitSelectionInputCompletion(pane, inputSequenceId);
+        }
+    }
+
+    private void BeginPreviewExplicitMouseSelectionCandidate(
+        ListView listView,
+        FolderPane pane,
+        FileEntry entry,
+        Point startPoint,
+        bool dragCandidateCreated)
+    {
+        CancelPreviewExplicitMouseSelectionCandidate("superseded");
+
+        var inputSequenceId = Interlocked.Increment(ref _nextPreviewExplicitInputSequenceId);
+        _previewExplicitMouseSelectionCandidate = new PreviewExplicitMouseSelectionCandidate(
+            FindSessionContainingPane(pane)?.Id,
+            pane.Id,
+            pane.ActiveTabState?.Id,
+            inputSequenceId,
+            listView,
+            entry,
+            startPoint);
+        BeginPreviewExplicitSelectionInput(
+            pane,
+            "mouse-click",
+            inputSequenceId,
+            deferCompletion: true);
+
+        PerfLog.WriteVerbose(
+            $"file-drag-input inputSequenceId={inputSequenceId} source=mouse-click " +
+            $"paneId={pane.Id} mouseDown=true dragCandidateCreated={dragCandidateCreated} " +
+            "dragThresholdExceeded=false dragStarted=false explicitClickCanceled=false " +
+            "mouseUp=false previewRequested=false duplicateSuppressed=false handled=false");
+    }
+
+    private void CancelPreviewExplicitMouseSelectionCandidateForDrag(
+        ListView listView,
+        FolderPane pane,
+        MouseEventArgs e,
+        string source)
+    {
+        if (_previewExplicitMouseSelectionCandidate is not { } candidate
+            || !ReferenceEquals(candidate.ListView, listView)
+            || !DoesPreviewOwnerMatch(candidate, pane)
+            || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var position = e.GetPosition(listView);
+        if (Math.Abs(position.X - candidate.StartPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(position.Y - candidate.StartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _previewExplicitMouseSelectionCandidate = null;
+        if (_previewExplicitSelectionIntent?.InputSequenceId == candidate.InputSequenceId)
+        {
+            _previewExplicitSelectionIntent = null;
+        }
+
+        PerfLog.WriteVerbose(
+            $"file-drag-input inputSequenceId={candidate.InputSequenceId} source={source} " +
+            $"paneId={pane.Id} mouseDown=true dragCandidateCreated=true dragThresholdExceeded=true " +
+            "dragStarted=false explicitClickCanceled=true mouseUp=false previewRequested=false " +
+            "duplicateSuppressed=true handled=false");
+    }
+
+    private void CompletePreviewExplicitMouseSelectionCandidate(
+        ListView listView,
+        FolderPane pane,
+        MouseButtonEventArgs e,
+        string source)
+    {
+        if (_previewExplicitMouseSelectionCandidate is not { } candidate
+            || !ReferenceEquals(candidate.ListView, listView)
+            || !DoesPreviewOwnerMatch(candidate, pane))
+        {
+            return;
+        }
+
+        _previewExplicitMouseSelectionCandidate = null;
+        var position = e.GetPosition(listView);
+        var exceededThreshold = Math.Abs(position.X - candidate.StartPoint.X) >= SystemParameters.MinimumHorizontalDragDistance
+            || Math.Abs(position.Y - candidate.StartPoint.Y) >= SystemParameters.MinimumVerticalDragDistance;
+        var selected = listView.SelectedItems.OfType<FileEntry>().Contains(candidate.Entry);
+        if (e.ChangedButton != MouseButton.Left || exceededThreshold || !selected)
+        {
+            if (_previewExplicitSelectionIntent?.InputSequenceId == candidate.InputSequenceId)
+            {
+                _previewExplicitSelectionIntent = null;
+            }
+
+            PerfLog.WriteVerbose(
+                $"file-drag-input inputSequenceId={candidate.InputSequenceId} source={source} paneId={pane.Id} " +
+                $"mouseDown=true dragCandidateCreated=true dragThresholdExceeded={exceededThreshold} " +
+                "dragStarted=false explicitClickCanceled=true mouseUp=true previewRequested=false " +
+                $"duplicateSuppressed=true skipReason={(e.ChangedButton != MouseButton.Left ? "non-left-mouse-up" : !selected ? "entry-not-selected" : "drag-threshold-exceeded")}");
+            return;
+        }
+
+        PerfLog.WriteVerbose(
+            $"file-drag-input inputSequenceId={candidate.InputSequenceId} source={source} paneId={pane.Id} " +
+            "mouseDown=true dragCandidateCreated=true dragThresholdExceeded=false dragStarted=false " +
+            "explicitClickCanceled=false mouseUp=true previewRequested=false duplicateSuppressed=false handled=false");
+        QueuePreviewExplicitSelectionInputCompletion(pane, candidate.InputSequenceId);
+    }
+
+    private void CancelPreviewExplicitMouseSelectionCandidate(string skipReason)
+    {
+        if (_previewExplicitMouseSelectionCandidate is not { } candidate)
+        {
+            return;
+        }
+
+        _previewExplicitMouseSelectionCandidate = null;
+        if (_previewExplicitSelectionIntent?.InputSequenceId == candidate.InputSequenceId)
+        {
+            _previewExplicitSelectionIntent = null;
+        }
+
+        PerfLog.WriteVerbose(
+            $"file-drag-input inputSequenceId={candidate.InputSequenceId} source=mouse-click paneId={candidate.PaneId} " +
+            $"explicitClickCanceled=true previewRequested=false duplicateSuppressed=true skipReason={skipReason}");
+    }
+
+    private void QueuePreviewExplicitSelectionInputCompletion(FolderPane pane, long inputSequenceId)
+    {
         _ = Dispatcher.BeginInvoke(
             System.Windows.Threading.DispatcherPriority.ApplicationIdle,
             new Action(() => CompletePreviewExplicitSelectionInput(pane, inputSequenceId)));
@@ -742,6 +887,15 @@ public partial class MainWindow
         long InputSequenceId,
         string Source,
         bool SelectionChangedRaised) : PreviewOwnerState(SessionId, PaneId, StateId);
+
+    private sealed record PreviewExplicitMouseSelectionCandidate(
+        string? SessionId,
+        string PaneId,
+        string? StateId,
+        long InputSequenceId,
+        ListView ListView,
+        FileEntry Entry,
+        Point StartPoint) : PreviewOwnerState(SessionId, PaneId, StateId);
 
     private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
     {

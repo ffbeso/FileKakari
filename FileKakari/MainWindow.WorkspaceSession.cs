@@ -728,11 +728,11 @@ public partial class MainWindow
         if (e.ChangedButton == MouseButton.Left && _workspacePendingRangeSelectionClickEntry is { } pendingEntry)
         {
             var entry = pendingEntry;
-            var listView = _workspacePendingRangeSelectionListView;
-            var pane = _workspacePendingRangeSelectionPane;
+            var pendingListView = _workspacePendingRangeSelectionListView;
+            var pendingPane = _workspacePendingRangeSelectionPane;
             ClearFileDragStart();
 
-            if (listView is not null && pane is not null && IsPaneOwnedByActiveWorkspaceSession(pane))
+            if (pendingListView is not null && pendingPane is not null && IsPaneOwnedByActiveWorkspaceSession(pendingPane))
             {
                 var modifiers = Keyboard.Modifiers;
                 var hasControl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
@@ -740,24 +740,29 @@ public partial class MainWindow
 
                 if (hasShift)
                 {
-                    FileListSelectionHelper.PerformShiftSelection(listView, _workspaceSelectionAnchorEntry, entry, hasControl);
+                    FileListSelectionHelper.PerformShiftSelection(pendingListView, _workspaceSelectionAnchorEntry, entry, hasControl);
                 }
                 else
                 {
                     if (hasControl)
                     {
-                        FileListSelectionHelper.ApplyControlSelection(listView, entry);
+                        FileListSelectionHelper.ApplyControlSelection(pendingListView, entry);
                         _workspaceSelectionAnchorEntry = entry;
                     }
                     else
                     {
-                        FileListSelectionHelper.ApplySingleSelection(listView, entry);
+                        FileListSelectionHelper.ApplySingleSelection(pendingListView, entry);
                         _workspaceSelectionAnchorEntry = entry;
                     }
                 }
 
-                listView.Focus();
-                SyncPaneSelectionFromListView(pane, listView);
+                pendingListView.Focus();
+                SyncPaneSelectionFromListView(pendingPane, pendingListView);
+                CompletePreviewExplicitMouseSelectionCandidate(
+                    pendingListView,
+                    pendingPane,
+                    e,
+                    "workspace-pane-mouse-up-range-selection");
             }
             e.Handled = true;
             return;
@@ -767,6 +772,7 @@ public partial class MainWindow
             && upListView.DataContext is FolderPane upPane
             && _renameInteraction.PendingClickEntry is { } renameEntry)
         {
+            CancelPreviewExplicitMouseSelectionCandidate("rename-pending");
             if (!IsPaneOwnedByActiveWorkspaceSession(upPane))
             {
                 ClearPendingRenameClick();
@@ -794,13 +800,42 @@ public partial class MainWindow
 
         if (CommitPendingSelection(sender, e))
         {
+            if (sender is ListView selectionListView
+                && selectionListView.DataContext is FolderPane selectionPane)
+            {
+                CompletePreviewExplicitMouseSelectionCandidate(
+                    selectionListView,
+                    selectionPane,
+                    e,
+                    "workspace-pane-mouse-up-pending-selection");
+            }
             e.Handled = true;
             return;
         }
 
         if (TryApplyWorkspacePanePendingSingleSelectionClick(sender, e))
         {
+            if (sender is ListView selectionListView
+                && selectionListView.DataContext is FolderPane selectionPane)
+            {
+                CompletePreviewExplicitMouseSelectionCandidate(
+                    selectionListView,
+                    selectionPane,
+                    e,
+                    "workspace-pane-mouse-up-pending-single-selection");
+            }
             e.Handled = true;
+            return;
+        }
+
+        if (sender is ListView listView
+            && listView.DataContext is FolderPane pane)
+        {
+            CompletePreviewExplicitMouseSelectionCandidate(
+                listView,
+                pane,
+                e,
+                "workspace-pane-mouse-up");
         }
     }
 

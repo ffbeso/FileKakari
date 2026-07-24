@@ -3650,11 +3650,11 @@ public partial class MainWindow : Window
                 return new TabInsertDropTarget(false, targetIndex, zone, targetItem);
             }
 
-            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+            var insertIndex = zone == TabDropZone.Before ? targetIndex : targetIndex + 1;
             return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
         }
 
-        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.Right, GetLastSubTabItem(listBox, pane));
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane));
     }
 
     private TabInsertDropTarget GetWorkspacePaneSubTabDragInsertDropTarget(
@@ -3671,15 +3671,15 @@ public partial class MainWindow : Window
                 return TabInsertDropTarget.None;
             }
 
-            var insertAfterTarget = e.GetPosition(targetItem).X > targetItem.ActualWidth / 2;
+            var insertAfterTarget = IsMouseAfterMiddle(targetItem, e.GetPosition(targetItem));
             return new TabInsertDropTarget(
                 true,
                 insertAfterTarget ? targetIndex + 1 : targetIndex,
-                insertAfterTarget ? TabDropZone.Right : TabDropZone.Left,
+                insertAfterTarget ? TabDropZone.After : TabDropZone.Before,
                 targetItem);
         }
 
-        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.Right, GetLastSubTabItem(listBox, pane));
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane));
     }
 
     private static FrameworkElement? GetLastSubTabItem(ListBox listBox, FolderPane pane)

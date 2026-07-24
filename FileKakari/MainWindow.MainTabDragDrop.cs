@@ -415,11 +415,11 @@ public partial class MainWindow
                 return new TabInsertDropTarget(false, targetIndex, zone, targetItem);
             }
 
-            var insertIndex = zone == TabDropZone.Left ? targetIndex : targetIndex + 1;
+            var insertIndex = zone == TabDropZone.Before ? targetIndex : targetIndex + 1;
             return new TabInsertDropTarget(true, insertIndex, zone, targetItem);
         }
 
-        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.Right, GetLastMainTabItem());
+        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.After, GetLastMainTabItem());
     }
 
     private TabInsertDropTarget GetMainTabDragInsertDropTarget(DragEventArgs e)
@@ -438,11 +438,11 @@ public partial class MainWindow
                 return TabInsertDropTarget.None;
             }
 
-            var insertAfterTarget = e.GetPosition(targetItem).X > targetItem.ActualWidth / 2;
+            var insertAfterTarget = IsMouseAfterMiddle(targetItem, e.GetPosition(targetItem));
             return new TabInsertDropTarget(
                 true,
                 insertAfterTarget ? targetIndex + 1 : targetIndex,
-                insertAfterTarget ? TabDropZone.Right : TabDropZone.Left,
+                insertAfterTarget ? TabDropZone.After : TabDropZone.Before,
                 targetItem);
         }
 
@@ -451,20 +451,79 @@ public partial class MainWindow
 
     private TabInsertDropTarget GetMainTabEndInsertDropTarget()
     {
-        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.Right, GetLastMainTabItem());
+        return new TabInsertDropTarget(true, _workspaceSessions.Count, TabDropZone.After, GetLastMainTabItem());
     }
 
     private FrameworkElement? GetLastMainTabItem()
     {
         for (var index = _workspaceSessions.Count - 1; index >= 0; index--)
         {
-            if (GetTabItem(_workspaceSessions[index]) is { } item)
+            if (TabsControl.ItemContainerGenerator.ContainerFromIndex(index) is FrameworkElement item)
             {
                 return item;
             }
         }
 
         return null;
+    }
+
+    internal enum TabStripOrientation
+    {
+        Horizontal,
+        Vertical
+    }
+
+    internal enum TabDropZone
+    {
+        Before,
+        Center,
+        After
+    }
+
+    internal readonly record struct TabInsertDropTarget(
+        bool IsInsert,
+        int InsertIndex,
+        TabDropZone Zone,
+        FrameworkElement? TargetElement,
+        TabStripOrientation Orientation = TabStripOrientation.Horizontal)
+    {
+        public static TabInsertDropTarget None => new(false, -1, TabDropZone.Center, null, TabStripOrientation.Horizontal);
+    }
+
+    private static TabDropZone GetTabDropZone(
+        FrameworkElement tabItem,
+        Point mousePosition,
+        TabStripOrientation orientation = TabStripOrientation.Horizontal)
+    {
+        var size = orientation == TabStripOrientation.Horizontal ? tabItem.ActualWidth : tabItem.ActualHeight;
+        var pos = orientation == TabStripOrientation.Horizontal ? mousePosition.X : mousePosition.Y;
+        if (size <= 0)
+        {
+            return TabDropZone.Center;
+        }
+
+        if (pos < size * 0.25)
+        {
+            return TabDropZone.Before;
+        }
+        else if (pos > size * 0.75)
+        {
+            return TabDropZone.After;
+        }
+        else
+        {
+            return TabDropZone.Center;
+        }
+    }
+
+    private static bool IsMouseAfterMiddle(
+        FrameworkElement tabItem,
+        Point mousePosition,
+        TabStripOrientation orientation = TabStripOrientation.Horizontal)
+    {
+        var size = orientation == TabStripOrientation.Horizontal ? tabItem.ActualWidth : tabItem.ActualHeight;
+        var pos = orientation == TabStripOrientation.Horizontal ? mousePosition.X : mousePosition.Y;
+        return pos > size / 2.0;
     }
 
     private void ReorderSession(WorkspaceSession draggedSession, WorkspaceSession targetSession, Func<IInputElement, Point> getPosition)
@@ -661,40 +720,6 @@ public partial class MainWindow
         if (TabsControl.IsMouseCaptured)
         {
             TabsControl.ReleaseMouseCapture();
-        }
-    }
-
-    private enum TabDropZone
-    {
-        Left,
-        Center,
-        Right
-    }
-
-    private readonly record struct TabInsertDropTarget(
-        bool IsInsert,
-        int InsertIndex,
-        TabDropZone Zone,
-        FrameworkElement? TargetElement)
-    {
-        public static TabInsertDropTarget None => new(false, -1, TabDropZone.Center, null);
-    }
-
-    private static TabDropZone GetTabDropZone(FrameworkElement tabItem, Point mousePosition)
-    {
-        var width = tabItem.ActualWidth;
-        var x = mousePosition.X;
-        if (x < width * 0.25)
-        {
-            return TabDropZone.Left;
-        }
-        else if (x > width * 0.75)
-        {
-            return TabDropZone.Right;
-        }
-        else
-        {
-            return TabDropZone.Center;
         }
     }
 

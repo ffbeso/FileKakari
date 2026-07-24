@@ -28,8 +28,8 @@ public partial class MainWindow
             return;
         }
 
-        var x = GetTabInsertIndicatorX(adornerTarget, target);
-        if (double.IsNaN(x))
+        var offset = GetTabInsertIndicatorOffset(adornerTarget, target);
+        if (double.IsNaN(offset))
         {
             HideTabInsertIndicator();
             return;
@@ -48,7 +48,7 @@ public partial class MainWindow
             layer.Add(_tabInsertIndicatorAdorner);
         }
 
-        _tabInsertIndicatorAdorner.Update(x);
+        _tabInsertIndicatorAdorner.Update(offset, target.Orientation);
     }
 
     private static FrameworkElement GetTabInsertIndicatorAdornerTarget(FrameworkElement preferredTarget)
@@ -64,23 +64,27 @@ public partial class MainWindow
         return preferredTarget;
     }
 
-    private static double GetTabInsertIndicatorX(FrameworkElement adornedElement, TabInsertDropTarget target)
+    private static double GetTabInsertIndicatorOffset(FrameworkElement adornedElement, TabInsertDropTarget target)
     {
         if (target.TargetElement is null)
         {
             return 0;
         }
 
-        var targetX = target.Zone == TabDropZone.Right
-            ? target.TargetElement.ActualWidth
+        var orientation = target.Orientation;
+        var boundaryOffset = target.Zone == TabDropZone.After
+            ? (orientation == TabStripOrientation.Horizontal ? target.TargetElement.ActualWidth : target.TargetElement.ActualHeight)
             : 0;
 
         try
         {
-            return target.TargetElement
+            var point = orientation == TabStripOrientation.Horizontal
+                ? new Point(boundaryOffset, 0)
+                : new Point(0, boundaryOffset);
+            var transformedPoint = target.TargetElement
                 .TransformToAncestor(adornedElement)
-                .Transform(new Point(targetX, 0))
-                .X;
+                .Transform(point);
+            return orientation == TabStripOrientation.Horizontal ? transformedPoint.X : transformedPoint.Y;
         }
         catch (InvalidOperationException)
         {
@@ -103,7 +107,8 @@ public partial class MainWindow
     private sealed class TabInsertIndicatorAdorner : Adorner
     {
         private readonly Pen _pen;
-        private double _x;
+        private double _offset;
+        private TabStripOrientation _orientation = TabStripOrientation.Horizontal;
 
         public TabInsertIndicatorAdorner(UIElement adornedElement, Brush brush)
             : base(adornedElement)
@@ -116,23 +121,38 @@ public partial class MainWindow
             }
         }
 
-        public void Update(double x)
+        public void Update(double offset, TabStripOrientation orientation = TabStripOrientation.Horizontal)
         {
-            _x = x;
+            _offset = offset;
+            _orientation = orientation;
             InvalidateVisual();
         }
 
         protected override void OnRender(DrawingContext drawingContext)
         {
             base.OnRender(drawingContext);
-            var height = Math.Max(0, AdornedElement.RenderSize.Height);
-            if (height <= 0)
+            if (_orientation == TabStripOrientation.Horizontal)
             {
-                return;
-            }
+                var height = Math.Max(0, AdornedElement.RenderSize.Height);
+                if (height <= 0)
+                {
+                    return;
+                }
 
-            var x = Math.Round(_x) + 0.5;
-            drawingContext.DrawLine(_pen, new Point(x, 2), new Point(x, Math.Max(2, height - 2)));
+                var x = Math.Round(_offset) + 0.5;
+                drawingContext.DrawLine(_pen, new Point(x, 2), new Point(x, Math.Max(2, height - 2)));
+            }
+            else
+            {
+                var width = Math.Max(0, AdornedElement.RenderSize.Width);
+                if (width <= 0)
+                {
+                    return;
+                }
+
+                var y = Math.Round(_offset) + 0.5;
+                drawingContext.DrawLine(_pen, new Point(2, y), new Point(Math.Max(2, width - 2), y));
+            }
         }
     }
 }

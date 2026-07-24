@@ -1196,7 +1196,7 @@ public partial class MainWindow
                 var insertTarget = new TabInsertDropTarget(
                     true,
                     pane.Tabs.Count,
-                    TabDropZone.Right,
+                    TabDropZone.After,
                     GetLastSubTabItem(listBox, pane));
                 ShowTabInsertIndicator(listBox, insertTarget);
             }

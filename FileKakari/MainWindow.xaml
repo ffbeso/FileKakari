@@ -1539,7 +1539,7 @@
                                         </ListView.View>
                                     </ListView>
                                     <Border Grid.Column="1"
-                                            Grid.Row="2"
+                                            Grid.Row="3"
                                             MinHeight="22"
                                             Padding="6,1"
                                             Background="{DynamicResource StatusBarBackgroundBrush}"

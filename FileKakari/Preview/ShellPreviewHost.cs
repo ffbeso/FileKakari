@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -19,9 +20,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 {
     public const string AllInitializersENoInterfaceDataKey = "ShellPreviewAllInitializersENoInterface";
 
+    private static long _nextHostInstanceId;
     private readonly string _filePath;
     private readonly Guid _clsid;
     private readonly string _requestId;
+    private readonly long _hostInstanceId;
     private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
     private readonly bool _isMarkdownPreview;
@@ -40,6 +43,8 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private static readonly Guid MonacoPreviewHandlerClsid = new("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
     private const uint CLSCTX_LOCAL_SERVER = 4;
     private static readonly Guid IID_IUnknown = new("00000000-0000-0000-C000-000000000046");
+
+    public long HostInstanceId => _hostInstanceId;
 
     private const int WS_CHILD = 0x40000000;
     private const int WS_VISIBLE = 0x10000000;
@@ -75,12 +80,13 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         _filePath = filePath;
         _clsid = clsid;
         _requestId = requestId;
+        _hostInstanceId = Interlocked.Increment(ref _nextHostInstanceId);
         _initializationPreference = initializationPreference;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == MonacoPreviewHandlerClsid ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
-        LogInfo($"ShellPreviewHost constructor start requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" initializationPreference=\"{_initializationPreference}\"");
+        LogInfo($"ShellPreviewHost constructor start hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" mode={_initializationPreference} created=true initialized=false");
 
         try
         {
@@ -315,11 +321,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 throw exception;
             }
 
-            LogInfo($"ShellPreviewHost constructor complete requestId=\"{_requestId}\" handler=\"{description}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" initialize=\"{_initializationMethod}\"");
+            LogInfo($"ShellPreviewHost constructor complete hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" handler=\"{description}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" initialize=\"{_initializationMethod}\" initialized=true");
         }
         catch (Exception ex)
         {
-            LogError($"ShellPreviewHost constructor failed requestId=\"{_requestId}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\"");
+            LogError($"ShellPreviewHost constructor failed hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" clsid=\"{_clsid:B}\" activation=\"{_activationContext}\" HRESULT=0x{ex.HResult:X8} reason=\"{ex.Message}\" initialized=false");
             DisposePreviewHandler();
             throw;
         }
@@ -393,7 +399,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 try
                 {
                     var rect = new RECT(0, 0, pixelWidth, pixelHeight);
-                    LogDiag($"Invoking IPreviewHandler.SetWindow: child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
+                    LogDiag($"SetWindow hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                     var setWindowHr = _previewHandler.SetWindow(hwndChild, ref rect);
                     LogDiag($"IPreviewHandler.SetWindow HRESULT=0x{setWindowHr:X8}");
                     if (setWindowHr < 0)
@@ -402,7 +408,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     }
                     ThrowIfFailed(setWindowHr);
 
-                    LogDiag("Invoking IPreviewHandler.DoPreview...");
+                    LogDiag($"DoPreview hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" invoked=true");
                     var doPreviewHr = _previewHandler.DoPreview();
                     LogDiag($"IPreviewHandler.DoPreview HRESULT=0x{doPreviewHr:X8}");
                     if (doPreviewHr < 0)
@@ -509,7 +515,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 {
                     var rect = new RECT(0, 0, pixelWidth, pixelHeight);
 
-                    LogDiag($"Deferred SetWindow child HWND=0x{_childHwnd.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
+                    LogDiag($"SetWindow hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" deferred=true child HWND=0x{_childHwnd.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
                     var setWindowHr = _previewHandler.SetWindow(_childHwnd, ref rect);
                     LogDiag($"Deferred SetWindow HRESULT=0x{setWindowHr:X8}");
                     if (setWindowHr < 0)
@@ -524,7 +530,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                         LogDiag($"ShowWindow (before-deferred-do-preview) child HWND=0x{_childHwnd.ToInt64():X} result={showRes}");
                     }
 
-                    LogDiag("Invoking deferred DoPreview...");
+                    LogDiag($"DoPreview hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" deferred=true invoked=true");
                     var doPreviewHr = _previewHandler.DoPreview();
                     LogDiag($"Deferred DoPreview HRESULT=0x{doPreviewHr:X8}");
                     if (doPreviewHr < 0)
@@ -556,7 +562,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 try
                 {
                     var setRectHr = _previewHandler.SetRect(ref rect);
-                    LogDiag($"SetRect rect=(0,0,{pixelWidth},{pixelHeight}) HRESULT=0x{setRectHr:X8}");
+                    LogDiag($"SetRect hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" rect=(0,0,{pixelWidth},{pixelHeight}) HRESULT=0x{setRectHr:X8}");
                 }
                 catch (Exception ex)
                 {
@@ -684,12 +690,12 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         if (_previewHandler is not null)
         {
-            LogInfo($"DisposePreviewHandler start requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\"");
+            LogInfo($"DisposePreviewHandler start hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\"");
             try
             {
-                LogDiag("Invoking IPreviewHandler.Unload...");
+                LogDiag($"Unload hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" invoked=true");
                 var unloadHr = _previewHandler.Unload();
-                LogInfo($"IPreviewHandler.Unload requestId=\"{_requestId}\" HRESULT=0x{unloadHr:X8}");
+                LogInfo($"IPreviewHandler.Unload hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" HRESULT=0x{unloadHr:X8}");
                 if (unloadHr < 0)
                 {
                     LogError($"Unload failed clsid=\"{_clsid:B}\" HRESULT=0x{unloadHr:X8}");
@@ -703,7 +709,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             {
                 var refCount = Marshal.ReleaseComObject(_previewHandler);
                 _previewHandler = null;
-                LogInfo($"DisposePreviewHandler complete requestId=\"{_requestId}\" remainingRefCount={refCount}");
+                LogInfo($"DisposePreviewHandler complete hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" remainingRefCount={refCount}");
             }
         }
 
@@ -764,7 +770,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
 
     protected override void Dispose(bool disposing)
     {
-        LogInfo($"ShellPreviewHost Dispose requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" disposing={disposing} isDisposed={_isDisposed}");
+        LogInfo($"ShellPreviewHost Dispose hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" disposing={disposing} isDisposed={_isDisposed} disposed={_isDisposed}");
         if (!_isDisposed)
         {
             if (disposing)
@@ -772,6 +778,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 DisposePreviewHandler();
             }
             _isDisposed = true;
+            LogInfo($"ShellPreviewHost disposed hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" disposed=true");
         }
         base.Dispose(disposing);
     }

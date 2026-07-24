@@ -29,6 +29,7 @@ public partial class MainWindow
     private string _activePreviewRequestId = "";
     private string? _previewOwnerSessionId;
     private string? _currentPreviewPath;
+    private PreviewDisplayRequest? _activePreviewDisplayRequest;
     private string? _currentTempMediaHtmlPath;
     private int _currentTempMediaHtmlGeneration = -1;
     private int _currentWebViewMediaGeneration = -1;
@@ -481,7 +482,10 @@ public partial class MainWindow
         return fallback;
     }
 
-    private void RefreshPreviewForActiveSelection(string source = "refresh-active-selection", bool explicitlyRequested = false)
+    private void RefreshPreviewForActiveSelection(
+        string source = "refresh-active-selection",
+        bool explicitlyRequested = false,
+        bool forcedRefresh = false)
     {
         if (!IsPreviewPaneActuallyVisible || InternalPageHost.Visibility == Visibility.Visible)
         {
@@ -515,7 +519,7 @@ public partial class MainWindow
             EndPreviewAwaitingExplicitSelection(activePane, $"explicit-request:{source}");
         }
 
-        SchedulePreview(GetSelectedEntries(), source);
+        SchedulePreview(GetSelectedEntries(), source, forcedRefresh);
     }
 
     private IDisposable SuppressPreviewForProgrammaticSelection(string origin)
@@ -897,12 +901,187 @@ public partial class MainWindow
         FileEntry Entry,
         Point StartPoint) : PreviewOwnerState(SessionId, PaneId, StateId);
 
-    private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified")
+    private enum PreviewDisplayRequestState
+    {
+        None,
+        Scheduled,
+        Loading,
+        Displayed,
+        Failed,
+        Disposed
+    }
+
+    private sealed record PreviewFileRevision(long LastWriteTimeUtcTicks, long Length);
+
+    private sealed record PreviewDisplayKey(
+        string? SessionId,
+        string PaneId,
+        string? StateId,
+        string NormalizedPath,
+        FilePreviewKind? PreviewKind,
+        bool PreviewPaneVisible,
+        PreviewFileRevision FileRevision);
+
+    private sealed record PreviewDisplayRequest(
+        PreviewDisplayKey Key,
+        PreviewDisplayRequestState State,
+        string RequestId,
+        int Generation);
+
+    private PreviewDisplayKey? TryCreatePreviewDisplayKey(string path)
+    {
+        var pane = GetActiveFolderPane();
+        if (pane is null)
+        {
+            return null;
+        }
+
+        var session = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
+        if (session is null || !TryGetPreviewFileRevision(path, out var normalizedPath, out var revision))
+        {
+            return null;
+        }
+
+        return new PreviewDisplayKey(
+            session.Id,
+            pane.Id,
+            pane.ActiveTabState?.Id,
+            normalizedPath,
+            PreviewKind: null,
+            PreviewPaneVisible: IsPreviewPaneActuallyVisible,
+            revision);
+    }
+
+    private static bool TryGetPreviewFileRevision(string path, out string normalizedPath, out PreviewFileRevision revision)
+    {
+        normalizedPath = "";
+        revision = default!;
+        try
+        {
+            normalizedPath = Path.GetFullPath(path);
+            var fileInfo = new FileInfo(normalizedPath);
+            if (!fileInfo.Exists)
+            {
+                return false;
+            }
+
+            revision = new PreviewFileRevision(fileInfo.LastWriteTimeUtc.Ticks, fileInfo.Length);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private bool TrySuppressDuplicatePreviewRequest(PreviewDisplayKey requestedKey, string source)
+    {
+        if (_activePreviewDisplayRequest is not { } current
+            || current.State is not (PreviewDisplayRequestState.Scheduled or PreviewDisplayRequestState.Loading or PreviewDisplayRequestState.Displayed)
+            || !IsSamePreviewDisplayKey(current.Key, requestedKey))
+        {
+            return false;
+        }
+
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"preview-duplicate-skip source=\"{source}\" requestedKey=\"{FormatPreviewDisplayKey(requestedKey)}\" " +
+            $"currentKey=\"{FormatPreviewDisplayKey(current.Key)}\" currentState={current.State} " +
+            $"currentRequestId=\"{current.RequestId}\" duplicateSuppressed=true forcedRefresh=false " +
+            "suppressionReason=\"same-active-preview\"");
+        return true;
+    }
+
+    private static bool IsSamePreviewDisplayKey(PreviewDisplayKey current, PreviewDisplayKey requested)
+    {
+        return string.Equals(current.SessionId, requested.SessionId, StringComparison.Ordinal)
+            && string.Equals(current.PaneId, requested.PaneId, StringComparison.Ordinal)
+            && string.Equals(current.StateId, requested.StateId, StringComparison.Ordinal)
+            && string.Equals(current.NormalizedPath, requested.NormalizedPath, StringComparison.OrdinalIgnoreCase)
+            && current.PreviewPaneVisible == requested.PreviewPaneVisible
+            && current.FileRevision == requested.FileRevision
+            // The provider kind is resolved asynchronously.  A request with an unknown kind
+            // matches the already-resolved kind for this same display identity.
+            && (requested.PreviewKind is null
+                || current.PreviewKind is null
+                || current.PreviewKind == requested.PreviewKind);
+    }
+
+    private void UpdateActivePreviewDisplayState(
+        string requestId,
+        int generation,
+        PreviewDisplayRequestState state,
+        FilePreviewKind? previewKind,
+        string source,
+        string reason)
+    {
+        if (_activePreviewDisplayRequest is not { } current
+            || !string.Equals(current.RequestId, requestId, StringComparison.Ordinal)
+            || current.Generation != generation)
+        {
+            return;
+        }
+
+        var key = previewKind is null || current.Key.PreviewKind == previewKind
+            ? current.Key
+            : current.Key with { PreviewKind = previewKind };
+        _activePreviewDisplayRequest = current with { Key = key, State = state };
+        LogPreviewDisplayState("preview-request-state", source, _activePreviewDisplayRequest, forcedRefresh: false, reason);
+    }
+
+    private void MarkActivePreviewDisplayDisposed(string reason)
+    {
+        if (_activePreviewDisplayRequest is not { } current
+            || current.State == PreviewDisplayRequestState.Disposed)
+        {
+            return;
+        }
+
+        _activePreviewDisplayRequest = current with { State = PreviewDisplayRequestState.Disposed };
+        LogPreviewDisplayState("preview-request-state", reason, _activePreviewDisplayRequest, forcedRefresh: false, "disposed");
+    }
+
+    private static string FormatPreviewDisplayKey(PreviewDisplayKey key)
+    {
+        var pathHash = StringComparer.OrdinalIgnoreCase.GetHashCode(key.NormalizedPath).ToString("X8");
+        var fileName = Path.GetFileName(key.NormalizedPath);
+        return $"sessionId={key.SessionId ?? "null"};paneId={key.PaneId};stateId={key.StateId ?? "null"};" +
+            $"fileName={fileName};pathHash={pathHash};kind={key.PreviewKind?.ToString() ?? "pending"};" +
+            $"visible={key.PreviewPaneVisible};revision={key.FileRevision.LastWriteTimeUtcTicks}:{key.FileRevision.Length}";
+    }
+
+    private static void LogPreviewDisplayState(
+        string eventName,
+        string source,
+        PreviewDisplayRequest request,
+        bool forcedRefresh,
+        string reason)
+    {
+        PreviewDiagnostics.Info(
+            "Preview",
+            $"{eventName} source=\"{source}\" key=\"{FormatPreviewDisplayKey(request.Key)}\" " +
+            $"state={request.State} requestId=\"{request.RequestId}\" generation={request.Generation} " +
+            $"forcedRefresh={forcedRefresh} reason=\"{reason}\"");
+    }
+
+    private void SchedulePreview(IReadOnlyList<FileEntry> selectedEntries, string source = "unspecified", bool forcedRefresh = false)
     {
         if (!IsPreviewPaneActuallyVisible)
         {
             PreviewDiagnostics.Info("Preview", $"SchedulePreview skipped source=\"{source}\" reason=\"preview-pane-hidden\" generation={_previewGeneration}");
             return;
+        }
+
+        PreviewDisplayKey? requestedKey = null;
+        if (selectedEntries.Count == 1 && !selectedEntries[0].IsDirectory)
+        {
+            requestedKey = TryCreatePreviewDisplayKey(selectedEntries[0].FullPath);
+            if (!forcedRefresh
+                && requestedKey is not null
+                && TrySuppressDuplicatePreviewRequest(requestedKey, source))
+            {
+                return;
+            }
         }
 
         var generation = Interlocked.Increment(ref _previewGeneration);
@@ -916,6 +1095,20 @@ public partial class MainWindow
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
+
+        if (requestedKey is not null)
+        {
+            _activePreviewDisplayRequest = new PreviewDisplayRequest(
+                requestedKey,
+                PreviewDisplayRequestState.Scheduled,
+                requestId,
+                generation);
+            LogPreviewDisplayState("preview-request-state", source, _activePreviewDisplayRequest, forcedRefresh, "scheduled");
+        }
+        else
+        {
+            _activePreviewDisplayRequest = null;
+        }
 
         if (selectedEntries.Count == 0)
         {
@@ -1012,6 +1205,13 @@ public partial class MainWindow
                 targetHeight = 1080 / scaleY;
             }
 
+            UpdateActivePreviewDisplayState(
+                requestId,
+                generation,
+                PreviewDisplayRequestState.Loading,
+                previewKind: null,
+                requestSource,
+                "provider-loading");
             var result = await _filePreviewController.LoadAsync(
                 path,
                 targetWidth,
@@ -1030,7 +1230,14 @@ public partial class MainWindow
                 return;
             }
 
-            await ShowPreviewResultAsync(result, generation, requestId, requestSource, cancellationToken);
+            var displayed = await ShowPreviewResultAsync(result, generation, requestId, requestSource, cancellationToken);
+            UpdateActivePreviewDisplayState(
+                requestId,
+                generation,
+                displayed ? PreviewDisplayRequestState.Displayed : PreviewDisplayRequestState.Failed,
+                result.Kind,
+                requestSource,
+                displayed ? "provider-displayed" : $"provider-{result.Status.ToString().ToLowerInvariant()}");
             PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync end requestId=\"{requestId}\" source=\"{requestSource}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
         }
         catch (OperationCanceledException)
@@ -1046,7 +1253,7 @@ public partial class MainWindow
         }
     }
 
-    private async Task ShowPreviewResultAsync(
+    private async Task<bool> ShowPreviewResultAsync(
         FilePreviewResult result,
         int generation,
         string requestId,
@@ -1056,6 +1263,7 @@ public partial class MainWindow
         PreviewDiagnostics.Info(
             "Preview",
             $"ShowPreviewResultAsync start requestId=\"{requestId}\" source=\"{source}\" path=\"{result.FileInfo?.FullPath ?? ""}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
+        var displayed = result.Status == FilePreviewStatus.Success;
         switch (result.Status)
         {
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Text:
@@ -1066,7 +1274,7 @@ public partial class MainWindow
                 if (generation != _previewGeneration)
                 {
                     PreviewDiagnostics.Info("Preview", $"ShowPreviewResultAsync skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" requested={generation} current={_previewGeneration} kind=Image");
-                    return;
+                    return false;
                 }
 
                 ReplacePreviewWithImage(result.ImageSource);
@@ -1074,7 +1282,7 @@ public partial class MainWindow
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
                 PreviewDiagnostics.Info("Preview", $"Provider result requestId=\"{requestId}\" kind=\"Shell\" path=\"{result.FileInfo?.FullPath ?? ""}\" clsid=\"{result.Clsid.Value:B}\" generation={generation}");
-                await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, requestId, cancellationToken);
+                displayed = await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, requestId, cancellationToken);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
@@ -1123,6 +1331,7 @@ public partial class MainWindow
         PreviewDiagnostics.Info(
             "Preview",
             $"ShowPreviewResultAsync end requestId=\"{requestId}\" source=\"{source}\" path=\"{result.FileInfo?.FullPath ?? ""}\" generation={generation} currentGeneration={_previewGeneration} status={result.Status} kind={result.Kind}");
+        return displayed;
     }
 
     private string CreatePreviewRequestId(int generation)
@@ -1231,7 +1440,7 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
     }
 
-    private async Task ReplacePreviewWithShellAsync(
+    private async Task<bool> ReplacePreviewWithShellAsync(
         string path,
         Guid clsid,
         FilePreviewInfo? fileInfo,
@@ -1246,25 +1455,25 @@ public partial class MainWindow
             if (generation != _previewGeneration)
             {
                 PreviewDiagnostics.Info("PreviewShell", $"ReplacePreviewWithShell skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation} path=\"{path}\"");
-                return;
+                return false;
             }
 
-            PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create start requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
+            var initializationPreference = attempt == 1
+                ? ShellPreviewInitializationPreference.Default
+                : ShellPreviewInitializationPreference.FileFirst;
+            PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create start requestId=\"{requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt} mode={initializationPreference}");
             ClearPreviewContent();
             ShellPreviewHost? shellHost = null;
             try
             {
                 PreviewDiagnostics.Verbose("PreviewShell", "Instantiating ShellPreviewHost");
-                var initializationPreference = attempt == 1
-                    ? ShellPreviewInitializationPreference.Default
-                    : ShellPreviewInitializationPreference.FileFirst;
                 shellHost = new ShellPreviewHost(path, clsid, requestId, initializationPreference);
 
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;
-                PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create complete requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt}");
-                return;
+                PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create complete hostInstanceId={shellHost.HostInstanceId} requestId=\"{requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt} mode={initializationPreference} created=true initialized=true");
+                return true;
             }
             catch (Exception ex)
             {
@@ -1291,9 +1500,11 @@ public partial class MainWindow
 
                 PreviewDiagnostics.Info("PreviewShell", $"Fallback requestId=\"{requestId}\" reason=\"shell-host-failed\" path=\"{path}\" clsid=\"{clsid:B}\"");
                 await FallbackFromShellToBuiltInTextAsync(path, fileInfo, generation, requestId, cancellationToken, ex);
-                return;
+                return false;
             }
         }
+
+        return false;
     }
 
     private static bool ShouldRetryShellPreview(Guid clsid, Exception exception)
@@ -1545,6 +1756,7 @@ public partial class MainWindow
         _previewCancellation?.Cancel();
         _previewCancellation?.Dispose();
         _previewCancellation = null;
+        MarkActivePreviewDisplayDisposed("cancel-preview-load");
     }
 
     private async Task CancelAndClearPreviewAsync(string reason, bool failOnShellHostDisposeFailure = false)
@@ -1556,6 +1768,7 @@ public partial class MainWindow
         await ClearWebViewAsync(reason);
         _currentPreviewPath = null;
         _previewOwnerSessionId = null;
+        MarkActivePreviewDisplayDisposed(reason);
         PreviewDiagnostics.Info("Preview", $"CancelAndClearPreviewAsync end requestId=\"{_activePreviewRequestId}\" reason=\"{reason}\" path=\"{path}\" generation={_previewGeneration}");
     }
 

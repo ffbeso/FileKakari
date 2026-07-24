@@ -3637,7 +3637,7 @@ public partial class MainWindow : Window
         FolderPane pane,
         DragEventArgs e)
     {
-        var orientation = CurrentSubTabDragOrientation;
+        var orientation = pane.SubTabDragOrientation;
         var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
         if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
         {
@@ -3665,7 +3665,7 @@ public partial class MainWindow : Window
         FolderPane pane,
         DragEventArgs e)
     {
-        var orientation = CurrentSubTabDragOrientation;
+        var orientation = pane.SubTabDragOrientation;
         var targetItem = FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject);
         if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
         {

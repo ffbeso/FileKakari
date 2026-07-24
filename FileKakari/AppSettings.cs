@@ -209,9 +209,19 @@ public sealed class AppSettings
 
     public static SubTabPlacement NormalizeSubTabPlacement(SubTabPlacement placement)
     {
-        return Enum.IsDefined(placement)
-            ? placement
-            : SubTabPlacement.Horizontal;
+        return placement switch
+        {
+            SubTabPlacement.Left or SubTabPlacement.Vertical => SubTabPlacement.Left,
+            SubTabPlacement.Right => SubTabPlacement.Right,
+            SubTabPlacement.Bottom => SubTabPlacement.Bottom,
+            _ => SubTabPlacement.Top
+        };
+    }
+
+    public static bool IsVerticalSubTabPlacement(SubTabPlacement placement)
+    {
+        var normalized = NormalizeSubTabPlacement(placement);
+        return normalized is SubTabPlacement.Left or SubTabPlacement.Right;
     }
 }
 

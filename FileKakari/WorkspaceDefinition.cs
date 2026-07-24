@@ -55,6 +55,7 @@ public sealed record WorkspacePaneGroupDefinition(
     IReadOnlyList<WorkspaceTabDefinition> Tabs) : WorkspaceLayoutNodeDefinition(Id)
 {
     public string SelectedTabId { get; init; } = "";
+    public SubTabPlacement SubTabPlacement { get; init; } = SubTabPlacement.Top;
 }
 
 public enum WorkspaceSplitOrientation

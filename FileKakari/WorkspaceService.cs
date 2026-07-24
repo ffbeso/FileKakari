@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -1085,6 +1085,8 @@ public sealed class WorkspaceService
 
         public string? SelectedTabId { get; set; }
 
+        public SubTabPlacement SubTabPlacement { get; set; } = SubTabPlacement.Top;
+
         public WorkspaceLayoutDocument? First { get; set; }
 
         public WorkspaceLayoutDocument? Second { get; set; }
@@ -1138,6 +1140,9 @@ public sealed class WorkspaceService
 
         [JsonPropertyName("selectedTabId")]
         public string SelectedTabId { get; set; } = "";
+
+        [JsonPropertyName("subTabPlacement")]
+        public SubTabPlacement SubTabPlacement { get; set; } = SubTabPlacement.Top;
 
         [JsonPropertyName("tabs")]
         public List<WorkspaceLocalTabStateDocument> Tabs { get; set; } = [];

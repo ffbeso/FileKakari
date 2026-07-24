@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Windows.Controls;
 using System.Windows.Data;
 
 namespace FileKakari;
@@ -294,12 +295,37 @@ public class FolderPane : INotifyPropertyChanged
     private bool _isActive;
     private int _activeTabIndex;
 
-    public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null)
+    private SubTabPlacement _subTabPlacement = SubTabPlacement.Top;
+    public SubTabPlacement SubTabPlacement
+    {
+        get => _subTabPlacement;
+        set
+        {
+            var normalized = AppSettings.NormalizeSubTabPlacement(value);
+            if (_subTabPlacement == normalized) return;
+            _subTabPlacement = normalized;
+            OnPropertyChanged(nameof(SubTabPlacement));
+            OnPropertyChanged(nameof(SubTabWpfOrientation));
+            OnPropertyChanged(nameof(SubTabDragOrientation));
+            OnPropertyChanged(nameof(SubTabIsVertical));
+            OnPropertyChanged(nameof(SubTabHorizontalScrollBarVisibility));
+            OnPropertyChanged(nameof(SubTabVerticalScrollBarVisibility));
+        }
+    }
+
+    public Orientation SubTabWpfOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? Orientation.Vertical : Orientation.Horizontal;
+    public MainWindow.TabStripOrientation SubTabDragOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? MainWindow.TabStripOrientation.Vertical : MainWindow.TabStripOrientation.Horizontal;
+    public bool SubTabIsVertical => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement);
+    public ScrollBarVisibility SubTabHorizontalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
+    public ScrollBarVisibility SubTabVerticalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Disabled;
+
+    public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
     {
         PaneId = string.IsNullOrWhiteSpace(paneId) ? "primary" : paneId;
         DisplayName = PaneId;
         RootPath = string.IsNullOrWhiteSpace(rootPath) ? "" : rootPath;
         Tabs = tabs;
+        SubTabPlacement = placement;
         SyncFileListPath();
     }
 
@@ -876,8 +902,8 @@ public class FolderPane : INotifyPropertyChanged
 
 public sealed class WorkspacePaneGroup : FolderPane
 {
-    public WorkspacePaneGroup(string id, ObservableCollection<FolderTab> tabs, string? rootPath = null)
-        : base(id, tabs, rootPath)
+    public WorkspacePaneGroup(string id, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
+        : base(id, tabs, rootPath, placement)
     {
     }
 }

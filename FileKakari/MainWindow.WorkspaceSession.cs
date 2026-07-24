@@ -367,10 +367,62 @@ public partial class MainWindow
                 }
             }
 
+            UpdateSubTabPlacementMenuItemsChecked(button.ContextMenu, pane.SubTabPlacement);
             button.ContextMenu.IsOpen = true;
         }
 
         ScheduleWorkspacePaneActivation(pane);
+    }
+
+    private void SetSubTabPlacementFromSender(object sender, SubTabPlacement placement)
+    {
+        if (GetWorkspacePaneFromMenuItem(sender) is { } pane)
+        {
+            pane.SubTabPlacement = placement;
+            _workspaceLocalState.MarkDirty("subtab-placement-change");
+        }
+    }
+
+    private void WorkspacePaneSubTabPlacementTop_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Top);
+    private void WorkspacePaneSubTabPlacementLeft_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Left);
+    private void WorkspacePaneSubTabPlacementRight_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Right);
+    private void WorkspacePaneSubTabPlacementBottom_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Bottom);
+
+    private void WorkspacePaneSubTabBarContextMenu_Opening(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu)
+        {
+            var pane = GetWorkspacePaneFromSender(menu.PlacementTarget ?? menu);
+            if (pane is not null)
+            {
+                UpdateSubTabPlacementMenuItemsChecked(menu, pane.SubTabPlacement);
+            }
+        }
+    }
+
+    private static void UpdateSubTabPlacementMenuItemsChecked(ContextMenu menu, SubTabPlacement currentPlacement)
+    {
+        foreach (var item in menu.Items)
+        {
+            if (item is MenuItem menuItem && menuItem.Header?.ToString() == "サブタブの配置")
+            {
+                foreach (var subItem in menuItem.Items)
+                {
+                    if (subItem is MenuItem subMenu)
+                    {
+                        var header = subMenu.Header?.ToString() ?? "";
+                        subMenu.IsChecked = header switch
+                        {
+                            string h when h.Contains("Top") || h.Contains("上") => currentPlacement == SubTabPlacement.Top,
+                            string h when h.Contains("Left") || h.Contains("左") => currentPlacement == SubTabPlacement.Left,
+                            string h when h.Contains("Right") || h.Contains("右") => currentPlacement == SubTabPlacement.Right,
+                            string h when h.Contains("Bottom") || h.Contains("下") => currentPlacement == SubTabPlacement.Bottom,
+                            _ => false
+                        };
+                    }
+                }
+            }
+        }
     }
 
     private void WorkspacePaneSplitRightMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1198,7 +1250,7 @@ public partial class MainWindow
                     pane.Tabs.Count,
                     TabDropZone.After,
                     GetLastSubTabItem(listBox, pane),
-                    CurrentSubTabDragOrientation);
+                    pane.SubTabDragOrientation);
                 ShowTabInsertIndicator(listBox, insertTarget);
             }
             else
@@ -1653,7 +1705,8 @@ public partial class MainWindow
     {
         return new WorkspacePaneGroupDefinition(paneGroup.Id, paneGroup.SelectedTabIndex, [])
         {
-            SelectedTabId = paneGroup.SelectedTabId ?? ""
+            SelectedTabId = paneGroup.SelectedTabId ?? "",
+            SubTabPlacement = paneGroup.SubTabPlacement
         };
     }
 

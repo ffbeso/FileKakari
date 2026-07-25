@@ -3,10 +3,12 @@ namespace FileKakari;
 sealed class WorkspaceSessionFactory
 {
     private readonly Func<string, string> _normalizeSortColumn;
+    private readonly Func<SubTabPlacement>? _getDefaultSubTabPlacement;
 
-    internal WorkspaceSessionFactory(Func<string, string> normalizeSortColumn)
+    internal WorkspaceSessionFactory(Func<string, string> normalizeSortColumn, Func<SubTabPlacement>? getDefaultSubTabPlacement = null)
     {
         _normalizeSortColumn = normalizeSortColumn;
+        _getDefaultSubTabPlacement = getDefaultSubTabPlacement;
     }
 
     internal WorkspaceSession Create(WorkspaceDefinition workspace)
@@ -78,7 +80,7 @@ sealed class WorkspaceSessionFactory
                 pane.Tabs.ToArray())
             {
                 SelectedTabId = pane.SelectedTabId,
-                SubTabPlacement = AppSettings.NormalizeSubTabPlacement(pane.SubTabPlacement)
+                SubTabPlacement = pane.SubTabPlacement
             },
             _ => throw new InvalidOperationException($"Unsupported workspace layout node: {layoutRoot.GetType().FullName}")
         };
@@ -99,7 +101,9 @@ sealed class WorkspaceSessionFactory
         var paneRootPath = definition.Tabs.FirstOrDefault()?.BasePath
             ?? workspace.RootPath
             ?? workspace.SourceDirectory;
-        var paneGroup = new WorkspacePaneGroup(definition.Id, [], paneRootPath, definition.SubTabPlacement);
+        var defaultPlacement = _getDefaultSubTabPlacement?.Invoke() ?? SubTabPlacement.Top;
+        var finalPlacement = SubTabPlacementHelper.Resolve(definition.SubTabPlacement, defaultPlacement);
+        var paneGroup = new WorkspacePaneGroup(definition.Id, [], paneRootPath, finalPlacement);
         paneGroup.SetWorkspace(workspace);
 
         foreach (var tabDefinition in definition.Tabs)

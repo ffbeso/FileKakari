@@ -207,15 +207,9 @@ public sealed class AppSettings
             : PreviewPanePlacement.Right;
     }
 
-    public static SubTabPlacement NormalizeSubTabPlacement(SubTabPlacement placement)
+    public static SubTabPlacement NormalizeSubTabPlacement(SubTabPlacement? placement, SubTabPlacement fallback = SubTabPlacement.Top)
     {
-        return placement switch
-        {
-            SubTabPlacement.Left or SubTabPlacement.Vertical => SubTabPlacement.Left,
-            SubTabPlacement.Right => SubTabPlacement.Right,
-            SubTabPlacement.Bottom => SubTabPlacement.Bottom,
-            _ => SubTabPlacement.Top
-        };
+        return SubTabPlacementHelper.Resolve(placement, fallback);
     }
 
     public static bool IsVerticalSubTabPlacement(SubTabPlacement placement)

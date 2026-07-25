@@ -391,8 +391,8 @@ public partial class MainWindow : Window
             () => _activeWorkspaceSession,
             () => TabsControl.SelectedIndex,
             SaveSessionState);
-        _workspaceSessionFactory = new WorkspaceSessionFactory(NormalizeSortColumn);
-        _primaryPaneGroup = new WorkspacePaneGroup("primary", _primaryPaneTabs);
+        _workspaceSessionFactory = new WorkspaceSessionFactory(NormalizeSortColumn, () => AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement));
+        _primaryPaneGroup = new WorkspacePaneGroup("primary", _primaryPaneTabs, placement: AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement));
         _activeWorkspacePaneGroup = _primaryPaneGroup;
         _statusSummary = new StatusSummaryService(_text);
         _statusSummaryCoordinator = new StatusSummaryCoordinator(

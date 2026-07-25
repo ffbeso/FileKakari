@@ -6,8 +6,22 @@ public enum SubTabPlacement
     Left,
     Right,
     Bottom,
-
-    // 旧データ互換用 (読み込み時に Top / Left に正規化)
     Horizontal = Top,
     Vertical = Left
+}
+
+public static class SubTabPlacementHelper
+{
+    public static SubTabPlacement Resolve(SubTabPlacement? raw, SubTabPlacement fallback)
+    {
+        if (!raw.HasValue) return fallback;
+        return raw.Value switch
+        {
+            SubTabPlacement.Left or SubTabPlacement.Vertical => SubTabPlacement.Left,
+            SubTabPlacement.Right => SubTabPlacement.Right,
+            SubTabPlacement.Bottom => SubTabPlacement.Bottom,
+            SubTabPlacement.Top or SubTabPlacement.Horizontal => SubTabPlacement.Top,
+            _ => fallback
+        };
+    }
 }

@@ -112,8 +112,10 @@ public partial class SettingsView : UserControl
         };
         SubTabPlacementComboBox.ItemsSource = new[]
         {
-            new SettingsChoice<SubTabPlacement>(_text.Get("SettingsPlacementHorizontal"), SubTabPlacement.Horizontal),
-            new SettingsChoice<SubTabPlacement>(_text.Get("SettingsPlacementVertical"), SubTabPlacement.Vertical)
+            new SettingsChoice<SubTabPlacement>("上 (Top)", SubTabPlacement.Top),
+            new SettingsChoice<SubTabPlacement>("左 (Left)", SubTabPlacement.Left),
+            new SettingsChoice<SubTabPlacement>("右 (Right)", SubTabPlacement.Right),
+            new SettingsChoice<SubTabPlacement>("下 (Bottom)", SubTabPlacement.Bottom)
         };
         FontFamilyComboBox.ItemsSource = GetFontFamilyChoices();
     }
@@ -126,7 +128,7 @@ public partial class SettingsView : UserControl
         ShowSystemFilesCheckBox.IsChecked = Result.ShowSystemFiles;
         SortFoldersFirstCheckBox.IsChecked = Result.SortFoldersFirst;
         PreviewPanePlacementComboBox.SelectedValue = Result.PreviewPanePlacement;
-        SubTabPlacementComboBox.SelectedValue = Result.SubTabPlacement;
+        SubTabPlacementComboBox.SelectedValue = AppSettings.NormalizeSubTabPlacement(Result.SubTabPlacement);
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
         AutoPlayAudioPreviewCheckBox.IsChecked = Result.AutoPlayAudioPreview ?? Result.AutoPlayVideoPreview;
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
@@ -215,8 +217,8 @@ public partial class SettingsView : UserControl
             ? previewPanePlacement
             : PreviewPanePlacement.Right;
         Result.SubTabPlacement = SubTabPlacementComboBox.SelectedValue is SubTabPlacement subTabPlacement
-            ? subTabPlacement
-            : SubTabPlacement.Horizontal;
+            ? AppSettings.NormalizeSubTabPlacement(subTabPlacement)
+            : SubTabPlacement.Top;
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
         Result.AutoPlayAudioPreview = AutoPlayAudioPreviewCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;

@@ -298,6 +298,8 @@ public partial class MainWindow
         menu.Items.Add(CreateMenuItem(_text.Get("CloseThisTabMenu"), canClose, () => CloseWorkspacePaneSubTabAsync(pane, tab, placementTarget as ListBox)));
         var isRestoreEnabled = _lastClosedSubTab is not null && _lastClosedSubTab.PaneId == pane.Id;
         menu.Items.Add(CreateMenuItem(_text.Get("RestoreClosedTabMenu"), isRestoreEnabled, () => RestoreLastClosedSubTabAsync(pane)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateSubTabPlacementMenu(pane));
         menu.IsOpen = true;
     }
 
@@ -309,7 +311,39 @@ public partial class MainWindow
         };
         var isRestoreEnabled = _lastClosedSubTab is not null && _lastClosedSubTab.PaneId == pane.Id;
         menu.Items.Add(CreateMenuItem(_text.Get("RestoreClosedTabMenu"), isRestoreEnabled, () => RestoreLastClosedSubTabAsync(pane)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CreateSubTabPlacementMenu(pane));
         menu.IsOpen = true;
+    }
+
+    private MenuItem CreateSubTabPlacementMenu(FolderPane pane)
+    {
+        var placementMenu = new MenuItem { Header = "サブタブの配置" };
+        var current = pane.SubTabPlacement;
+
+        var itemTop = new MenuItem { Header = "上 (Top)", IsChecked = current == SubTabPlacement.Top };
+        itemTop.Click += (_, _) => SetFolderPaneSubTabPlacement(pane, SubTabPlacement.Top);
+        placementMenu.Items.Add(itemTop);
+
+        var itemLeft = new MenuItem { Header = "左 (Left)", IsChecked = current == SubTabPlacement.Left };
+        itemLeft.Click += (_, _) => SetFolderPaneSubTabPlacement(pane, SubTabPlacement.Left);
+        placementMenu.Items.Add(itemLeft);
+
+        var itemRight = new MenuItem { Header = "右 (Right)", IsChecked = current == SubTabPlacement.Right };
+        itemRight.Click += (_, _) => SetFolderPaneSubTabPlacement(pane, SubTabPlacement.Right);
+        placementMenu.Items.Add(itemRight);
+
+        var itemBottom = new MenuItem { Header = "下 (Bottom)", IsChecked = current == SubTabPlacement.Bottom };
+        itemBottom.Click += (_, _) => SetFolderPaneSubTabPlacement(pane, SubTabPlacement.Bottom);
+        placementMenu.Items.Add(itemBottom);
+
+        return placementMenu;
+    }
+
+    private void SetFolderPaneSubTabPlacement(FolderPane pane, SubTabPlacement placement)
+    {
+        pane.SubTabPlacement = placement;
+        _workspaceLocalState.MarkDirty("subtab-placement-change");
     }
 
     private void TabsControl_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)

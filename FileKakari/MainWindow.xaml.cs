@@ -3359,8 +3359,9 @@ public partial class MainWindow : Window
 
     private void WorkspacePaneSubTabBar_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (sender is not ListBox listBox
-            || FindVisualChild<ScrollViewer>(listBox) is not { } scrollViewer
+        if (sender is not ScrollViewer scrollViewer
+            || scrollViewer.DataContext is not FolderPane pane
+            || pane.SubTabIsVertical
             || scrollViewer.ScrollableWidth <= 0)
         {
             return;

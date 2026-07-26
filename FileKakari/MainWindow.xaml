@@ -1105,8 +1105,22 @@
                                                 DragLeave="WorkspacePaneSubTabBar_DragLeave"
                                                 Drop="WorkspacePaneSubTabBar_Drop">
                                         <ScrollViewer HorizontalScrollBarVisibility="{Binding SubTabHorizontalScrollBarVisibility}"
-                                                      VerticalScrollBarVisibility="{Binding SubTabVerticalScrollBarVisibility}">
+                                                      VerticalScrollBarVisibility="{Binding SubTabVerticalScrollBarVisibility}"
+                                                      CanContentScroll="False"
+                                                      PreviewMouseWheel="WorkspacePaneSubTabBar_PreviewMouseWheel">
                                             <StackPanel Orientation="{Binding SubTabWpfOrientation}">
+                                                <StackPanel.Style>
+                                                    <Style TargetType="StackPanel">
+                                                        <Setter Property="HorizontalAlignment" Value="Left" />
+                                                        <Setter Property="VerticalAlignment" Value="Stretch" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding SubTabIsVertical}" Value="True">
+                                                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                <Setter Property="VerticalAlignment" Value="Top" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </StackPanel.Style>
                                                 <ListBox ItemsSource="{Binding Tabs}"
                                                          SelectedValue="{Binding SelectedTabId, Mode=TwoWay}"
                                                          SelectedValuePath="Id"
@@ -1114,7 +1128,6 @@
                                                          SelectionChanged="WorkspacePaneSubTabBar_SelectionChanged"
                                                          PreviewMouseDown="WorkspacePaneSubTabBar_PreviewMouseDown"
                                                          PreviewMouseMove="WorkspacePaneSubTabBar_PreviewMouseMove"
-                                                         PreviewMouseWheel="WorkspacePaneSubTabBar_PreviewMouseWheel"
                                                          PreviewMouseRightButtonUp="WorkspacePaneSubTabBar_PreviewMouseRightButtonUp"
                                                          DragOver="WorkspacePaneSubTabBar_DragOver"
                                                          DragLeave="WorkspacePaneSubTabBar_DragLeave"
@@ -1123,6 +1136,29 @@
                                                          Background="Transparent"
                                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                                          ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                                                    <ListBox.Style>
+                                                        <Style TargetType="ListBox">
+                                                            <Setter Property="HorizontalAlignment" Value="Left" />
+                                                            <Setter Property="VerticalAlignment" Value="Stretch" />
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="ListBox">
+                                                                        <Border Background="{TemplateBinding Background}"
+                                                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                BorderThickness="{TemplateBinding BorderThickness}">
+                                                                            <ItemsPresenter />
+                                                                        </Border>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SubTabIsVertical}" Value="True">
+                                                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                    <Setter Property="VerticalAlignment" Value="Top" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ListBox.Style>
                                                     <ListBox.ItemsPanel>
                                                         <ItemsPanelTemplate>
                                                             <StackPanel Orientation="{Binding SubTabWpfOrientation}" />

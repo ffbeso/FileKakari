@@ -380,6 +380,13 @@ public partial class MainWindow
         {
             pane.SubTabPlacement = placement;
             _workspaceLocalState.MarkDirty("subtab-placement-change");
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                if (FindWorkspacePaneSubTabListBox(pane) is { } listBox)
+                {
+                    BringWorkspacePaneSelectedSubTabIntoView(listBox);
+                }
+            }, DispatcherPriority.ContextIdle);
         }
     }
 

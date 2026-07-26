@@ -316,8 +316,8 @@ public class FolderPane : INotifyPropertyChanged
     public Orientation SubTabWpfOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? Orientation.Vertical : Orientation.Horizontal;
     public MainWindow.TabStripOrientation SubTabDragOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? MainWindow.TabStripOrientation.Vertical : MainWindow.TabStripOrientation.Horizontal;
     public bool SubTabIsVertical => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement);
-    public ScrollBarVisibility SubTabHorizontalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
-    public ScrollBarVisibility SubTabVerticalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Disabled;
+    public ScrollBarVisibility SubTabHorizontalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+    public ScrollBarVisibility SubTabVerticalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
 
     public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
     {

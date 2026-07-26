@@ -28,8 +28,11 @@ public partial class MainWindow : Window
     private const string FileDropTargetTag = "FileDropTarget";
     private const double SubTabAutoScrollEdgeSize = 30;
     private const double SubTabAutoScrollStep = 12;
+    private const double FileListDragAutoScrollEdgeSize = 30;
+    private const double FileListDragAutoScrollStep = 12;
     private static readonly TimeSpan FileTabHoverDelay = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan SubTabAutoScrollInterval = TimeSpan.FromMilliseconds(45);
+    private static readonly TimeSpan FileListDragAutoScrollInterval = TimeSpan.FromMilliseconds(45);
     private static readonly TimeSpan WorkspaceLocalStateSaveDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan WorkspaceRenameClickDelay = TimeSpan.FromMilliseconds(350);
     private readonly BulkObservableCollection<FileEntry> _items = [];
@@ -180,6 +183,12 @@ public partial class MainWindow : Window
     private Point? _subTabAutoScrollPointerPosition;
     private SubTabAutoScrollDirection _subTabAutoScrollDirection;
     private SubTabAutoScrollDragKind _subTabAutoScrollDragKind;
+    private readonly DispatcherTimer _fileListDragAutoScrollTimer = new() { Interval = FileListDragAutoScrollInterval };
+    private FolderPane? _fileListDragAutoScrollPane;
+    private ListView? _fileListDragAutoScrollListView;
+    private ScrollViewer? _fileListDragAutoScrollViewer;
+    private Point? _fileListDragAutoScrollPointerPosition;
+    private FileListDragAutoScrollDirection _fileListDragAutoScrollDirection;
     private readonly DispatcherTimer _mainTabHoverTimer = new() { Interval = TimeSpan.FromMilliseconds(600) };
     private WorkspaceSession? _mainTabHoverTarget;
     private ClosedWorkspaceSessionState? _lastClosedWorkspaceSession;
@@ -519,6 +528,7 @@ public partial class MainWindow : Window
         _fileTabHoverTimer.Tick += FileTabHoverTimer_Tick;
         _subTabHoverTimer.Tick += SubTabHoverTimer_Tick;
         _subTabAutoScrollTimer.Tick += SubTabAutoScrollTimer_Tick;
+        _fileListDragAutoScrollTimer.Tick += FileListDragAutoScrollTimer_Tick;
         _mainTabHoverTimer.Tick += MainTabHoverTimer_Tick;
         _items.CollectionChanged += Items_CollectionChanged;
         _folderWatchService.ChangeObserved += FolderWatchService_ChangeObserved;
@@ -1360,7 +1370,9 @@ public partial class MainWindow : Window
 
     private void ItemsList_DragOver(object sender, DragEventArgs e)
     {
-        if (GetMainTabDemotionTarget(e, ActiveSession, GetNormalFolderPane()) is not null)
+        var pane = GetNormalFolderPane();
+        UpdateFileListDragAutoScroll(pane, ItemsList, FindItemsScrollViewer(), e);
+        if (GetMainTabDemotionTarget(e, ActiveSession, pane) is not null)
         {
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
@@ -1372,11 +1384,13 @@ public partial class MainWindow : Window
 
     private void ItemsList_DragLeave(object sender, DragEventArgs e)
     {
+        StopFileListDragAutoScrollIfPointerOutside(ItemsList, e);
         _fileListInput.HandleDragLeave(e);
     }
 
     private async void ItemsList_Drop(object sender, DragEventArgs e)
     {
+        StopFileListDragAutoScroll();
         if (GetMainTabDemotionTarget(e, ActiveSession, GetNormalFolderPane()) is { } demotionTarget)
         {
             e.Effects = DragDropEffects.Move;
@@ -1533,6 +1547,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape)
         {
+            StopFileListDragAutoScroll();
             StopWorkspacePaneSubTabAutoScroll();
             HideTabInsertIndicator();
         }
@@ -3462,6 +3477,161 @@ public partial class MainWindow : Window
                 && string.Equals(scrollViewer.Tag as string, "WorkspacePaneSubTabScroller", StringComparison.Ordinal));
     }
 
+    private void UpdateFileListDragAutoScroll(
+        FolderPane? pane,
+        ListView listView,
+        ScrollViewer? scrollViewer,
+        DragEventArgs e)
+    {
+        if (pane is null
+            || scrollViewer is null
+            || GetFileOperationDragItems(e) is null
+            || !ReferenceEquals(GetFolderPaneListView(pane), listView)
+            || !ReferenceEquals(FindVisualChild<ScrollViewer>(listView), scrollViewer))
+        {
+            StopFileListDragAutoScroll();
+            return;
+        }
+
+        var pointerPosition = e.GetPosition(listView);
+        var direction = GetFileListDragAutoScrollDirection(listView, pointerPosition);
+        if (direction == FileListDragAutoScrollDirection.None
+            || scrollViewer.ScrollableHeight <= 0
+            || (direction == FileListDragAutoScrollDirection.Up && scrollViewer.VerticalOffset <= 0.5)
+            || (direction == FileListDragAutoScrollDirection.Down
+                && scrollViewer.ScrollableHeight - scrollViewer.VerticalOffset <= 0.5))
+        {
+            StopFileListDragAutoScroll();
+            return;
+        }
+
+        _fileListDragAutoScrollPane = pane;
+        _fileListDragAutoScrollListView = listView;
+        _fileListDragAutoScrollViewer = scrollViewer;
+        _fileListDragAutoScrollPointerPosition = pointerPosition;
+        _fileListDragAutoScrollDirection = direction;
+        if (!_fileListDragAutoScrollTimer.IsEnabled)
+        {
+            _fileListDragAutoScrollTimer.Start();
+        }
+    }
+
+    private static FileListDragAutoScrollDirection GetFileListDragAutoScrollDirection(
+        ListView listView,
+        Point pointerPosition)
+    {
+        if (listView.ActualHeight <= 0
+            || pointerPosition.Y < 0
+            || pointerPosition.Y > listView.ActualHeight)
+        {
+            return FileListDragAutoScrollDirection.None;
+        }
+
+        if (pointerPosition.Y <= FileListDragAutoScrollEdgeSize)
+        {
+            return FileListDragAutoScrollDirection.Up;
+        }
+
+        if (pointerPosition.Y >= listView.ActualHeight - FileListDragAutoScrollEdgeSize)
+        {
+            return FileListDragAutoScrollDirection.Down;
+        }
+
+        return FileListDragAutoScrollDirection.None;
+    }
+
+    private void FileListDragAutoScrollTimer_Tick(object? sender, EventArgs e)
+    {
+        var pane = _fileListDragAutoScrollPane;
+        var listView = _fileListDragAutoScrollListView;
+        var scrollViewer = _fileListDragAutoScrollViewer;
+        var pointerPosition = _fileListDragAutoScrollPointerPosition;
+        if (pane is null
+            || listView is null
+            || scrollViewer is null
+            || pointerPosition is null
+            || !listView.IsLoaded
+            || !listView.IsVisible
+            || !ReferenceEquals(GetFolderPaneListView(pane), listView)
+            || !ReferenceEquals(FindVisualChild<ScrollViewer>(listView), scrollViewer))
+        {
+            StopFileListDragAutoScroll();
+            return;
+        }
+
+        var direction = GetFileListDragAutoScrollDirection(listView, pointerPosition.Value);
+        if (direction != _fileListDragAutoScrollDirection
+            || direction == FileListDragAutoScrollDirection.None
+            || scrollViewer.ScrollableHeight <= 0)
+        {
+            StopFileListDragAutoScroll();
+            return;
+        }
+
+        var currentOffset = scrollViewer.VerticalOffset;
+        var nextOffset = Math.Clamp(
+            currentOffset + (direction == FileListDragAutoScrollDirection.Up
+                ? -FileListDragAutoScrollStep
+                : FileListDragAutoScrollStep),
+            0,
+            scrollViewer.ScrollableHeight);
+        if (Math.Abs(nextOffset - currentOffset) <= 0.01)
+        {
+            StopFileListDragAutoScroll();
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(nextOffset);
+        UpdateFileListDropTargetHighlightAtPosition(listView, pointerPosition.Value);
+    }
+
+    private void UpdateFileListDropTargetHighlightAtPosition(ListView listView, Point pointerPosition)
+    {
+        var hit = VisualTreeHelper.HitTest(listView, pointerPosition)?.VisualHit as DependencyObject;
+        var item = FindVisualParent<ListViewItem>(hit);
+        if (item?.DataContext is FileEntry { IsDirectory: true } entry
+            && FileListHitTestService.IsInsideFileNameHitTarget(hit)
+            && !string.IsNullOrWhiteSpace(entry.FullPath)
+            && !SpecialLocationService.IsSpecialUri(entry.FullPath)
+            && Directory.Exists(entry.FullPath))
+        {
+            ClearFileDropHighlight();
+            HighlightFileDropTarget(listView, entry);
+            return;
+        }
+
+        ClearFileDropHighlight();
+    }
+
+    private void StopFileListDragAutoScrollIfPointerOutside(ListView listView, DragEventArgs e)
+    {
+        if (!ReferenceEquals(_fileListDragAutoScrollListView, listView))
+        {
+            return;
+        }
+
+        var pointerPosition = e.GetPosition(listView);
+        if (pointerPosition.X >= 0
+            && pointerPosition.X <= listView.ActualWidth
+            && pointerPosition.Y >= 0
+            && pointerPosition.Y <= listView.ActualHeight)
+        {
+            return;
+        }
+
+        StopFileListDragAutoScroll();
+    }
+
+    private void StopFileListDragAutoScroll()
+    {
+        _fileListDragAutoScrollTimer.Stop();
+        _fileListDragAutoScrollPane = null;
+        _fileListDragAutoScrollListView = null;
+        _fileListDragAutoScrollViewer = null;
+        _fileListDragAutoScrollPointerPosition = null;
+        _fileListDragAutoScrollDirection = FileListDragAutoScrollDirection.None;
+    }
+
     private void UpdateWorkspacePaneSubTabAutoScroll(
         FolderPane pane,
         ListBox listBox,
@@ -3598,6 +3768,7 @@ public partial class MainWindow : Window
     {
         if (e.Action is DragAction.Cancel or DragAction.Drop)
         {
+            StopFileListDragAutoScroll();
             StopWorkspacePaneSubTabAutoScroll();
             if (e.Action == DragAction.Cancel)
             {
@@ -3608,6 +3779,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Deactivated(object? sender, EventArgs e)
     {
+        StopFileListDragAutoScroll();
         StopWorkspacePaneSubTabAutoScroll();
         HideTabInsertIndicator();
     }
@@ -7511,6 +7683,13 @@ public partial class MainWindow : Window
         None,
         Backward,
         Forward
+    }
+
+    private enum FileListDragAutoScrollDirection
+    {
+        None,
+        Up,
+        Down
     }
 
     private enum SubTabAutoScrollDragKind

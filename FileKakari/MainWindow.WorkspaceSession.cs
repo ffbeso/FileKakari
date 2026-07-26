@@ -944,10 +944,17 @@ public partial class MainWindow
         if (sender is not ListView listView
             || listView.DataContext is not FolderPane pane)
         {
+            StopFileListDragAutoScroll();
             e.Effects = DragDropEffects.None;
             e.Handled = true;
             return;
         }
+
+        var resolvedListView = GetFolderPaneListView(pane);
+        var scrollViewer = ReferenceEquals(resolvedListView, listView)
+            ? FindVisualChild<ScrollViewer>(listView)
+            : null;
+        UpdateFileListDragAutoScroll(pane, listView, scrollViewer, e);
 
         if (GetMainTabDemotionTarget(e, FindSessionContainingPane(pane), pane) is not null)
         {
@@ -985,11 +992,17 @@ public partial class MainWindow
 
     private void WorkspacePaneFileList_DragLeave(object sender, DragEventArgs e)
     {
+        if (sender is ListView listView)
+        {
+            StopFileListDragAutoScrollIfPointerOutside(listView, e);
+        }
+
         ClearFileDropHighlight();
     }
 
     private async void WorkspacePaneFileList_Drop(object sender, DragEventArgs e)
     {
+        StopFileListDragAutoScroll();
         ClearFileDropHighlight();
         if (sender is not ListView listView
             || listView.DataContext is not FolderPane pane)

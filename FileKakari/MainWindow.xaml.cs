@@ -3374,14 +3374,48 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private bool TryGetWorkspacePaneSubTabBarTarget(
+        object sender,
+        out ListBox listBox,
+        out FolderPane pane)
+    {
+        if (sender is ListBox { DataContext: FolderPane listPane } directListBox
+            && FindSessionContainingPane(listPane) is not null)
+        {
+            listBox = directListBox;
+            pane = listPane;
+            return true;
+        }
+
+        if (sender is FrameworkElement { DataContext: FolderPane hostPane } host
+            && FindVisualChild<ListBox>(host) is { DataContext: FolderPane hostListPane } hostListBox
+            && ReferenceEquals(hostPane, hostListPane)
+            && FindSessionContainingPane(hostPane) is not null)
+        {
+            listBox = hostListBox;
+            pane = hostPane;
+            return true;
+        }
+
+        listBox = null!;
+        pane = null!;
+        return false;
+    }
+
+    private static bool IsWorkspacePaneSubTabBarBackgroundInput(DependencyObject? source)
+    {
+        return FindVisualParent<ListBox>(source) is null
+            && FindVisualParent<Button>(source) is null
+            && FindVisualParent<ScrollBar>(source) is null;
+    }
+
     private async void WorkspacePaneSubTabBar_Drop(object sender, DragEventArgs e)
     {
         ClearWorkspacePaneSubTabHover();
         HideTabInsertIndicator();
-        if (sender is ListBox listBox
-            && listBox.DataContext is FolderPane targetPane)
+        if (TryGetWorkspacePaneSubTabBarTarget(sender, out var listBox, out var targetPane))
         {
-            if (CanDropSubTab(sender, e) && e.Data.GetDataPresent(TabDragFormat))
+            if (CanDropSubTab(targetPane, e) && e.Data.GetDataPresent(TabDragFormat))
             {
                 var draggedSession = e.Data.GetData(TabDragFormat) as WorkspaceSession;
                 if (draggedSession is not null
@@ -3390,12 +3424,7 @@ public partial class MainWindow : Window
                     && draggedSession.PaneGroups[0].Tabs.Count == 1
                     && _workspaceSessions.Count > 1)
                 {
-                    var targetIndex = GetSubTabDropTargetIndex(e, targetPane);
-                    if (FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject) is null)
-                    {
-                        targetIndex = targetPane.Tabs.Count;
-                    }
-                    targetIndex = Math.Clamp(targetIndex, 0, targetPane.Tabs.Count);
+                    var targetIndex = GetWorkspacePaneSubTabDragInsertDropTarget(listBox, targetPane, e).InsertIndex;
                     e.Effects = DragDropEffects.Move;
                     e.Handled = true;
                     await DemoteMainTabToSubTabAsync(draggedSession, targetPane, targetIndex);
@@ -3403,7 +3432,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (CanDropSubTab(sender, e)
+            if (CanDropSubTab(targetPane, e)
                 && _draggedSubTab is { } draggedTab
                 && _draggedSubTabPane is WorkspacePaneGroup sourcePane
                 && targetPane is WorkspacePaneGroup targetPaneGroup
@@ -3419,7 +3448,7 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                var targetIndex = GetSubTabDropTargetIndex(e, targetPane);
+                var targetIndex = GetWorkspacePaneSubTabDragInsertDropTarget(listBox, targetPane, e).InsertIndex;
                 var isCopy = (e.KeyStates & DragDropKeyStates.ControlKey) == DragDropKeyStates.ControlKey;
                 e.Effects = isCopy ? DragDropEffects.Copy : DragDropEffects.Move;
                 e.Handled = true;
@@ -3441,7 +3470,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (GetWorkspacePaneSubTabFolderDropPath(sender, e) is { } folderPath)
+            if (GetWorkspacePaneSubTabFolderDropPath(e) is { } folderPath)
             {
                 var insertTarget = GetWorkspacePaneSubTabInsertDropTarget(listBox, targetPane, e);
                 if (insertTarget.IsInsert)
@@ -3458,7 +3487,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (GetWorkspacePaneSubTabFileDropTarget(sender, e) is { } fileDropTarget)
+            if (GetWorkspacePaneSubTabFileDropTarget(e) is { } fileDropTarget)
             {
                 var dragItems = GetFileOperationDragItems(e);
                 var targetDirectory = fileDropTarget.Navigation.CurrentPath;
@@ -3493,24 +3522,6 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private async void WorkspacePaneSubTabAddTarget_Drop(object sender, DragEventArgs e)
-    {
-        ClearWorkspacePaneSubTabHover();
-        HideTabInsertIndicator();
-        if (GetWorkspacePaneFromSender(sender) is not { } pane
-            || GetSingleExistingDirectoryDropPath(e) is not { } folderPath)
-        {
-            e.Effects = DragDropEffects.None;
-            e.Handled = true;
-            return;
-        }
-
-        e.Effects = DragDropEffects.Link;
-        e.Handled = true;
-        await CreateWorkspacePaneSubTabAsync(pane, folderPath, pane.ActiveTab);
-        _performanceLogger.Write($"workspace-subtab-add-target-folder-drop paneId=\"{pane.Id}\" path=\"{folderPath}\"");
-    }
-
     private static bool IsWorkspacePaneSubTabHoverDrag(DragEventArgs e)
     {
         return e.Data.GetDataPresent(FileDragFormat)
@@ -3518,10 +3529,9 @@ public partial class MainWindow : Window
             || e.Data.GetDataPresent(DataFormats.FileDrop);
     }
 
-    private static FolderTab? GetWorkspacePaneSubTabFileDropTarget(object sender, DragEventArgs e)
+    private static FolderTab? GetWorkspacePaneSubTabFileDropTarget(DragEventArgs e)
     {
-        if (sender is not ListBox { DataContext: FolderPane }
-            || FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is not FolderTab tab
+        if (FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is not FolderTab tab
             || GetFileOperationDragItems(e) is null
             || SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath)
             || !Directory.Exists(tab.Navigation.CurrentPath))
@@ -3532,14 +3542,8 @@ public partial class MainWindow : Window
         return tab;
     }
 
-    private bool CanDropSubTab(object sender, DragEventArgs e)
+    private bool CanDropSubTab(FolderPane pane, DragEventArgs e)
     {
-        if (sender is not ListBox listBox
-            || listBox.DataContext is not FolderPane pane)
-        {
-            return false;
-        }
-
         if (e.Data.GetDataPresent(TabDragFormat))
         {
             var targetSession = FindSessionContainingPane(pane);
@@ -3620,11 +3624,9 @@ public partial class MainWindow : Window
             ?? targetSession.PaneGroups.FirstOrDefault();
     }
 
-    private string? GetWorkspacePaneSubTabFolderDropPath(object sender, DragEventArgs e)
+    private static string? GetWorkspacePaneSubTabFolderDropPath(DragEventArgs e)
     {
-        if (sender is not ListBox listBox
-            || listBox.DataContext is not FolderPane pane
-            || GetSingleExistingDirectoryDropPath(e) is not { } directoryPath)
+        if (GetSingleExistingDirectoryDropPath(e) is not { } directoryPath)
         {
             return null;
         }

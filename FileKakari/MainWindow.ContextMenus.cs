@@ -268,6 +268,18 @@ public partial class MainWindow
         ShowWorkspacePaneSubTabBarContextMenu(listBox, pane);
     }
 
+    private void WorkspacePaneSubTabBarBackground_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsWorkspacePaneSubTabBarBackgroundInput(e.OriginalSource as DependencyObject)
+            || !TryGetWorkspacePaneSubTabBarTarget(sender, out var listBox, out var pane))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        ShowWorkspacePaneSubTabBarContextMenu(sender as FrameworkElement ?? listBox, pane);
+    }
+
     private void ShowWorkspacePaneSubTabContextMenu(FrameworkElement placementTarget, FolderPane pane, FolderTab tab)
     {
         var menu = new ContextMenu

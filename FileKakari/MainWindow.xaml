@@ -1096,6 +1096,14 @@
                                         </Grid.Style>
                                         <Border Tag="{Binding IsActive}"
                                                 Style="{StaticResource FileKakariPaneAccentLineStyle}" />
+                                        <Border x:Name="WorkspacePaneSubTabBarHost"
+                                                Background="Transparent"
+                                                AllowDrop="True"
+                                                PreviewMouseDown="WorkspacePaneSubTabBarBackground_PreviewMouseDown"
+                                                PreviewMouseRightButtonUp="WorkspacePaneSubTabBarBackground_PreviewMouseRightButtonUp"
+                                                DragOver="WorkspacePaneSubTabBar_DragOver"
+                                                DragLeave="WorkspacePaneSubTabBar_DragLeave"
+                                                Drop="WorkspacePaneSubTabBar_Drop">
                                         <ScrollViewer HorizontalScrollBarVisibility="{Binding SubTabHorizontalScrollBarVisibility}"
                                                       VerticalScrollBarVisibility="{Binding SubTabVerticalScrollBarVisibility}">
                                             <StackPanel Orientation="{Binding SubTabWpfOrientation}">
@@ -1219,19 +1227,51 @@
                                                     </ListBox.ItemTemplate>
                                                 </ListBox>
 
-                                                <Button Content="＋"
-                                                        Width="22"
-                                                        Height="22"
-                                                        Padding="0"
-                                                        Margin="2,2,2,2"
-                                                        ToolTip="新しいサブタブ"
-                                                        Style="{StaticResource FileKakariButtonStyle}"
-                                                        Click="WorkspacePaneNewSubTabButton_Click"
-                                                        AllowDrop="True"
-                                                        DragOver="WorkspacePaneSubTabAddTarget_DragOver"
-                                                        Drop="WorkspacePaneSubTabAddTarget_Drop" />
-                                            </StackPanel>
-                                        </ScrollViewer>
+                                                 <Button Content="＋"
+                                                         Width="22"
+                                                         Height="22"
+                                                         Padding="0"
+                                                         Margin="2,2,2,2"
+                                                         ToolTip="新しいサブタブ"
+                                                         HorizontalContentAlignment="Center"
+                                                         VerticalContentAlignment="Center"
+                                                         Click="WorkspacePaneNewSubTabButton_Click">
+                                                     <Button.Style>
+                                                         <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
+                                                             <Setter Property="Background" Value="Transparent" />
+                                                             <Setter Property="BorderThickness" Value="0" />
+                                                             <Setter Property="BorderBrush" Value="Transparent" />
+                                                             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                                                             <Setter Property="Template">
+                                                                 <Setter.Value>
+                                                                     <ControlTemplate TargetType="Button">
+                                                                         <Grid x:Name="Root" Background="{TemplateBinding Background}">
+                                                                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                                                               Content="{TemplateBinding Content}"
+                                                                                               ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                                               TextElement.Foreground="{TemplateBinding Foreground}" />
+                                                                         </Grid>
+                                                                         <ControlTemplate.Triggers>
+                                                                             <Trigger Property="IsMouseOver" Value="True">
+                                                                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource ControlHoverBrush}" />
+                                                                             </Trigger>
+                                                                             <Trigger Property="IsPressed" Value="True">
+                                                                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource ControlPressedBrush}" />
+                                                                             </Trigger>
+                                                                             <Trigger Property="IsEnabled" Value="False">
+                                                                                 <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                                                             </Trigger>
+                                                                         </ControlTemplate.Triggers>
+                                                                     </ControlTemplate>
+                                                                 </Setter.Value>
+                                                             </Setter>
+                                                         </Style>
+                                                     </Button.Style>
+                                                 </Button>
+                                             </StackPanel>
+                                         </ScrollViewer>
+                                        </Border>
                                     </Grid>
 
                                     <!-- Header Border -->

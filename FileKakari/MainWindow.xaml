@@ -1148,6 +1148,8 @@
                                                         <Style TargetType="ListBox">
                                                             <Setter Property="HorizontalAlignment" Value="Left" />
                                                             <Setter Property="VerticalAlignment" Value="Stretch" />
+                                                            <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
                                                             <Setter Property="Template">
                                                                 <Setter.Value>
                                                                     <ControlTemplate TargetType="ListBox">
@@ -1161,9 +1163,10 @@
                                                             </Setter>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding SubTabIsVertical}" Value="True">
-                                                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                                                    <Setter Property="VerticalAlignment" Value="Top" />
-                                                                </DataTrigger>
+                                                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                <Setter Property="VerticalAlignment" Value="Top" />
+                                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                            </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </ListBox.Style>
@@ -1179,6 +1182,11 @@
                                                             <Setter Property="BorderThickness" Value="1" />
                                                             <Setter Property="Padding" Value="4,2" />
                                                             <Setter Property="Margin" Value="0,0,1,0" />
+                                                            <Setter Property="MinWidth" Value="52" />
+                                                            <Setter Property="MaxWidth" Value="170" />
+                                                            <Setter Property="HorizontalAlignment" Value="Left" />
+                                                            <Setter Property="HorizontalContentAlignment" Value="Left" />
+                                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
                                                             <Setter Property="Template">
                                                                 <Setter.Value>
                                                                     <ControlTemplate TargetType="ListBoxItem">
@@ -1189,15 +1197,25 @@
                                                                                 Background="{TemplateBinding Background}"
                                                                                 Padding="{TemplateBinding Padding}"
                                                                                 CornerRadius="3,3,0,0">
-                                                                                <ContentPresenter />
+                                                                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                                                                             </Border>
                                                                             <Border x:Name="SelectedTabAccentLine"
                                                                                     Height="2"
                                                                                     VerticalAlignment="Bottom"
                                                                                     Background="Transparent"
                                                                                     IsHitTestVisible="False" />
+                                                                            <Border x:Name="SelectedTabVerticalAccentLine"
+                                                                                    Width="2"
+                                                                                    HorizontalAlignment="Left"
+                                                                                    Background="Transparent"
+                                                                                    IsHitTestVisible="False"
+                                                                                    Visibility="Collapsed" />
                                                                         </Grid>
                                                                         <ControlTemplate.Triggers>
+                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource ControlHoverBrush}" />
+                                                                            </Trigger>
                                                                             <Trigger Property="IsSelected" Value="True">
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.65" />
@@ -1210,16 +1228,67 @@
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.9" />
                                                                             </MultiDataTrigger>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                                    <Condition Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Visibility" Value="Collapsed" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Visibility" Value="Visible" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.65" />
+                                                                            </MultiDataTrigger>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                                    <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                                                                                    <Condition Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.9" />
+                                                                            </MultiDataTrigger>
+                                                                            <DataTrigger Binding="{Binding DataContext.SubTabPlacement, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Right">
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="HorizontalAlignment" Value="Right" />
+                                                                            </DataTrigger>
                                                                         </ControlTemplate.Triggers>
                                                                     </ControlTemplate>
                                                                 </Setter.Value>
                                                             </Setter>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                                                    <Setter Property="MinWidth" Value="0" />
+                                                                    <Setter Property="MaxWidth" Value="140" />
+                                                                    <Setter Property="Margin" Value="0,0,0,1" />
+                                                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
                                                         </Style>
                                                     </ListBox.ItemContainerStyle>
                                                     <ListBox.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type local:FolderTab}">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="&#xE72E;"
+                                                            <Grid>
+                                                                <Grid.Style>
+                                                                    <Style TargetType="Grid">
+                                                                        <Setter Property="MinWidth" Value="52" />
+                                                                        <Setter Property="MaxWidth" Value="160" />
+                                                                        <Setter Property="HorizontalAlignment" Value="Left" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                                                                <Setter Property="MinWidth" Value="0" />
+                                                                                <Setter Property="MaxWidth" Value="128" />
+                                                                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Grid.Style>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" MinWidth="0" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="&#xE72E;"
                                                                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                                                            Margin="0,0,3,0"
                                                                            FontSize="11"
@@ -1236,15 +1305,29 @@
                                                                         </Style>
                                                                     </TextBlock.Style>
                                                                 </TextBlock>
-                                                                <TextBlock Text="{Binding Header}"
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{Binding Header}"
                                                                            Foreground="{DynamicResource TextBrush}"
                                                                            Margin="0,0,3,0"
-                                                                           MaxWidth="120"
                                                                            TextTrimming="CharacterEllipsis"
-                                                                           VerticalAlignment="Center"/>
-                                                                <Button Content="×"
-                                                                        Width="14"
-                                                                        Height="14"
+                                                                           VerticalAlignment="Center">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="MinWidth" Value="0" />
+                                                                            <Setter Property="MaxWidth" Value="120" />
+                                                                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                                                                    <Setter Property="MaxWidth" Value="90" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                                <Button Grid.Column="2"
+                                                                        Content="×"
+                                                                        Width="18"
+                                                                        Height="18"
                                                                         Padding="0"
                                                                         FontSize="10"
                                                                         Background="Transparent"
@@ -1266,14 +1349,12 @@
                                                                         </Style>
                                                                     </Button.Style>
                                                                 </Button>
-                                                            </StackPanel>
+                                                            </Grid>
                                                         </DataTemplate>
                                                     </ListBox.ItemTemplate>
                                                 </ListBox>
 
                                                  <Button Content="＋"
-                                                         Width="22"
-                                                         Height="22"
                                                          Padding="0"
                                                          Margin="2,2,2,2"
                                                          ToolTip="新しいサブタブ"
@@ -1282,6 +1363,8 @@
                                                          Click="WorkspacePaneNewSubTabButton_Click">
                                                      <Button.Style>
                                                          <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
+                                                             <Setter Property="Width" Value="22" />
+                                                             <Setter Property="Height" Value="22" />
                                                              <Setter Property="Background" Value="Transparent" />
                                                              <Setter Property="BorderThickness" Value="0" />
                                                              <Setter Property="BorderBrush" Value="Transparent" />
@@ -1310,6 +1393,12 @@
                                                                      </ControlTemplate>
                                                                  </Setter.Value>
                                                              </Setter>
+                                                             <Style.Triggers>
+                                                                 <DataTrigger Binding="{Binding SubTabIsVertical}" Value="True">
+                                                                     <Setter Property="Width" Value="Auto" />
+                                                                     <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                                                 </DataTrigger>
+                                                             </Style.Triggers>
                                                          </Style>
                                                      </Button.Style>
                                                  </Button>

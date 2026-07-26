@@ -1186,6 +1186,7 @@ public partial class MainWindow
     {
         if (!TryGetWorkspacePaneSubTabBarTarget(sender, out var listBox, out var pane))
         {
+            StopWorkspacePaneSubTabAutoScroll();
             e.Effects = DragDropEffects.None;
             return;
         }
@@ -1194,6 +1195,7 @@ public partial class MainWindow
         {
             ClearWorkspacePaneSubTabHover();
             ShowTabInsertIndicator(listBox, GetWorkspacePaneSubTabDragInsertDropTarget(listBox, pane, e));
+            UpdateWorkspacePaneSubTabAutoScroll(pane, listBox, e, SubTabAutoScrollDragKind.SubTab);
 
             if (e.Data.GetDataPresent(TabDragFormat))
             {
@@ -1216,9 +1218,11 @@ public partial class MainWindow
                 e.Effects = DragDropEffects.Link;
                 ClearWorkspacePaneSubTabHover();
                 ShowTabInsertIndicator(listBox, insertTarget);
+                UpdateWorkspacePaneSubTabAutoScroll(pane, listBox, e, SubTabAutoScrollDragKind.Folder);
             }
             else
             {
+                StopWorkspacePaneSubTabAutoScroll();
                 e.Effects = DragDropEffects.None;
                 HideTabInsertIndicator();
                 QueueWorkspacePaneSubTabHover(sender, e);
@@ -1229,6 +1233,7 @@ public partial class MainWindow
 
         if (GetWorkspacePaneSubTabFileDropTarget(e) is { } fileDropTarget)
         {
+            StopWorkspacePaneSubTabAutoScroll();
             HideTabInsertIndicator();
             QueueWorkspacePaneSubTabHover(sender, e);
             var dragItems = GetFileOperationDragItems(e);
@@ -1243,6 +1248,7 @@ public partial class MainWindow
             return;
         }
 
+        StopWorkspacePaneSubTabAutoScroll();
         HideTabInsertIndicator();
         QueueWorkspacePaneSubTabHover(sender, e);
         e.Effects = DragDropEffects.None;
@@ -1251,6 +1257,7 @@ public partial class MainWindow
 
     private void WorkspacePaneSubTabBar_DragLeave(object sender, DragEventArgs e)
     {
+        StopWorkspacePaneSubTabAutoScroll();
         ClearWorkspacePaneSubTabHover();
         HideTabInsertIndicator();
     }
@@ -1308,6 +1315,7 @@ public partial class MainWindow
 
     private void ClearSubTabDragState()
     {
+        StopWorkspacePaneSubTabAutoScroll();
         _subTabDragStartPoint = null;
         _draggedSubTabPane = null;
         _draggedSubTab = null;

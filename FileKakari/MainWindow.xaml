@@ -1101,10 +1101,12 @@
                                                 AllowDrop="True"
                                                 PreviewMouseDown="WorkspacePaneSubTabBarBackground_PreviewMouseDown"
                                                 PreviewMouseRightButtonUp="WorkspacePaneSubTabBarBackground_PreviewMouseRightButtonUp"
+                                                DragEnter="WorkspacePaneSubTabBar_DragOver"
                                                 DragOver="WorkspacePaneSubTabBar_DragOver"
                                                 DragLeave="WorkspacePaneSubTabBar_DragLeave"
                                                 Drop="WorkspacePaneSubTabBar_Drop">
-                                            <Grid ClipToBounds="True">
+                                            <Grid ClipToBounds="True"
+                                                  AllowDrop="True">
                                         <ScrollViewer Tag="WorkspacePaneSubTabScroller"
                                                       HorizontalScrollBarVisibility="{Binding SubTabHorizontalScrollBarVisibility}"
                                                       VerticalScrollBarVisibility="{Binding SubTabVerticalScrollBarVisibility}"
@@ -1134,6 +1136,7 @@
                                                          PreviewMouseDown="WorkspacePaneSubTabBar_PreviewMouseDown"
                                                          PreviewMouseMove="WorkspacePaneSubTabBar_PreviewMouseMove"
                                                          PreviewMouseRightButtonUp="WorkspacePaneSubTabBar_PreviewMouseRightButtonUp"
+                                                         DragEnter="WorkspacePaneSubTabBar_DragOver"
                                                          DragOver="WorkspacePaneSubTabBar_DragOver"
                                                          DragLeave="WorkspacePaneSubTabBar_DragLeave"
                                                          Drop="WorkspacePaneSubTabBar_Drop"
@@ -1399,6 +1402,7 @@
                                                         VerticalAlignment="Center"
                                                         Margin="2,0,0,0"
                                                         Panel.ZIndex="2"
+                                                        AllowDrop="True"
                                                         CommandParameter="Backward"
                                                         Click="WorkspacePaneSubTabOverflowScrollButton_Click">
                                                     <Button.Style>
@@ -1421,6 +1425,7 @@
                                                         VerticalAlignment="Center"
                                                         Margin="0,0,2,0"
                                                         Panel.ZIndex="2"
+                                                        AllowDrop="True"
                                                         CommandParameter="Forward"
                                                         Click="WorkspacePaneSubTabOverflowScrollButton_Click">
                                                     <Button.Style>
@@ -1443,6 +1448,7 @@
                                                         VerticalAlignment="Top"
                                                         Margin="0,2,0,0"
                                                         Panel.ZIndex="2"
+                                                        AllowDrop="True"
                                                         CommandParameter="Backward"
                                                         Click="WorkspacePaneSubTabOverflowScrollButton_Click">
                                                     <Button.Style>
@@ -1465,6 +1471,7 @@
                                                         VerticalAlignment="Bottom"
                                                         Margin="0,0,0,2"
                                                         Panel.ZIndex="2"
+                                                        AllowDrop="True"
                                                         CommandParameter="Forward"
                                                         Click="WorkspacePaneSubTabOverflowScrollButton_Click">
                                                     <Button.Style>

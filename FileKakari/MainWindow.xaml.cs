@@ -26,7 +26,10 @@ public partial class MainWindow : Window
     private const string FileDragFormat = "FileKakari.FileEntries";
     private const string BreadcrumbFolderDragFormat = "FileKakari.BreadcrumbFolder";
     private const string FileDropTargetTag = "FileDropTarget";
+    private const double SubTabAutoScrollEdgeSize = 30;
+    private const double SubTabAutoScrollStep = 12;
     private static readonly TimeSpan FileTabHoverDelay = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan SubTabAutoScrollInterval = TimeSpan.FromMilliseconds(45);
     private static readonly TimeSpan WorkspaceLocalStateSaveDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan WorkspaceRenameClickDelay = TimeSpan.FromMilliseconds(350);
     private readonly BulkObservableCollection<FileEntry> _items = [];
@@ -170,6 +173,13 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _subTabHoverTimer = new() { Interval = FileTabHoverDelay };
     private FolderPane? _subTabHoverPane;
     private FolderTab? _subTabHoverTarget;
+    private readonly DispatcherTimer _subTabAutoScrollTimer = new() { Interval = SubTabAutoScrollInterval };
+    private FolderPane? _subTabAutoScrollPane;
+    private ScrollViewer? _subTabAutoScrollViewer;
+    private ListBox? _subTabAutoScrollListBox;
+    private Point? _subTabAutoScrollPointerPosition;
+    private SubTabAutoScrollDirection _subTabAutoScrollDirection;
+    private SubTabAutoScrollDragKind _subTabAutoScrollDragKind;
     private readonly DispatcherTimer _mainTabHoverTimer = new() { Interval = TimeSpan.FromMilliseconds(600) };
     private WorkspaceSession? _mainTabHoverTarget;
     private ClosedWorkspaceSessionState? _lastClosedWorkspaceSession;
@@ -508,6 +518,7 @@ public partial class MainWindow : Window
             FindItemsScrollViewer);
         _fileTabHoverTimer.Tick += FileTabHoverTimer_Tick;
         _subTabHoverTimer.Tick += SubTabHoverTimer_Tick;
+        _subTabAutoScrollTimer.Tick += SubTabAutoScrollTimer_Tick;
         _mainTabHoverTimer.Tick += MainTabHoverTimer_Tick;
         _items.CollectionChanged += Items_CollectionChanged;
         _folderWatchService.ChangeObserved += FolderWatchService_ChangeObserved;
@@ -521,6 +532,8 @@ public partial class MainWindow : Window
         AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(Window_PreviewMouseDown), true);
         AddHandler(Mouse.PreviewMouseMoveEvent, new MouseEventHandler(Window_PreviewMouseMoveDuringRangeSelection), true);
         AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler(Window_PreviewMouseUpDuringRangeSelection), true);
+        AddHandler(DragDrop.QueryContinueDragEvent, new QueryContinueDragEventHandler(WorkspacePaneSubTabAutoScroll_QueryContinueDrag), true);
+        Deactivated += MainWindow_Deactivated;
         ItemsList.AddHandler(ButtonBase.ClickEvent, new RoutedEventHandler(GridViewColumnHeader_Click));
         ItemsList.AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(ItemsList_PreviewMouseWheelDuringRangeSelection), true);
         ItemsList.AddHandler(FrameworkElement.RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler(ItemsList_RequestBringIntoView), true);
@@ -1520,6 +1533,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Escape)
         {
+            StopWorkspacePaneSubTabAutoScroll();
             HideTabInsertIndicator();
         }
 
@@ -3448,6 +3462,156 @@ public partial class MainWindow : Window
                 && string.Equals(scrollViewer.Tag as string, "WorkspacePaneSubTabScroller", StringComparison.Ordinal));
     }
 
+    private void UpdateWorkspacePaneSubTabAutoScroll(
+        FolderPane pane,
+        ListBox listBox,
+        DragEventArgs e,
+        SubTabAutoScrollDragKind dragKind)
+    {
+        if (dragKind == SubTabAutoScrollDragKind.None
+            || FindWorkspacePaneSubTabScroller(pane) is not { } scrollViewer)
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            return;
+        }
+
+        var pointerPosition = e.GetPosition(scrollViewer);
+        var direction = GetWorkspacePaneSubTabAutoScrollDirection(pane, scrollViewer, pointerPosition);
+        var scrollableExtent = pane.SubTabIsVertical ? scrollViewer.ScrollableHeight : scrollViewer.ScrollableWidth;
+        var offset = pane.SubTabIsVertical ? scrollViewer.VerticalOffset : scrollViewer.HorizontalOffset;
+        if (direction == SubTabAutoScrollDirection.None
+            || scrollableExtent <= 0
+            || (direction == SubTabAutoScrollDirection.Backward && offset <= 0.5)
+            || (direction == SubTabAutoScrollDirection.Forward && scrollableExtent - offset <= 0.5))
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            return;
+        }
+
+        _subTabAutoScrollPane = pane;
+        _subTabAutoScrollViewer = scrollViewer;
+        _subTabAutoScrollListBox = listBox;
+        _subTabAutoScrollPointerPosition = pointerPosition;
+        _subTabAutoScrollDirection = direction;
+        _subTabAutoScrollDragKind = dragKind;
+        if (!_subTabAutoScrollTimer.IsEnabled)
+        {
+            _subTabAutoScrollTimer.Start();
+        }
+    }
+
+    private static SubTabAutoScrollDirection GetWorkspacePaneSubTabAutoScrollDirection(
+        FolderPane pane,
+        ScrollViewer scrollViewer,
+        Point pointerPosition)
+    {
+        if (pane.SubTabIsVertical)
+        {
+            if (pointerPosition.Y <= SubTabAutoScrollEdgeSize)
+            {
+                return SubTabAutoScrollDirection.Backward;
+            }
+
+            if (pointerPosition.Y >= scrollViewer.ActualHeight - SubTabAutoScrollEdgeSize)
+            {
+                return SubTabAutoScrollDirection.Forward;
+            }
+
+            return SubTabAutoScrollDirection.None;
+        }
+
+        if (pointerPosition.X <= SubTabAutoScrollEdgeSize)
+        {
+            return SubTabAutoScrollDirection.Backward;
+        }
+
+        if (pointerPosition.X >= scrollViewer.ActualWidth - SubTabAutoScrollEdgeSize)
+        {
+            return SubTabAutoScrollDirection.Forward;
+        }
+
+        return SubTabAutoScrollDirection.None;
+    }
+
+    private void SubTabAutoScrollTimer_Tick(object? sender, EventArgs e)
+    {
+        var pane = _subTabAutoScrollPane;
+        var scrollViewer = _subTabAutoScrollViewer;
+        var listBox = _subTabAutoScrollListBox;
+        var pointerPosition = _subTabAutoScrollPointerPosition;
+        if (pane is null
+            || scrollViewer is null
+            || listBox is null
+            || pointerPosition is null
+            || !ReferenceEquals(FindWorkspacePaneSubTabScroller(pane), scrollViewer))
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            return;
+        }
+
+        var direction = GetWorkspacePaneSubTabAutoScrollDirection(pane, scrollViewer, pointerPosition.Value);
+        var scrollableExtent = pane.SubTabIsVertical ? scrollViewer.ScrollableHeight : scrollViewer.ScrollableWidth;
+        var currentOffset = pane.SubTabIsVertical ? scrollViewer.VerticalOffset : scrollViewer.HorizontalOffset;
+        if (direction != _subTabAutoScrollDirection
+            || direction == SubTabAutoScrollDirection.None
+            || scrollableExtent <= 0)
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            return;
+        }
+
+        var nextOffset = Math.Clamp(
+            currentOffset + (direction == SubTabAutoScrollDirection.Backward ? -SubTabAutoScrollStep : SubTabAutoScrollStep),
+            0,
+            scrollableExtent);
+        if (Math.Abs(nextOffset - currentOffset) <= 0.01)
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            return;
+        }
+
+        if (pane.SubTabIsVertical)
+        {
+            scrollViewer.ScrollToVerticalOffset(nextOffset);
+        }
+        else
+        {
+            scrollViewer.ScrollToHorizontalOffset(nextOffset);
+        }
+
+        UpdateWorkspacePaneSubTabOverflowState(scrollViewer);
+        UpdateWorkspacePaneSubTabAutoScrollInsertIndicator(pane, listBox, scrollViewer, pointerPosition.Value, _subTabAutoScrollDragKind);
+    }
+
+    private void StopWorkspacePaneSubTabAutoScroll()
+    {
+        _subTabAutoScrollTimer.Stop();
+        _subTabAutoScrollPane = null;
+        _subTabAutoScrollViewer = null;
+        _subTabAutoScrollListBox = null;
+        _subTabAutoScrollPointerPosition = null;
+        _subTabAutoScrollDirection = SubTabAutoScrollDirection.None;
+        _subTabAutoScrollDragKind = SubTabAutoScrollDragKind.None;
+    }
+
+    private void WorkspacePaneSubTabAutoScroll_QueryContinueDrag(object sender, QueryContinueDragEventArgs e)
+    {
+        if (e.Action is DragAction.Cancel or DragAction.Drop)
+        {
+            StopWorkspacePaneSubTabAutoScroll();
+            if (e.Action == DragAction.Cancel)
+            {
+                HideTabInsertIndicator();
+            }
+        }
+    }
+
+    private void MainWindow_Deactivated(object? sender, EventArgs e)
+    {
+        StopWorkspacePaneSubTabAutoScroll();
+        HideTabInsertIndicator();
+    }
+
     private void WorkspacePaneSubTabBar_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer
@@ -3503,6 +3667,7 @@ public partial class MainWindow : Window
 
     private async void WorkspacePaneSubTabBar_Drop(object sender, DragEventArgs e)
     {
+        StopWorkspacePaneSubTabAutoScroll();
         ClearWorkspacePaneSubTabHover();
         HideTabInsertIndicator();
         if (TryGetWorkspacePaneSubTabBarTarget(sender, out var listBox, out var targetPane))
@@ -3779,6 +3944,99 @@ public partial class MainWindow : Window
         }
 
         return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane), orientation);
+    }
+
+    private void UpdateWorkspacePaneSubTabAutoScrollInsertIndicator(
+        FolderPane pane,
+        ListBox listBox,
+        ScrollViewer scrollViewer,
+        Point pointerPosition,
+        SubTabAutoScrollDragKind dragKind)
+    {
+        if (!ReferenceEquals(listBox.DataContext, pane)
+            || !ReferenceEquals(FindWorkspacePaneSubTabScroller(pane), scrollViewer))
+        {
+            return;
+        }
+
+        var listBoxPosition = scrollViewer.TranslatePoint(pointerPosition, listBox);
+        var insertTarget = dragKind switch
+        {
+            SubTabAutoScrollDragKind.SubTab => GetWorkspacePaneSubTabDragInsertDropTargetAtPosition(listBox, pane, listBoxPosition),
+            SubTabAutoScrollDragKind.Folder => GetWorkspacePaneSubTabInsertDropTargetAtPosition(listBox, pane, listBoxPosition),
+            _ => TabInsertDropTarget.None
+        };
+
+        if (insertTarget.IsInsert)
+        {
+            ShowTabInsertIndicator(listBox, insertTarget);
+        }
+        else
+        {
+            HideTabInsertIndicator();
+        }
+    }
+
+    private TabInsertDropTarget GetWorkspacePaneSubTabInsertDropTargetAtPosition(
+        ListBox listBox,
+        FolderPane pane,
+        Point listBoxPosition)
+    {
+        var orientation = pane.SubTabDragOrientation;
+        var targetItem = GetWorkspacePaneSubTabItemAtPosition(listBox, listBoxPosition);
+        if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
+        {
+            var targetIndex = pane.Tabs.IndexOf(targetTab);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var zone = GetTabDropZone(targetItem, listBox.TranslatePoint(listBoxPosition, targetItem), orientation);
+            if (zone == TabDropZone.Center)
+            {
+                return new TabInsertDropTarget(false, targetIndex, zone, targetItem, orientation);
+            }
+
+            var insertIndex = zone == TabDropZone.Before ? targetIndex : targetIndex + 1;
+            return new TabInsertDropTarget(true, insertIndex, zone, targetItem, orientation);
+        }
+
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane), orientation);
+    }
+
+    private TabInsertDropTarget GetWorkspacePaneSubTabDragInsertDropTargetAtPosition(
+        ListBox listBox,
+        FolderPane pane,
+        Point listBoxPosition)
+    {
+        var orientation = pane.SubTabDragOrientation;
+        var targetItem = GetWorkspacePaneSubTabItemAtPosition(listBox, listBoxPosition);
+        if (targetItem is not null && targetItem.DataContext is FolderTab targetTab)
+        {
+            var targetIndex = pane.Tabs.IndexOf(targetTab);
+            if (targetIndex < 0)
+            {
+                return TabInsertDropTarget.None;
+            }
+
+            var insertAfterTarget = IsMouseAfterMiddle(targetItem, listBox.TranslatePoint(listBoxPosition, targetItem), orientation);
+            return new TabInsertDropTarget(
+                true,
+                insertAfterTarget ? targetIndex + 1 : targetIndex,
+                insertAfterTarget ? TabDropZone.After : TabDropZone.Before,
+                targetItem,
+                orientation);
+        }
+
+        return new TabInsertDropTarget(true, pane.Tabs.Count, TabDropZone.After, GetLastSubTabItem(listBox, pane), orientation);
+    }
+
+    private static ListBoxItem? GetWorkspacePaneSubTabItemAtPosition(ListBox listBox, Point listBoxPosition)
+    {
+        return listBox.InputHitTest(listBoxPosition) is DependencyObject hit
+            ? FindVisualParent<ListBoxItem>(hit)
+            : null;
     }
 
     private static FrameworkElement? GetLastSubTabItem(ListBox listBox, FolderPane pane)
@@ -7246,6 +7504,20 @@ public partial class MainWindow : Window
         None,
         MainSession,
         SubTab
+    }
+
+    private enum SubTabAutoScrollDirection
+    {
+        None,
+        Backward,
+        Forward
+    }
+
+    private enum SubTabAutoScrollDragKind
+    {
+        None,
+        SubTab,
+        Folder
     }
 
     private sealed class WorkspaceRangeSelectionAdorner : Adorner

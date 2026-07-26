@@ -3357,6 +3357,97 @@ public partial class MainWindow : Window
             .FirstOrDefault(lv => ReferenceEquals(lv.DataContext, pane));
     }
 
+    private void WorkspacePaneSubTabScroller_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+        {
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(
+            () => UpdateWorkspacePaneSubTabOverflowState(scrollViewer),
+            DispatcherPriority.Loaded);
+    }
+
+    private void WorkspacePaneSubTabScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (sender is ScrollViewer scrollViewer)
+        {
+            UpdateWorkspacePaneSubTabOverflowState(scrollViewer);
+        }
+    }
+
+    private void WorkspacePaneSubTabScroller_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is ScrollViewer scrollViewer)
+        {
+            UpdateWorkspacePaneSubTabOverflowState(scrollViewer);
+        }
+    }
+
+    private static void UpdateWorkspacePaneSubTabOverflowState(ScrollViewer scrollViewer)
+    {
+        if (scrollViewer.DataContext is not FolderPane pane)
+        {
+            return;
+        }
+
+        const double offsetTolerance = 0.5;
+        var offset = pane.SubTabIsVertical ? scrollViewer.VerticalOffset : scrollViewer.HorizontalOffset;
+        var scrollableExtent = pane.SubTabIsVertical ? scrollViewer.ScrollableHeight : scrollViewer.ScrollableWidth;
+        pane.UpdateSubTabOverflowState(
+            offset > offsetTolerance,
+            scrollableExtent - offset > offsetTolerance);
+    }
+
+    private void WorkspacePaneSubTabOverflowScrollButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: FolderPane pane } button
+            || button.CommandParameter is not string direction
+            || FindSessionContainingPane(pane) is null
+            || FindWorkspacePaneSubTabScroller(pane) is not { } scrollViewer)
+        {
+            return;
+        }
+
+        var isBackward = string.Equals(direction, "Backward", StringComparison.Ordinal);
+        var viewport = pane.SubTabIsVertical ? scrollViewer.ViewportHeight : scrollViewer.ViewportWidth;
+        var scrollableExtent = pane.SubTabIsVertical ? scrollViewer.ScrollableHeight : scrollViewer.ScrollableWidth;
+        if (scrollableExtent <= 0)
+        {
+            return;
+        }
+
+        var delta = Math.Max(48, viewport * 0.7);
+        if (pane.SubTabIsVertical)
+        {
+            var nextOffset = Math.Clamp(
+                scrollViewer.VerticalOffset + (isBackward ? -delta : delta),
+                0,
+                scrollViewer.ScrollableHeight);
+            scrollViewer.ScrollToVerticalOffset(nextOffset);
+        }
+        else
+        {
+            var nextOffset = Math.Clamp(
+                scrollViewer.HorizontalOffset + (isBackward ? -delta : delta),
+                0,
+                scrollViewer.ScrollableWidth);
+            scrollViewer.ScrollToHorizontalOffset(nextOffset);
+        }
+
+        UpdateWorkspacePaneSubTabOverflowState(scrollViewer);
+        e.Handled = true;
+    }
+
+    private ScrollViewer? FindWorkspacePaneSubTabScroller(FolderPane pane)
+    {
+        return FindVisualChildren<ScrollViewer>(WorkspaceSessionsHost)
+            .FirstOrDefault(scrollViewer =>
+                ReferenceEquals(scrollViewer.DataContext, pane)
+                && string.Equals(scrollViewer.Tag as string, "WorkspacePaneSubTabScroller", StringComparison.Ordinal));
+    }
+
     private void WorkspacePaneSubTabBar_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (sender is not ScrollViewer scrollViewer

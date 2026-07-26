@@ -1104,9 +1104,14 @@
                                                 DragOver="WorkspacePaneSubTabBar_DragOver"
                                                 DragLeave="WorkspacePaneSubTabBar_DragLeave"
                                                 Drop="WorkspacePaneSubTabBar_Drop">
-                                        <ScrollViewer HorizontalScrollBarVisibility="{Binding SubTabHorizontalScrollBarVisibility}"
+                                            <Grid ClipToBounds="True">
+                                        <ScrollViewer Tag="WorkspacePaneSubTabScroller"
+                                                      HorizontalScrollBarVisibility="{Binding SubTabHorizontalScrollBarVisibility}"
                                                       VerticalScrollBarVisibility="{Binding SubTabVerticalScrollBarVisibility}"
                                                       CanContentScroll="False"
+                                                      Loaded="WorkspacePaneSubTabScroller_Loaded"
+                                                      ScrollChanged="WorkspacePaneSubTabScroller_ScrollChanged"
+                                                      SizeChanged="WorkspacePaneSubTabScroller_SizeChanged"
                                                       PreviewMouseWheel="WorkspacePaneSubTabBar_PreviewMouseWheel">
                                             <StackPanel Orientation="{Binding SubTabWpfOrientation}">
                                                 <StackPanel.Style>
@@ -1307,6 +1312,177 @@
                                                  </Button>
                                              </StackPanel>
                                          </ScrollViewer>
+                                                <Grid IsHitTestVisible="False"
+                                                      Panel.ZIndex="1">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SubTabIsVertical}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Border Width="30"
+                                                            HorizontalAlignment="Left"
+                                                            Background="{DynamicResource SubTabOverflowFadeFromLeftBrush}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanScrollSubTabsBackward}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+                                                    <Border Width="30"
+                                                            HorizontalAlignment="Right"
+                                                            Background="{DynamicResource SubTabOverflowFadeFromRightBrush}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanScrollSubTabsForward}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+                                                </Grid>
+                                                <Grid IsHitTestVisible="False"
+                                                      Panel.ZIndex="1">
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding SubTabIsVertical}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Border Height="30"
+                                                            VerticalAlignment="Top"
+                                                            Background="{DynamicResource SubTabOverflowFadeFromTopBrush}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanScrollSubTabsBackward}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+                                                    <Border Height="30"
+                                                            VerticalAlignment="Bottom"
+                                                            Background="{DynamicResource SubTabOverflowFadeFromBottomBrush}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanScrollSubTabsForward}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                    </Border>
+                                                </Grid>
+                                                <Button Content="‹"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center"
+                                                        Margin="2,0,0,0"
+                                                        Panel.ZIndex="2"
+                                                        CommandParameter="Backward"
+                                                        Click="WorkspacePaneSubTabOverflowScrollButton_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SubTabOverflowScrollButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding SubTabIsVertical}" Value="False" />
+                                                                        <Condition Binding="{Binding CanScrollSubTabsBackward}" Value="True" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="›"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        Margin="0,0,2,0"
+                                                        Panel.ZIndex="2"
+                                                        CommandParameter="Forward"
+                                                        Click="WorkspacePaneSubTabOverflowScrollButton_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SubTabOverflowScrollButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding SubTabIsVertical}" Value="False" />
+                                                                        <Condition Binding="{Binding CanScrollSubTabsForward}" Value="True" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="⌃"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Top"
+                                                        Margin="0,2,0,0"
+                                                        Panel.ZIndex="2"
+                                                        CommandParameter="Backward"
+                                                        Click="WorkspacePaneSubTabOverflowScrollButton_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SubTabOverflowScrollButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding SubTabIsVertical}" Value="True" />
+                                                                        <Condition Binding="{Binding CanScrollSubTabsBackward}" Value="True" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="⌄"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Bottom"
+                                                        Margin="0,0,0,2"
+                                                        Panel.ZIndex="2"
+                                                        CommandParameter="Forward"
+                                                        Click="WorkspacePaneSubTabOverflowScrollButton_Click">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource SubTabOverflowScrollButtonStyle}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding SubTabIsVertical}" Value="True" />
+                                                                        <Condition Binding="{Binding CanScrollSubTabsForward}" Value="True" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </Grid>
                                         </Border>
                                     </Grid>
 

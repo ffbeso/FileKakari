@@ -310,14 +310,45 @@ public class FolderPane : INotifyPropertyChanged
             OnPropertyChanged(nameof(SubTabIsVertical));
             OnPropertyChanged(nameof(SubTabHorizontalScrollBarVisibility));
             OnPropertyChanged(nameof(SubTabVerticalScrollBarVisibility));
+            UpdateSubTabOverflowState(false, false);
         }
     }
 
     public Orientation SubTabWpfOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? Orientation.Vertical : Orientation.Horizontal;
     public MainWindow.TabStripOrientation SubTabDragOrientation => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement) ? MainWindow.TabStripOrientation.Vertical : MainWindow.TabStripOrientation.Horizontal;
     public bool SubTabIsVertical => AppSettings.IsVerticalSubTabPlacement(SubTabPlacement);
-    public ScrollBarVisibility SubTabHorizontalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
-    public ScrollBarVisibility SubTabVerticalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+    public ScrollBarVisibility SubTabHorizontalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Hidden;
+    public ScrollBarVisibility SubTabVerticalScrollBarVisibility => SubTabIsVertical ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Disabled;
+
+    private bool _canScrollSubTabsBackward;
+    public bool CanScrollSubTabsBackward
+    {
+        get => _canScrollSubTabsBackward;
+        private set
+        {
+            if (_canScrollSubTabsBackward == value) return;
+            _canScrollSubTabsBackward = value;
+            OnPropertyChanged(nameof(CanScrollSubTabsBackward));
+        }
+    }
+
+    private bool _canScrollSubTabsForward;
+    public bool CanScrollSubTabsForward
+    {
+        get => _canScrollSubTabsForward;
+        private set
+        {
+            if (_canScrollSubTabsForward == value) return;
+            _canScrollSubTabsForward = value;
+            OnPropertyChanged(nameof(CanScrollSubTabsForward));
+        }
+    }
+
+    public void UpdateSubTabOverflowState(bool canScrollBackward, bool canScrollForward)
+    {
+        CanScrollSubTabsBackward = canScrollBackward;
+        CanScrollSubTabsForward = canScrollForward;
+    }
 
     public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
     {

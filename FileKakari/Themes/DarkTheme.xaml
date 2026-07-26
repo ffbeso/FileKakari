@@ -31,6 +31,7 @@
     <Color x:Key="ScrollBarThumbPressedColor">#7A828E</Color>
     <Color x:Key="StatusBarBackgroundColor">#25272b</Color>
     <Color x:Key="MenuIconColumnBackgroundColor">#2f3238</Color>
+    <Color x:Key="SubTabOverflowFadeTransparentColor">#0025272b</Color>
 
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="{DynamicResource AppBackgroundColor}" />
     <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{DynamicResource PanelBackgroundColor}" />

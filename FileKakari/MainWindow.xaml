@@ -1167,10 +1167,12 @@
                                                     <ListBox.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type local:FolderTab}">
                                                             <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="🔒"
+                                                                <TextBlock Text="&#xE72E;"
+                                                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                                                            Margin="0,0,3,0"
                                                                            FontSize="11"
-                                                                           VerticalAlignment="Center">
+                                                                           VerticalAlignment="Center"
+                                                                           Foreground="{DynamicResource SubtleTextBrush}">
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
                                                                             <Setter Property="Visibility" Value="Collapsed" />

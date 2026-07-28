@@ -1477,7 +1477,30 @@ public partial class MainWindow
     {
         const int maxAttempts = 2;
 
+        if (DevListPerfOptions.FromEnvironment().OutOfProcPreviewEnabled)
+        {
+            PreviewDiagnostics.Info("PreviewShell", $"Stage P1-A OutOfProc PreviewHost starting... requestId=\"{requestId}\" path=\"{path}\"");
+            var procMgr = new FileKakari.Preview.PreviewHostProcessManager();
+            var startSuccess = await procMgr.StartAsync().ConfigureAwait(true);
+            if (startSuccess && generation == _previewGeneration && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+            {
+                var ctrl = new FileKakari.Preview.PreviewHostControl(procMgr);
+                ClearPreviewContent();
+                ApplyShellPreviewHostBackground();
+                PreviewShellHostContainer.Child = ctrl;
+                PreviewShellHostContainer.Visibility = Visibility.Visible;
+                PreviewDiagnostics.Info("PreviewShell", $"Stage P1-A OutOfProc PreviewHost attached successfully. HostPID={procMgr.HostProcessId}");
+                return true;
+            }
+            else
+            {
+                procMgr.Dispose();
+                PreviewDiagnostics.Error("PreviewShell", $"Stage P1-A OutOfProc PreviewHost start failed or canceled. Falling back.");
+            }
+        }
+
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
+
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (generation != _previewGeneration || !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
@@ -1665,12 +1688,12 @@ public partial class MainWindow
 
     private void ClearShellPreviewHost(bool failOnDisposeFailure = false)
     {
-        if (PreviewShellHostContainer.Child is ShellPreviewHost host)
+        if (PreviewShellHostContainer.Child is IDisposable disposableHost)
         {
             PreviewDiagnostics.Verbose("PreviewShell", "ClearShellPreviewHost disposing active host");
             try
             {
-                host.Dispose();
+                disposableHost.Dispose();
                 PreviewDiagnostics.Verbose("PreviewShell", "ClearShellPreviewHost disposed");
             }
             catch (Exception ex)
@@ -1682,6 +1705,7 @@ public partial class MainWindow
                 }
             }
         }
+
 
         PreviewShellHostContainer.Child = null;
         ApplyShellPreviewHostBackground();

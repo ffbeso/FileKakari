@@ -22,10 +22,12 @@ public sealed class DevListPerfOptions
     private const string StatusAggregationVariable = "FILEKAKARI_DEV_STATUS_AGGREGATION";
     private const string ExtraColumnsVariable = "FILEKAKARI_DEV_EXTRA_COLUMNS";
     private const string SessionRestoreVariable = "FILEKAKARI_DEV_SESSION_RESTORE";
+    private const string OutOfProcPreviewVariable = "FILEKAKARI_DEV_OUT_OF_PROC_PREVIEW";
 
     public bool Enabled { get; private set; }
 
     public bool ShellIconsEnabled { get; private set; } = true;
+
 
     public bool GridLinesEnabled { get; private set; } = true;
 
@@ -53,7 +55,10 @@ public sealed class DevListPerfOptions
 
     public bool SessionRestoreEnabled { get; private set; } = true;
 
+    public bool OutOfProcPreviewEnabled { get; private set; }
+
     public int MouseWheelLines { get; private set; } = 3;
+
 
     public double MouseWheelPixels { get; private set; } = 96;
 
@@ -93,6 +98,8 @@ public sealed class DevListPerfOptions
         options.ApplyBoolean(StatusAggregationVariable, value => options.StatusAggregationEnabled = value);
         options.ApplyBoolean(ExtraColumnsVariable, value => options.ExtraColumnsEnabled = value);
         options.ApplyBoolean(SessionRestoreVariable, value => options.SessionRestoreEnabled = value);
+        options.ApplyBoolean(OutOfProcPreviewVariable, value => options.OutOfProcPreviewEnabled = value);
+
 
         if (TryReadScrollUnit(out var scrollUnit))
         {
@@ -130,8 +137,9 @@ public sealed class DevListPerfOptions
 
     public string Describe()
     {
-        return $"enabled={Enabled} shellIcons={ShellIconsEnabled} gridLines={GridLinesEnabled} hover={HoverEnabled} minimalSelection={MinimalSelection} diagnosticRowStyle={DiagnosticRowStyleEnabled} canContentScroll={CanContentScroll} scrollUnit={ScrollUnit} panningMode={PanningMode} previewMouseWheel={PreviewMouseWheelEnabled} scrollTrace={ScrollTraceEnabled} sort={SortEnabled} statusAggregation={StatusAggregationEnabled} extraColumns={ExtraColumnsEnabled} sessionRestore={SessionRestoreEnabled} mouseWheelLines={MouseWheelLines} mouseWheelPixels={MouseWheelPixels}";
+        return $"enabled={Enabled} shellIcons={ShellIconsEnabled} gridLines={GridLinesEnabled} hover={HoverEnabled} minimalSelection={MinimalSelection} diagnosticRowStyle={DiagnosticRowStyleEnabled} canContentScroll={CanContentScroll} scrollUnit={ScrollUnit} panningMode={PanningMode} previewMouseWheel={PreviewMouseWheelEnabled} scrollTrace={ScrollTraceEnabled} sort={SortEnabled} statusAggregation={StatusAggregationEnabled} extraColumns={ExtraColumnsEnabled} sessionRestore={SessionRestoreEnabled} outOfProcPreview={OutOfProcPreviewEnabled} mouseWheelLines={MouseWheelLines} mouseWheelPixels={MouseWheelPixels}";
     }
+
 
     private void ApplyBoolean(string variableName, Action<bool> apply)
     {

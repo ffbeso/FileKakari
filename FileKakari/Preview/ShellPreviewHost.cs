@@ -24,6 +24,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private readonly string _filePath;
     private readonly Guid _clsid;
     private readonly string _requestId;
+    private readonly int _generation;
     private readonly long _hostInstanceId;
     private readonly ShellPreviewInitializationPreference _initializationPreference;
     private readonly bool _isDeferredHandler;
@@ -75,11 +76,13 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         string filePath,
         Guid clsid,
         string requestId,
-        ShellPreviewInitializationPreference initializationPreference = ShellPreviewInitializationPreference.Default)
+        ShellPreviewInitializationPreference initializationPreference = ShellPreviewInitializationPreference.Default,
+        int generation = 0)
     {
         _filePath = filePath;
         _clsid = clsid;
         _requestId = requestId;
+        _generation = generation;
         _hostInstanceId = Interlocked.Increment(ref _nextHostInstanceId);
         _initializationPreference = initializationPreference;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
@@ -129,14 +132,24 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 _activationContext = activationContext;
                 LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"Default\" activationContext=\"{activationContext}\"");
 
+                PreviewDiagnostics.LogTiming("Type.GetTypeFromCLSID start", _requestId, _generation, _filePath);
+                var swClsid = System.Diagnostics.Stopwatch.StartNew();
                 var comType = Type.GetTypeFromCLSID(_clsid, true);
+                swClsid.Stop();
+                PreviewDiagnostics.LogTiming("Type.GetTypeFromCLSID end", _requestId, _generation, _filePath, swClsid.ElapsedMilliseconds);
+
                 if (comType is null)
                 {
                     throw new InvalidOperationException($"Could not get type from CLSID {_clsid}");
                 }
                 LogDiag("COM Type resolution success.");
 
+                PreviewDiagnostics.LogTiming("Activator.CreateInstance start", _requestId, _generation, _filePath);
+                var swInst = System.Diagnostics.Stopwatch.StartNew();
                 instance = Activator.CreateInstance(comType);
+                swInst.Stop();
+                PreviewDiagnostics.LogTiming("Activator.CreateInstance end", _requestId, _generation, _filePath, swInst.ElapsedMilliseconds);
+
                 if (instance is null)
                 {
                     throw new InvalidOperationException("Failed to create COM instance");
@@ -225,7 +238,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _managedIStream = new ManagedIStream(_fileStream);
                     LogDiag($"Stream opened path='{_filePath}' length={_fileStream.Length}. Invoking Initialize...");
 
+                    PreviewDiagnostics.LogTiming("IInitializeWithStream.Initialize start", _requestId, _generation, _filePath);
+                    var swInitStream = System.Diagnostics.Stopwatch.StartNew();
                     int hr = streamInit.Initialize(_managedIStream, 0);
+                    swInitStream.Stop();
+                    PreviewDiagnostics.LogTiming("IInitializeWithStream.Initialize end", _requestId, _generation, _filePath, swInitStream.ElapsedMilliseconds);
                     LogDiag($"[ShellPreviewHost] IInitializeWithStream.Initialize HRESULT=0x{hr:X8}");
                     if (hr == 0)
                     {
@@ -400,7 +417,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 {
                     var rect = new RECT(0, 0, pixelWidth, pixelHeight);
                     LogDiag($"SetWindow hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" child HWND=0x{hwndChild.ToInt64():X}, rect=({rect.Left},{rect.Top},{rect.Right},{rect.Bottom})");
+                    PreviewDiagnostics.LogTiming("SetWindow start", _requestId, _generation, _filePath);
+                    var swSetWin = System.Diagnostics.Stopwatch.StartNew();
                     var setWindowHr = _previewHandler.SetWindow(hwndChild, ref rect);
+                    swSetWin.Stop();
+                    PreviewDiagnostics.LogTiming("SetWindow end", _requestId, _generation, _filePath, swSetWin.ElapsedMilliseconds);
                     LogDiag($"IPreviewHandler.SetWindow HRESULT=0x{setWindowHr:X8}");
                     if (setWindowHr < 0)
                     {
@@ -408,8 +429,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     }
                     ThrowIfFailed(setWindowHr);
 
-                    LogDiag($"DoPreview hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" invoked=true");
+                    PreviewDiagnostics.LogTiming("DoPreview start", _requestId, _generation, _filePath);
+                    var swDoPrev = System.Diagnostics.Stopwatch.StartNew();
                     var doPreviewHr = _previewHandler.DoPreview();
+                    swDoPrev.Stop();
+                    PreviewDiagnostics.LogTiming("DoPreview end", _requestId, _generation, _filePath, swDoPrev.ElapsedMilliseconds);
                     LogDiag($"IPreviewHandler.DoPreview HRESULT=0x{doPreviewHr:X8}");
                     if (doPreviewHr < 0)
                     {
@@ -575,7 +599,11 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     private bool TryInitializeWithFile(IInitializeWithFile fileInit)
     {
         LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
+        PreviewDiagnostics.LogTiming("IInitializeWithFile.Initialize start", _requestId, _generation, _filePath);
+        var swInitFile = System.Diagnostics.Stopwatch.StartNew();
         int hr = fileInit.Initialize(_filePath, 0);
+        swInitFile.Stop();
+        PreviewDiagnostics.LogTiming("IInitializeWithFile.Initialize end", _requestId, _generation, _filePath, swInitFile.ElapsedMilliseconds);
         LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
         if (hr == 0)
         {
@@ -690,12 +718,15 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
     {
         if (_previewHandler is not null)
         {
-            LogInfo($"DisposePreviewHandler start hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" path=\"{_filePath}\" clsid=\"{_clsid:B}\"");
+            PreviewDiagnostics.LogTiming("DisposePreviewHandler start", _requestId, _generation, _filePath);
+            var swDispose = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                LogDiag($"Unload hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" invoked=true");
+                PreviewDiagnostics.LogTiming("IPreviewHandler.Unload start", _requestId, _generation, _filePath);
+                var swUnload = System.Diagnostics.Stopwatch.StartNew();
                 var unloadHr = _previewHandler.Unload();
-                LogInfo($"IPreviewHandler.Unload hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" HRESULT=0x{unloadHr:X8}");
+                swUnload.Stop();
+                PreviewDiagnostics.LogTiming("IPreviewHandler.Unload end", _requestId, _generation, _filePath, swUnload.ElapsedMilliseconds);
                 if (unloadHr < 0)
                 {
                     LogError($"Unload failed clsid=\"{_clsid:B}\" HRESULT=0x{unloadHr:X8}");
@@ -707,9 +738,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
             }
             finally
             {
+                PreviewDiagnostics.LogTiming("Marshal.ReleaseComObject start", _requestId, _generation, _filePath);
+                var swRel = System.Diagnostics.Stopwatch.StartNew();
                 var refCount = Marshal.ReleaseComObject(_previewHandler);
+                swRel.Stop();
+                PreviewDiagnostics.LogTiming("Marshal.ReleaseComObject end", _requestId, _generation, _filePath, swRel.ElapsedMilliseconds);
                 _previewHandler = null;
-                LogInfo($"DisposePreviewHandler complete hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" remainingRefCount={refCount}");
+                swDispose.Stop();
+                PreviewDiagnostics.LogTiming("DisposePreviewHandler end", _requestId, _generation, _filePath, swDispose.ElapsedMilliseconds);
             }
         }
 

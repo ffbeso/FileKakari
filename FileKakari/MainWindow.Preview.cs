@@ -1089,6 +1089,7 @@ public partial class MainWindow
         _activePreviewRequestId = requestId;
         _previewOwnerSessionId = _activeWorkspaceSession?.Id;
         var selectedPath = selectedEntries.Count == 1 ? selectedEntries[0].FullPath : "";
+        PreviewDiagnostics.LogTiming("Preview request accepted", requestId, generation, selectedPath);
         PreviewDiagnostics.Info(
             "Preview",
             $"SchedulePreview requestId=\"{requestId}\" source=\"{source}\" selectedCount={selectedEntries.Count} path=\"{selectedPath}\" generation={generation} previousGeneration={generation - 1} initializationPending={!_isWebViewInitialized}");
@@ -1466,12 +1467,12 @@ public partial class MainWindow
             ShellPreviewHost? shellHost = null;
             try
             {
-                PreviewDiagnostics.Verbose("PreviewShell", "Instantiating ShellPreviewHost");
-                shellHost = new ShellPreviewHost(path, clsid, requestId, initializationPreference);
+                shellHost = new ShellPreviewHost(path, clsid, requestId, initializationPreference, generation);
 
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;
+                PreviewDiagnostics.LogTiming("Preview visible (ShellHost)", requestId, generation, path);
                 PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create complete hostInstanceId={shellHost.HostInstanceId} requestId=\"{requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt} mode={initializationPreference} created=true initialized=true");
                 return true;
             }
@@ -1909,6 +1910,7 @@ public partial class MainWindow
 
             var absoluteUri = new Uri(path).AbsoluteUri;
             _currentWebViewUri = absoluteUri; // Track target URI before navigating
+            PreviewDiagnostics.LogTiming("Source/Navigate start", requestId, generation, path);
             PreviewDiagnostics.Info("PreviewWebView", $"Navigation started requestId=\"{requestId}\" uri=\"{absoluteUri}\" generation={generation}");
             PreviewWebView.CoreWebView2.Navigate(absoluteUri);
         }
@@ -2013,6 +2015,7 @@ public partial class MainWindow
             allowed = string.Equals(uri, _currentWebViewUri, StringComparison.OrdinalIgnoreCase);
         }
 
+        PreviewDiagnostics.LogTiming("NavigationStarting", _currentWebViewRequestId, _previewGeneration, uri);
         PreviewDiagnostics.Info("PreviewWebView", $"NavigationStarting requestId=\"{_currentWebViewRequestId}\" uri=\"{uri}\" currentWebViewUri=\"{_currentWebViewUri ?? ""}\" allowed={allowed} generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration}");
 
         if (allowed)
@@ -2078,9 +2081,11 @@ public partial class MainWindow
 
         if (e.IsSuccess || isMediaOrAudio)
         {
+            PreviewDiagnostics.LogTiming("NavigationCompleted", _currentWebViewRequestId, completedGen, currentUri);
             PreviewDiagnostics.Info("PreviewWebView", $"NavigationCompleted requestId=\"{_currentWebViewRequestId}\" uri=\"{currentUri}\" success={e.IsSuccess} isMediaOrAudio={isMediaOrAudio} generation={completedGen}");
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Visible reason=\"Navigation completed\" generation={completedGen}");
             PreviewWebView.Visibility = Visibility.Visible;
+            PreviewDiagnostics.LogTiming("Preview visible (WebView)", _currentWebViewRequestId, completedGen, currentUri);
 
             if (e.IsSuccess && PreviewTemporaryFileManager.IsMediaPreviewHtmlUri(currentUri))
             {
@@ -2119,6 +2124,8 @@ public partial class MainWindow
         var requestId = _currentWebViewRequestId;
         _clearingWebViewRequestId = requestId;
         var activeGen = _webViewNavigationGeneration;
+        PreviewDiagnostics.LogTiming($"ClearWebViewAsync start (reason={reason})", requestId, _previewGeneration, _currentPreviewPath ?? "");
+        var swClearWv = System.Diagnostics.Stopwatch.StartNew();
         PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync start requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={_webViewNavigationGeneration} initialized={_isWebViewInitialized}");
         if (!_isWebViewInitialized || PreviewWebView.CoreWebView2 == null)
         {
@@ -2139,6 +2146,8 @@ public partial class MainWindow
             _currentWebViewMediaType = "";
             PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
             PreviewWebView.Visibility = Visibility.Collapsed;
+            swClearWv.Stop();
+            PreviewDiagnostics.LogTiming($"ClearWebViewAsync end (reason={reason})", requestId, _previewGeneration, "", swClearWv.ElapsedMilliseconds);
             PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync end requestId=\"{requestId}\" reason=\"{reason}\" mode=\"not-initialized\" generation={_previewGeneration}");
             return;
         }
@@ -2228,6 +2237,8 @@ public partial class MainWindow
 
         PreviewDiagnostics.Verbose("PreviewWebView", $"WebView visibility changed Collapsed reason=\"Clearing WebView\" generation={_previewGeneration}");
         PreviewWebView.Visibility = Visibility.Collapsed;
+        swClearWv.Stop();
+        PreviewDiagnostics.LogTiming($"ClearWebViewAsync end (reason={reason})", requestId, _previewGeneration, "", swClearWv.ElapsedMilliseconds);
         PreviewDiagnostics.Info("PreviewWebView", $"ClearWebViewAsync end requestId=\"{requestId}\" reason=\"{reason}\" generation={_previewGeneration} navigationGeneration={activeGen}");
     }
 

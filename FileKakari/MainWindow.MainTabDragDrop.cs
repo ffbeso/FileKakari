@@ -736,7 +736,7 @@ public partial class MainWindow
         }
 
         var tab = new FolderTab(path, viewMode: _settingsService.Settings.DisplayMode);
-        var session = _workspaceController.CreateSinglePaneSession(tab);
+        var session = CreateSinglePaneSession(tab);
         var result = _workspaceController.InsertSession(index, _workspaceSessions, _activeWorkspaceSession, session);
 
         _isSwitchingTabs = true;

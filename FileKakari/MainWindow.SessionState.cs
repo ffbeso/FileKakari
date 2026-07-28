@@ -107,7 +107,7 @@ public partial class MainWindow
             SortAscending = tabState.SortAscending
         };
         var tab = new FolderTab(tabState.Path, state: state);
-        var session = _workspaceController.CreateSinglePaneSession(tab);
+        var session = CreateSinglePaneSession(tab);
         ApplyRestoredWorkspaceName(session, tabState);
         session.IsLocked = tabState.IsFolderLocked;
         return session;

@@ -499,7 +499,8 @@ public partial class MainWindow
         clonedTab.SetFolderLocked(activeTab.IsFolderLocked);
         var newPaneTabs = new ObservableCollection<FolderTab> { clonedTab };
         var defaultPlacement = AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement);
-        var newPaneGroup = new WorkspacePaneGroup(paneId, newPaneTabs, path, defaultPlacement) { SelectedTabIndex = 0, SelectedTabId = tabId };
+        var defaultWidth = ResolveNewPaneDefaultSubTabBarWidth();
+        var newPaneGroup = new WorkspacePaneGroup(paneId, newPaneTabs, path, defaultPlacement, defaultWidth) { SelectedTabIndex = 0, SelectedTabId = tabId };
         if (session.Workspace is not null) newPaneGroup.SetWorkspace(session.Workspace);
 
         EnsureWorkspaceLayoutRoot(session);

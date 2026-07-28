@@ -674,12 +674,17 @@ public partial class MainWindow : Window
         };
     }
 
+    internal double ResolveNewPaneDefaultSubTabBarWidth()
+    {
+        return AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth);
+    }
+
     private WorkspaceSession CreateSinglePaneSession(FolderTab tab)
     {
         return _workspaceController.CreateSinglePaneSession(
             tab,
             AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement),
-            AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth));
+            ResolveNewPaneDefaultSubTabBarWidth());
     }
 
     private void ApplyFontSettings()

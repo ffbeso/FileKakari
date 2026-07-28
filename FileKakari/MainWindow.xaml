@@ -1205,7 +1205,8 @@
                                                                                     Background="Transparent"
                                                                                     IsHitTestVisible="False" />
                                                                             <Border x:Name="SelectedTabVerticalAccentLine"
-                                                                                    Width="2"
+                                                                                    Width="3"
+                                                                                    Panel.ZIndex="1"
                                                                                     HorizontalAlignment="Left"
                                                                                     Background="Transparent"
                                                                                     IsHitTestVisible="False"
@@ -1235,7 +1236,7 @@
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Visibility" Value="Collapsed" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Visibility" Value="Visible" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.65" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.85" />
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
@@ -1244,8 +1245,11 @@
                                                                                     <Condition Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                 </MultiDataTrigger.Conditions>
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.9" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="1.0" />
                                                                             </MultiDataTrigger>
+                                                                            <DataTrigger Binding="{Binding DataContext.SubTabPlacement, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Left">
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="HorizontalAlignment" Value="Left" />
+                                                                            </DataTrigger>
                                                                             <DataTrigger Binding="{Binding DataContext.SubTabPlacement, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="Right">
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="HorizontalAlignment" Value="Right" />
                                                                             </DataTrigger>

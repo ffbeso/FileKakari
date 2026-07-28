@@ -56,6 +56,7 @@ public sealed record WorkspacePaneGroupDefinition(
 {
     public string SelectedTabId { get; init; } = "";
     public SubTabPlacement? SubTabPlacement { get; init; }
+    public double? SubTabBarWidth { get; init; }
 }
 
 public enum WorkspaceSplitOrientation

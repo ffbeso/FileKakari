@@ -10,6 +10,9 @@ public sealed class AppSettings
     public const double MaxFontSize = 32;
     public const double MinRowHeight = 18;
     public const double MaxRowHeight = 64;
+    public const double BuiltInDefaultSubTabBarWidth = 140;
+    public const double MinSubTabBarWidth = 80;
+    public const double MaxSubTabBarWidth = 300;
     private static readonly Dictionary<string, double> DefaultColumnWidths = new()
     {
         ["Name"] = 400,
@@ -59,6 +62,8 @@ public sealed class AppSettings
 
     public SubTabPlacement SubTabPlacement { get; set; } = SubTabPlacement.Horizontal;
 
+    public double DefaultSubTabBarWidth { get; set; } = BuiltInDefaultSubTabBarWidth;
+
     public string FontFamily { get; set; } = DefaultFontFamily;
 
     public double FontSize { get; set; } = DefaultFontSize;
@@ -94,6 +99,7 @@ public sealed class AppSettings
             IsPreviewPaneVisible = IsPreviewPaneVisible,
             DisplayMode = DisplayMode,
             SubTabPlacement = SubTabPlacement,
+            DefaultSubTabBarWidth = DefaultSubTabBarWidth,
             FontFamily = FontFamily,
             FontSize = FontSize,
             RowHeight = RowHeight
@@ -109,6 +115,7 @@ public sealed class AppSettings
         RowHeight = IsFiniteInRange(RowHeight, MinRowHeight, MaxRowHeight) ? RowHeight : DefaultRowHeight;
         DisplayMode = NormalizeDisplayMode(DisplayMode);
         SubTabPlacement = NormalizeSubTabPlacement(SubTabPlacement);
+        DefaultSubTabBarWidth = NormalizeSubTabBarWidth(DefaultSubTabBarWidth);
         AutoPlayAudioPreview ??= AutoPlayVideoPreview;
         PreviewPanePlacement = NormalizePreviewPanePlacement(PreviewPanePlacement);
         PreviewPaneWidth = IsPositiveFinite(PreviewPaneWidth) ? PreviewPaneWidth : null;
@@ -216,6 +223,13 @@ public sealed class AppSettings
     {
         var normalized = NormalizeSubTabPlacement(placement);
         return normalized is SubTabPlacement.Left or SubTabPlacement.Right;
+    }
+
+    public static double NormalizeSubTabBarWidth(double? value)
+    {
+        return value is { } actual && IsFiniteInRange(actual, MinSubTabBarWidth, MaxSubTabBarWidth)
+            ? actual
+            : BuiltInDefaultSubTabBarWidth;
     }
 }
 

@@ -344,19 +344,36 @@ public class FolderPane : INotifyPropertyChanged
         }
     }
 
+    private double? _subTabBarWidth;
+    public double? SubTabBarWidth
+    {
+        get => _subTabBarWidth;
+        set
+        {
+            var normalized = value.HasValue ? AppSettings.NormalizeSubTabBarWidth(value.Value) : (double?)null;
+            if (Nullable.Equals(_subTabBarWidth, normalized)) return;
+            _subTabBarWidth = normalized;
+            OnPropertyChanged(nameof(SubTabBarWidth));
+            OnPropertyChanged(nameof(EffectiveSubTabBarWidth));
+        }
+    }
+
+    public double EffectiveSubTabBarWidth => AppSettings.NormalizeSubTabBarWidth(_subTabBarWidth ?? AppSettings.BuiltInDefaultSubTabBarWidth);
+
     public void UpdateSubTabOverflowState(bool canScrollBackward, bool canScrollForward)
     {
         CanScrollSubTabsBackward = canScrollBackward;
         CanScrollSubTabsForward = canScrollForward;
     }
 
-    public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
+    public FolderPane(string paneId, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top, double? subTabBarWidth = null)
     {
         PaneId = string.IsNullOrWhiteSpace(paneId) ? "primary" : paneId;
         DisplayName = PaneId;
         RootPath = string.IsNullOrWhiteSpace(rootPath) ? "" : rootPath;
         Tabs = tabs;
         SubTabPlacement = placement;
+        SubTabBarWidth = subTabBarWidth;
         SyncFileListPath();
     }
 
@@ -933,8 +950,8 @@ public class FolderPane : INotifyPropertyChanged
 
 public sealed class WorkspacePaneGroup : FolderPane
 {
-    public WorkspacePaneGroup(string id, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top)
-        : base(id, tabs, rootPath, placement)
+    public WorkspacePaneGroup(string id, ObservableCollection<FolderTab> tabs, string? rootPath = null, SubTabPlacement placement = SubTabPlacement.Top, double? subTabBarWidth = null)
+        : base(id, tabs, rootPath, placement, subTabBarWidth)
     {
     }
 }

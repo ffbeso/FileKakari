@@ -325,6 +325,7 @@ public partial class MainWindow
         menu.Items.Add(CreateMenuItem(_text.Get("RestoreClosedTabMenu"), isRestoreEnabled, () => RestoreLastClosedSubTabAsync(pane)));
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateSubTabPlacementMenu(pane));
+        menu.Items.Add(CreateMenuItem(_text.Get("ResetSubTabBarWidthToDefault"), true, () => ResetFolderPaneSubTabBarWidth(pane)));
         menu.IsOpen = true;
     }
 
@@ -356,6 +357,13 @@ public partial class MainWindow
     {
         pane.SubTabPlacement = placement;
         _workspaceLocalState.MarkDirty("subtab-placement-change");
+    }
+
+    private void ResetFolderPaneSubTabBarWidth(FolderPane pane)
+    {
+        var defaultWidth = AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth);
+        pane.SubTabBarWidth = defaultWidth;
+        _workspaceLocalState.MarkDirty("subtab-bar-width-reset");
     }
 
     private void TabsControl_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)

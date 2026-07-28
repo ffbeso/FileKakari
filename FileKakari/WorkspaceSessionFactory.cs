@@ -80,7 +80,8 @@ sealed class WorkspaceSessionFactory
                 pane.Tabs.ToArray())
             {
                 SelectedTabId = pane.SelectedTabId,
-                SubTabPlacement = pane.SubTabPlacement
+                SubTabPlacement = pane.SubTabPlacement,
+                SubTabBarWidth = pane.SubTabBarWidth
             },
             _ => throw new InvalidOperationException($"Unsupported workspace layout node: {layoutRoot.GetType().FullName}")
         };
@@ -103,7 +104,8 @@ sealed class WorkspaceSessionFactory
             ?? workspace.SourceDirectory;
         var defaultPlacement = _getDefaultSubTabPlacement?.Invoke() ?? SubTabPlacement.Top;
         var finalPlacement = SubTabPlacementHelper.Resolve(definition.SubTabPlacement, defaultPlacement);
-        var paneGroup = new WorkspacePaneGroup(definition.Id, [], paneRootPath, finalPlacement);
+        var finalWidth = definition.SubTabBarWidth ?? AppSettings.BuiltInDefaultSubTabBarWidth;
+        var paneGroup = new WorkspacePaneGroup(definition.Id, [], paneRootPath, finalPlacement, finalWidth);
         paneGroup.SetWorkspace(workspace);
 
         foreach (var tabDefinition in definition.Tabs)

@@ -217,7 +217,7 @@ public partial class MainWindow
         }
 
         activeTab.SetHeaderOverride(null);
-        var session = _workspaceController.CreateSinglePaneSession(activeTab);
+        var session = CreateSinglePaneSession(activeTab);
         var sessionIndex = Math.Clamp(TabsControl.SelectedIndex, 0, Math.Max(0, _workspaceSessions.Count - 1));
 
         _workspaceSessions[sessionIndex] = session;
@@ -394,6 +394,32 @@ public partial class MainWindow
     private void WorkspacePaneSubTabPlacementLeft_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Left);
     private void WorkspacePaneSubTabPlacementRight_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Right);
     private void WorkspacePaneSubTabPlacementBottom_Click(object sender, RoutedEventArgs e) => SetSubTabPlacementFromSender(sender, SubTabPlacement.Bottom);
+
+    private void WorkspacePaneResetSubTabWidth_Click(object sender, RoutedEventArgs e)
+    {
+        if (GetWorkspacePaneFromMenuItem(sender) is { } pane)
+        {
+            var defaultWidth = AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth);
+            pane.SubTabBarWidth = defaultWidth;
+            _workspaceLocalState.MarkDirty("subtab-bar-width-reset");
+        }
+    }
+
+    private void SubTabWidthResizeGrip_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        if (sender is FrameworkElement element && GetWorkspacePaneFromSender(element) is { } pane)
+        {
+            var currentWidth = pane.EffectiveSubTabBarWidth;
+            var delta = pane.SubTabPlacement == SubTabPlacement.Right ? -e.HorizontalChange : e.HorizontalChange;
+            var newWidth = Math.Clamp(currentWidth + delta, AppSettings.MinSubTabBarWidth, AppSettings.MaxSubTabBarWidth);
+            pane.SubTabBarWidth = newWidth;
+        }
+    }
+
+    private void SubTabWidthResizeGrip_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        _workspaceLocalState.MarkDirty("subtab-bar-width-resize");
+    }
 
     private void WorkspacePaneSubTabBarContextMenu_Opening(object sender, RoutedEventArgs e)
     {

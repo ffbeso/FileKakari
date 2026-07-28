@@ -18,7 +18,7 @@ internal record struct WorkspaceMutationResult(
 
 internal class WorkspaceController
 {
-    public WorkspaceSession CreateSinglePaneSession(FolderTab tab, SubTabPlacement defaultPlacement = SubTabPlacement.Top)
+    public WorkspaceSession CreateSinglePaneSession(FolderTab tab, SubTabPlacement defaultPlacement = SubTabPlacement.Top, double? defaultSubTabBarWidth = null)
     {
         tab.SetHeaderOverride(null);
         var representativeTab = new FolderTab(
@@ -34,7 +34,7 @@ internal class WorkspaceController
         {
             SelectedTabIndex = 0
         };
-        var primaryPane = new WorkspacePaneGroup("primary", paneTabs, tab.Navigation.CurrentPath, defaultPlacement)
+        var primaryPane = new WorkspacePaneGroup("primary", paneTabs, tab.Navigation.CurrentPath, defaultPlacement, defaultSubTabBarWidth)
         {
             SelectedTabIndex = 0,
             SelectedTabId = tab.Id

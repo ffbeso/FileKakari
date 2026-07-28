@@ -1073,7 +1073,7 @@
                                                         <Setter Property="Grid.Row" Value="0" />
                                                         <Setter Property="Grid.ColumnSpan" Value="1" />
                                                         <Setter Property="Grid.RowSpan" Value="5" />
-                                                        <Setter Property="Width" Value="140" />
+                                                        <Setter Property="Width" Value="{Binding EffectiveSubTabBarWidth}" />
                                                         <Setter Property="Margin" Value="0,0,2,0" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding SubTabPlacement}" Value="Right">
@@ -1081,7 +1081,7 @@
                                                         <Setter Property="Grid.Row" Value="0" />
                                                         <Setter Property="Grid.ColumnSpan" Value="1" />
                                                         <Setter Property="Grid.RowSpan" Value="5" />
-                                                        <Setter Property="Width" Value="140" />
+                                                        <Setter Property="Width" Value="{Binding EffectiveSubTabBarWidth}" />
                                                         <Setter Property="Margin" Value="2,0,0,0" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding SubTabPlacement}" Value="Bottom">
@@ -1257,7 +1257,6 @@
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
                                                                     <Setter Property="MinWidth" Value="0" />
-                                                                    <Setter Property="MaxWidth" Value="140" />
                                                                     <Setter Property="Margin" Value="0,0,0,1" />
                                                                     <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -1276,7 +1275,7 @@
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
                                                                                 <Setter Property="MinWidth" Value="0" />
-                                                                                <Setter Property="MaxWidth" Value="128" />
+                                                                                <Setter Property="MaxWidth" Value="Infinity" />
                                                                                 <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
@@ -1314,11 +1313,10 @@
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
                                                                             <Setter Property="MinWidth" Value="0" />
-                                                                            <Setter Property="MaxWidth" Value="120" />
                                                                             <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
-                                                                                    <Setter Property="MaxWidth" Value="90" />
+                                                                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -1618,6 +1616,7 @@
                                                                 <MenuItem Header="右 (Right)" Click="WorkspacePaneSubTabPlacementRight_Click" Tag="{Binding}" />
                                                                 <MenuItem Header="下 (Bottom)" Click="WorkspacePaneSubTabPlacementBottom_Click" Tag="{Binding}" />
                                                             </MenuItem>
+                                                            <MenuItem Header="サブタブ幅を既定値に戻す" Click="WorkspacePaneResetSubTabWidth_Click" Tag="{Binding}" />
                                                             <Separator />
                                                             <MenuItem Header="ペインを閉じる" Click="WorkspacePaneCloseMenuItem_Click" />
                                                         </ContextMenu>

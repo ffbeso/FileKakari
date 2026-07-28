@@ -61,6 +61,7 @@ public partial class SettingsView : UserControl
         SortFoldersFirstCheckBox.Content = _text.Get("SettingsSortFoldersFirst");
         PreviewPanePlacementLabel.Text = _text.Get("SettingsPreviewPanePlacement");
         SubTabPlacementLabel.Text = _text.Get("SettingsSubTabPlacement");
+        DefaultSubTabBarWidthLabel.Text = _text.Get("SettingsDefaultSubTabBarWidth");
         AutoPlayVideoPreviewCheckBox.Content = _text.Get("SettingsAutoPlayVideoPreview");
         AutoPlayVideoPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayVideoPreviewDescription");
         AutoPlayAudioPreviewCheckBox.Content = _text.Get("SettingsAutoPlayAudioPreview");
@@ -129,6 +130,7 @@ public partial class SettingsView : UserControl
         SortFoldersFirstCheckBox.IsChecked = Result.SortFoldersFirst;
         PreviewPanePlacementComboBox.SelectedValue = Result.PreviewPanePlacement;
         SubTabPlacementComboBox.SelectedValue = AppSettings.NormalizeSubTabPlacement(Result.SubTabPlacement);
+        DefaultSubTabBarWidthBox.Text = Result.DefaultSubTabBarWidth.ToString(CultureInfo.InvariantCulture);
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
         AutoPlayAudioPreviewCheckBox.IsChecked = Result.AutoPlayAudioPreview ?? Result.AutoPlayVideoPreview;
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
@@ -219,6 +221,7 @@ public partial class SettingsView : UserControl
         Result.SubTabPlacement = SubTabPlacementComboBox.SelectedValue is SubTabPlacement subTabPlacement
             ? AppSettings.NormalizeSubTabPlacement(subTabPlacement)
             : SubTabPlacement.Top;
+        Result.DefaultSubTabBarWidth = ParseSettingDouble(DefaultSubTabBarWidthBox.Text, AppSettings.BuiltInDefaultSubTabBarWidth);
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
         Result.AutoPlayAudioPreview = AutoPlayAudioPreviewCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;

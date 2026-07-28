@@ -521,7 +521,8 @@ public sealed class WorkspaceService
                 Tabs = updatedTabs,
                 SelectedTabId = targetSelectedTabId ?? "",
                 SelectedTabIndex = Math.Clamp(tabIndex, 0, Math.Max(0, updatedTabs.Count - 1)),
-                SubTabPlacement = paneState.SubTabPlacement ?? paneGroup.SubTabPlacement
+                SubTabPlacement = paneState.SubTabPlacement ?? paneGroup.SubTabPlacement,
+                SubTabBarWidth = paneState.SubTabBarWidth ?? paneGroup.SubTabBarWidth
             };
         }
 
@@ -860,6 +861,7 @@ public sealed class WorkspaceService
             PaneId = pane.Id,
             SelectedTabId = selectedTabId,
             SubTabPlacement = pane.SubTabPlacement,
+            SubTabBarWidth = pane.SubTabBarWidth,
             Tabs = paneTabs
         });
     }
@@ -1145,6 +1147,9 @@ public sealed class WorkspaceService
 
         [JsonPropertyName("subTabPlacement")]
         public SubTabPlacement? SubTabPlacement { get; set; }
+
+        [JsonPropertyName("subTabBarWidth")]
+        public double? SubTabBarWidth { get; set; }
 
         [JsonPropertyName("tabs")]
         public List<WorkspaceLocalTabStateDocument> Tabs { get; set; } = [];

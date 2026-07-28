@@ -411,7 +411,7 @@ public partial class MainWindow : Window
             () => TabsControl.SelectedIndex,
             SaveSessionState);
         _workspaceSessionFactory = new WorkspaceSessionFactory(NormalizeSortColumn, () => AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement));
-        _primaryPaneGroup = new WorkspacePaneGroup("primary", _primaryPaneTabs, placement: AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement));
+        _primaryPaneGroup = new WorkspacePaneGroup("primary", _primaryPaneTabs, placement: AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement), subTabBarWidth: AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth));
         _activeWorkspacePaneGroup = _primaryPaneGroup;
         _statusSummary = new StatusSummaryService(_text);
         _statusSummaryCoordinator = new StatusSummaryCoordinator(
@@ -591,7 +591,7 @@ public partial class MainWindow : Window
 
         if (initialSessions.Count == 0)
         {
-            initialSessions.Add(_workspaceController.CreateSinglePaneSession(
+            initialSessions.Add(CreateSinglePaneSession(
                 new FolderTab(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), viewMode: _settingsService.Settings.DisplayMode)));
         }
 
@@ -672,6 +672,14 @@ public partial class MainWindow : Window
 
             RunPreviewIntegrationTestIfNeeded();
         };
+    }
+
+    private WorkspaceSession CreateSinglePaneSession(FolderTab tab)
+    {
+        return _workspaceController.CreateSinglePaneSession(
+            tab,
+            AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement),
+            AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth));
     }
 
     private void ApplyFontSettings()
@@ -4311,7 +4319,7 @@ public partial class MainWindow : Window
         session.UnregisterTabState(tab.Id, pane.Id);
 
         // 4. Create new single pane session using WorkspaceController
-        var newSession = _workspaceController.CreateSinglePaneSession(tab);
+        var newSession = CreateSinglePaneSession(tab);
 
         // 5. Update the PaneId of the moved tab's state to "primary"
         tab.State.PaneId = "primary";
@@ -5172,7 +5180,7 @@ public partial class MainWindow : Window
             tab = new FolderTab(newTabPath, viewMode: _settingsService.Settings.DisplayMode);
         }
 
-        var session = _workspaceController.CreateSinglePaneSession(tab);
+        var session = CreateSinglePaneSession(tab);
         var result = _workspaceController.AddSession(_activeWorkspaceSession, session);
 
         _isSwitchingTabs = true;

@@ -72,12 +72,31 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         return clsid == MonacoPreviewHandlerClsid;
     }
 
+    private readonly Func<bool>? _isCurrentGenerationCheck;
+    private readonly CancellationToken _cancellationToken;
+
+    private void CheckCurrentGenerationOrThrow(string stage = "unspecified")
+    {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            LogInfo($"CheckCurrentGenerationOrThrow canceled stage=\"{stage}\" requestId=\"{_requestId}\" generation={_generation}");
+            throw new OperationCanceledException($"ShellPreviewHost cancellation requested at stage '{stage}' requestId='{_requestId}' gen={_generation}");
+        }
+        if (_isCurrentGenerationCheck != null && !_isCurrentGenerationCheck())
+        {
+            LogInfo($"CheckCurrentGenerationOrThrow generation-outdated stage=\"{stage}\" requestId=\"{_requestId}\" generation={_generation}");
+            throw new OperationCanceledException($"ShellPreviewHost generation outdated at stage '{stage}' requestId='{_requestId}' gen={_generation}");
+        }
+    }
+
     public ShellPreviewHost(
         string filePath,
         Guid clsid,
         string requestId,
         ShellPreviewInitializationPreference initializationPreference = ShellPreviewInitializationPreference.Default,
-        int generation = 0)
+        int generation = 0,
+        Func<bool>? isCurrentGenerationCheck = null,
+        CancellationToken cancellationToken = default)
     {
         _filePath = filePath;
         _clsid = clsid;
@@ -85,11 +104,14 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
         _generation = generation;
         _hostInstanceId = Interlocked.Increment(ref _nextHostInstanceId);
         _initializationPreference = initializationPreference;
+        _isCurrentGenerationCheck = isCurrentGenerationCheck;
+        _cancellationToken = cancellationToken;
         _isMarkdownPreview = string.Equals(Path.GetExtension(_filePath), ".md", StringComparison.OrdinalIgnoreCase);
         _isDeferredHandler = _clsid == MonacoPreviewHandlerClsid ||
                              _clsid == new Guid("60789D87-9C3C-44AF-B18C-3DE2C2820ED3");
 
         LogInfo($"ShellPreviewHost constructor start hostInstanceId={_hostInstanceId} requestId=\"{_requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{_filePath}\" clsid=\"{_clsid:B}\" mode={_initializationPreference} created=true initialized=false");
+        CheckCurrentGenerationOrThrow("constructor-start");
 
         try
         {
@@ -105,6 +127,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 IntPtr pUnkMonaco = IntPtr.Zero;
                 try
                 {
+                    CheckCurrentGenerationOrThrow("before-cocreateinstance-monaco");
                     int hr = CoCreateInstance(in _clsid, IntPtr.Zero, CLSCTX_LOCAL_SERVER, in IID_IUnknown, out pUnkMonaco);
                     LogDiag($"CoCreateInstance activationContext=\"LocalServer\" HRESULT=0x{hr:X8}");
                     if (hr < 0)
@@ -132,6 +155,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 _activationContext = activationContext;
                 LogDiag($"Activating handler clsid=\"{_clsid:B}\" description=\"{description}\" profile=\"Default\" activationContext=\"{activationContext}\"");
 
+                CheckCurrentGenerationOrThrow("before-gettypefromclsid");
                 PreviewDiagnostics.LogTiming("Type.GetTypeFromCLSID start", _requestId, _generation, _filePath);
                 var swClsid = System.Diagnostics.Stopwatch.StartNew();
                 var comType = Type.GetTypeFromCLSID(_clsid, true);
@@ -144,6 +168,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
                 LogDiag("COM Type resolution success.");
 
+                CheckCurrentGenerationOrThrow("before-createinstance");
                 PreviewDiagnostics.LogTiming("Activator.CreateInstance start", _requestId, _generation, _filePath);
                 var swInst = System.Diagnostics.Stopwatch.StartNew();
                 instance = Activator.CreateInstance(comType);
@@ -215,6 +240,26 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                 }
             }
 
+            bool TryInitializeWithFile(IInitializeWithFile fileInit)
+            {
+                CheckCurrentGenerationOrThrow("before-initialize-file");
+                LogDiag("Query IInitializeWithFile success. Invoking Initialize...");
+                PreviewDiagnostics.LogTiming("IInitializeWithFile.Initialize start", _requestId, _generation, _filePath);
+                var swInitFile = System.Diagnostics.Stopwatch.StartNew();
+                int hr = fileInit.Initialize(_filePath, 0);
+                swInitFile.Stop();
+                PreviewDiagnostics.LogTiming("IInitializeWithFile.Initialize end", _requestId, _generation, _filePath, swInitFile.ElapsedMilliseconds);
+                LogDiag($"[ShellPreviewHost] IInitializeWithFile.Initialize HRESULT=0x{hr:X8}");
+                if (hr == 0)
+                {
+                    _initializationMethod = "File";
+                    LogDiag("[ShellPreviewHost] Initialization selected method=File");
+                    return true;
+                }
+                LogDiag("[ShellPreviewHost] InitializeWithFile failed.");
+                return false;
+            }
+
             bool initialized = false;
             var preferFileInitialization = _initializationPreference == ShellPreviewInitializationPreference.FileFirst
                 || _clsid == WindowsTxtPreviewerClsid;
@@ -238,6 +283,7 @@ public sealed class ShellPreviewHost : HwndHost, IDisposable
                     _managedIStream = new ManagedIStream(_fileStream);
                     LogDiag($"Stream opened path='{_filePath}' length={_fileStream.Length}. Invoking Initialize...");
 
+                    CheckCurrentGenerationOrThrow("before-initialize-stream");
                     PreviewDiagnostics.LogTiming("IInitializeWithStream.Initialize start", _requestId, _generation, _filePath);
                     var swInitStream = System.Diagnostics.Stopwatch.StartNew();
                     int hr = streamInit.Initialize(_managedIStream, 0);

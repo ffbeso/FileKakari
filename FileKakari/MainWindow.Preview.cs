@@ -23,6 +23,24 @@ public partial class MainWindow
         ".xls", ".xlsx", ".xlsm", ".xlt", ".xltx", ".xltm",
         ".ppt", ".pptx", ".pptm", ".pot", ".potx", ".potm", ".pps", ".ppsx", ".ppsm"
     };
+    private static readonly System.Collections.Generic.HashSet<string> ExcelExtensions = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        ".xls", ".xlsx", ".xlsm", ".xlsb", ".ods"
+    };
+
+    private static bool IsExcelPreviewExtension(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return false;
+        var ext = Path.GetExtension(path);
+        return ExcelExtensions.Contains(ext);
+    }
+
+    private static TimeSpan GetPreviewLoadDelay(string? path)
+    {
+        return IsExcelPreviewExtension(path)
+            ? TimeSpan.FromMilliseconds(400)
+            : PreviewLoadDelay;
+    }
     private CancellationTokenSource? _previewCancellation;
     private int _previewGeneration;
     private int _previewRequestSequence;
@@ -1182,8 +1200,16 @@ public partial class MainWindow
         try
         {
             PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync start requestId=\"{requestId}\" source=\"{requestSource}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration}");
+            var loadDelay = GetPreviewLoadDelay(path);
+            await Task.Delay(loadDelay, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation != _previewGeneration)
+            {
+                PreviewDiagnostics.Info("Preview", $"LoadPreviewAsync skipped after-delay requestId=\"{requestId}\" reason=\"generation-mismatch\" path=\"{path}\" requested={generation} current={_previewGeneration}");
+                return;
+            }
+
             PreviewLoadingBar.Visibility = Visibility.Visible;
-            await Task.Delay(PreviewLoadDelay, cancellationToken);
 
             double scaleX = 1.0;
             double scaleY = 1.0;
@@ -1453,7 +1479,8 @@ public partial class MainWindow
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
-            if (generation != _previewGeneration)
+            cancellationToken.ThrowIfCancellationRequested();
+            if (generation != _previewGeneration || !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
                 PreviewDiagnostics.Info("PreviewShell", $"ReplacePreviewWithShell skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation} path=\"{path}\"");
                 return false;
@@ -1463,12 +1490,27 @@ public partial class MainWindow
                 ? ShellPreviewInitializationPreference.Default
                 : ShellPreviewInitializationPreference.FileFirst;
             PreviewDiagnostics.Info("PreviewShell", $"ShellPreviewHost create start requestId=\"{requestId}\" provider=\"ShellPreviewHandlerProvider\" path=\"{path}\" clsid=\"{clsid:B}\" attempt={attempt} mode={initializationPreference}");
-            ClearPreviewContent();
             ShellPreviewHost? shellHost = null;
             try
             {
-                shellHost = new ShellPreviewHost(path, clsid, requestId, initializationPreference, generation);
+                shellHost = new ShellPreviewHost(
+                    path,
+                    clsid,
+                    requestId,
+                    initializationPreference,
+                    generation,
+                    isCurrentGenerationCheck: () => generation == _previewGeneration && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal),
+                    cancellationToken: cancellationToken);
 
+                cancellationToken.ThrowIfCancellationRequested();
+                if (generation != _previewGeneration || !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+                {
+                    PreviewDiagnostics.Info("PreviewShell", $"ReplacePreviewWithShell skipped before-visual-tree-add requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation} path=\"{path}\"");
+                    shellHost.Dispose();
+                    return false;
+                }
+
+                ClearPreviewContent();
                 ApplyShellPreviewHostBackground();
                 PreviewShellHostContainer.Child = shellHost;
                 PreviewShellHostContainer.Visibility = Visibility.Visible;

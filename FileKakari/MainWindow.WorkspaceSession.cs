@@ -1308,8 +1308,18 @@ public partial class MainWindow
     {
         if (sender is not ListBox { DataContext: FolderPane pane }
             || FindVisualParent<ListBoxItem>(e.OriginalSource as DependencyObject)?.DataContext is not FolderTab tab
-            || !IsWorkspacePaneSubTabHoverDrag(e)
-            || ReferenceEquals(pane.ActiveTab, tab))
+            || !IsWorkspacePaneSubTabHoverDrag(e))
+        {
+            ClearWorkspacePaneSubTabHover();
+            return;
+        }
+
+        var session = ResolveActivePaneOwner(pane).Session;
+        var isCurrentActivePane = pane.IsActive && IsSameWorkspaceSession(session, _activeWorkspaceSession);
+        var needsTabSwitch = !string.Equals(pane.SelectedTabId, tab.Id, StringComparison.Ordinal);
+        var needsPaneActivation = !isCurrentActivePane;
+
+        if (!needsTabSwitch && !needsPaneActivation)
         {
             ClearWorkspacePaneSubTabHover();
             return;
@@ -1339,14 +1349,33 @@ public partial class MainWindow
         if (pane is null
             || tab is null
             || !IsWorkspaceDisplayPane(pane)
-            || !pane.Tabs.Contains(tab)
-            || ReferenceEquals(pane.ActiveTab, tab))
+            || !pane.Tabs.Contains(tab))
         {
             return;
         }
 
-        pane.SelectedTabId = tab.Id;
+        var session = ResolveActivePaneOwner(pane).Session;
+        var isCurrentActivePane = pane.IsActive && IsSameWorkspaceSession(session, _activeWorkspaceSession);
+        var needsTabSwitch = !string.Equals(pane.SelectedTabId, tab.Id, StringComparison.Ordinal);
+        var needsPaneActivation = !isCurrentActivePane;
+
+        if (!needsTabSwitch && !needsPaneActivation)
+        {
+            return;
+        }
+
+        if (needsTabSwitch)
+        {
+            pane.SelectedTabId = tab.Id;
+        }
+
+        if (needsPaneActivation)
+        {
+            TryRequestActivePane(pane, "subtab-hover");
+        }
     }
+
+
 
     private void ClearWorkspacePaneSubTabHover()
     {

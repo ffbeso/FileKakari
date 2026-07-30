@@ -10,6 +10,8 @@
         MinHeight="400" MinWidth="520">
     <Window.Resources>
         <local:PaneCountToColumnsConverter x:Key="PaneCountToColumnsConverter" />
+        <local:ObjectsEqualConverter x:Key="ObjectsEqualConverter" />
+
         <DataTemplate x:Key="ListDisplayTemplate">
             <Grid Background="Transparent"
                   Height="24">
@@ -1216,13 +1218,26 @@
                                                                             <Trigger Property="IsMouseOver" Value="True">
                                                                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource ControlHoverBrush}" />
                                                                             </Trigger>
-                                                                            <Trigger Property="IsSelected" Value="True">
+                                                                            <DataTrigger Value="True">
+                                                                                <DataTrigger.Binding>
+                                                                                    <MultiBinding Converter="{StaticResource ObjectsEqualConverter}">
+                                                                                        <Binding Path="Id" />
+                                                                                        <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                                                    </MultiBinding>
+                                                                                </DataTrigger.Binding>
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.65" />
-                                                                            </Trigger>
+                                                                            </DataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                                    <Condition Value="True">
+                                                                                        <Condition.Binding>
+                                                                                            <MultiBinding Converter="{StaticResource ObjectsEqualConverter}">
+                                                                                                <Binding Path="Id" />
+                                                                                                <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                                                            </MultiBinding>
+                                                                                        </Condition.Binding>
+                                                                                    </Condition>
                                                                                     <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                 </MultiDataTrigger.Conditions>
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
@@ -1230,7 +1245,14 @@
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                                    <Condition Value="True">
+                                                                                        <Condition.Binding>
+                                                                                            <MultiBinding Converter="{StaticResource ObjectsEqualConverter}">
+                                                                                                <Binding Path="Id" />
+                                                                                                <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                                                            </MultiBinding>
+                                                                                        </Condition.Binding>
+                                                                                    </Condition>
                                                                                     <Condition Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                 </MultiDataTrigger.Conditions>
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Visibility" Value="Collapsed" />
@@ -1240,7 +1262,14 @@
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource Self}}" Value="True" />
+                                                                                    <Condition Value="True">
+                                                                                        <Condition.Binding>
+                                                                                            <MultiBinding Converter="{StaticResource ObjectsEqualConverter}">
+                                                                                                <Binding Path="Id" />
+                                                                                                <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                                                            </MultiBinding>
+                                                                                        </Condition.Binding>
+                                                                                    </Condition>
                                                                                     <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                     <Condition Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                 </MultiDataTrigger.Conditions>

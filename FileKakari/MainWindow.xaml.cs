@@ -664,7 +664,6 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await RestoreWorkspaceTabAsync(_activeWorkspaceSession);
-            SynchronizeDisplayedSubTabSelectionsAfterRestore();
             if (IsPreviewPaneActuallyVisible)
             {
                 RefreshPreviewForActiveSelection("window-activated");
@@ -675,6 +674,7 @@ public partial class MainWindow : Window
 
             RunPreviewIntegrationTestIfNeeded();
         };
+
 
     }
 
@@ -7843,13 +7843,46 @@ public partial class MainWindow : Window
             }
         }
     }
+}
 
+public class ObjectsEqualConverter : System.Windows.Data.IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+    {
+        if (values is null || values.Length < 2)
+        {
+            return false;
+        }
 
+        var first = values[0];
+        var second = values[1];
 
+        if (first == DependencyProperty.UnsetValue || second == DependencyProperty.UnsetValue)
+        {
+            return false;
+        }
 
+        if (first is null && second is null)
+        {
+            return true;
+        }
+
+        if (first is null || second is null)
+        {
+            return false;
+        }
+
+        return Equals(first, second);
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, System.Globalization.CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
 }
 
 public class PaneCountToColumnsConverter : System.Windows.Data.IValueConverter
+
 {
     public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
     {

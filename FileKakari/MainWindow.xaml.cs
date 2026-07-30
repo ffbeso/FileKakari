@@ -664,6 +664,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await RestoreWorkspaceTabAsync(_activeWorkspaceSession);
+            SynchronizeDisplayedSubTabSelectionsAfterRestore();
             if (IsPreviewPaneActuallyVisible)
             {
                 RefreshPreviewForActiveSelection("window-activated");
@@ -674,6 +675,7 @@ public partial class MainWindow : Window
 
             RunPreviewIntegrationTestIfNeeded();
         };
+
     }
 
     internal double ResolveNewPaneDefaultSubTabBarWidth()

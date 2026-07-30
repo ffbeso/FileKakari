@@ -2526,7 +2526,32 @@ public partial class MainWindow
         FocusSelectedListViewItemOfActivePane();
     }
 
+    private void SynchronizeDisplayedSubTabSelectionsAfterRestore()
+    {
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();
+            foreach (var session in displayedSessions)
+            {
+                foreach (var paneGroup in session.PaneGroups)
+                {
+                    var pane = paneGroup;
+                    var listBox = FindWorkspacePaneSubTabListBox(pane);
+                    if (listBox is not null && pane.SelectedTabId is not null)
+                    {
+                        var targetTab = pane.Tabs.FirstOrDefault(t => string.Equals(t.Id, pane.SelectedTabId, StringComparison.Ordinal));
+                        if (targetTab is not null)
+                        {
+                            ApplyWorkspacePaneSubTabSelection(listBox, pane, pane.SelectedTabId, targetTab);
+                        }
+                    }
+                }
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
     private void RestoreWorkspacePaneSubTabSelection(ListBox? listBox, FolderPane pane, FolderTab selectedTab)
+
     {
         RestoreWorkspacePaneSubTabSelection(listBox, pane, selectedTab.Id, selectedTab);
     }

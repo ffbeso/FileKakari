@@ -1202,7 +1202,7 @@
                                                                                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                                                                             </Border>
                                                                             <Border x:Name="SelectedTabAccentLine"
-                                                                                    Height="2"
+                                                                                    Height="3"
                                                                                     VerticalAlignment="Bottom"
                                                                                     Background="Transparent"
                                                                                     IsHitTestVisible="False" />
@@ -1225,9 +1225,8 @@
                                                                                         <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
                                                                                     </MultiBinding>
                                                                                 </DataTrigger.Binding>
-                                                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource SelectionInactiveBackgroundBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.75" />
+                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.9" />
                                                                             </DataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
@@ -1241,9 +1240,8 @@
                                                                                     </Condition>
                                                                                     <Condition Binding="{Binding DataContext.IsActive, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True" />
                                                                                 </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource SelectionBackgroundBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource ActivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.95" />
+                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="1.0" />
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>
@@ -1260,7 +1258,7 @@
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Visibility" Value="Collapsed" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Visibility" Value="Visible" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
-                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.85" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.9" />
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>
                                                                                 <MultiDataTrigger.Conditions>

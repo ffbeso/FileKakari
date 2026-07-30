@@ -290,11 +290,7 @@ public partial class MainWindow
         }
 
         var dragItems = GetFileOperationDragItems(e);
-        var operationKind = GetFileDropOperationKind(e, targetTab?.Navigation.CurrentPath);
-        if (_draggedTab is not null
-            || targetTab is null
-            || dragItems is null
-            || !CanDropFileItems(dragItems, targetTab.Navigation.CurrentPath, operationKind))
+        if (_draggedTab is not null || targetSession is null || dragItems is null)
         {
             e.Effects = DragDropEffects.None;
             ClearFileTabHover();
@@ -304,21 +300,86 @@ public partial class MainWindow
             return;
         }
 
-        e.Effects = operationKind == PendingFileOperationKind.Copy
-            ? DragDropEffects.Copy
-            : DragDropEffects.Move;
-        QueueFileTabHover(targetTab);
+        var isCopyRequested = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        var allowedMove = (e.AllowedEffects & DragDropEffects.Move) != 0;
+        var allowedCopy = (e.AllowedEffects & DragDropEffects.Copy) != 0;
+
+        DragDropEffects targetEffect;
+        if (isCopyRequested && allowedCopy)
+        {
+            targetEffect = DragDropEffects.Copy;
+        }
+        else if (allowedMove)
+        {
+            targetEffect = DragDropEffects.Move;
+        }
+        else if (allowedCopy)
+        {
+            targetEffect = DragDropEffects.Copy;
+        }
+        else
+        {
+            targetEffect = DragDropEffects.None;
+        }
+
+        if (targetEffect == DragDropEffects.None)
+        {
+            targetEffect = allowedMove ? DragDropEffects.Move : (allowedCopy ? DragDropEffects.Copy : DragDropEffects.None);
+        }
+
+        e.Effects = targetEffect;
+        QueueFileTabHover(targetSession);
         ClearMainTabHover();
         HideTabInsertIndicator();
         e.Handled = true;
     }
 
+
+
     private void TabsControl_DragLeave(object sender, DragEventArgs e)
     {
-        ClearFileTabHover();
         ClearMainTabHover();
         HideTabInsertIndicator();
+        VerifyTabsControlDragLeave(e);
     }
+
+    private void VerifyTabsControlDragLeave(DragEventArgs e)
+    {
+        var captureGen = _fileTabHoverGeneration;
+        _ = Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Input,
+            new Action(() =>
+            {
+                if (captureGen != _fileTabHoverGeneration || _fileTabHoverTargetSessionId is null)
+                {
+                    return;
+                }
+
+                if (!IsPointerInsideTabsControl(e))
+                {
+                    ClearFileTabHover();
+                }
+            }));
+    }
+
+    private bool IsPointerInsideTabsControl(DragEventArgs e)
+    {
+        try
+        {
+            var pos = e.GetPosition(TabsControl);
+            if (pos.X >= 0 && pos.X <= TabsControl.ActualWidth && pos.Y >= 0 && pos.Y <= TabsControl.ActualHeight)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+            // Fallback to clearing hover
+        }
+
+        return false;
+    }
+
 
     private async void TabsControl_Drop(object sender, DragEventArgs e)
     {
@@ -384,9 +445,42 @@ public partial class MainWindow
             return;
         }
 
+        var dragItems = GetFileOperationDragItems(e);
+        if (dragItems is not null && targetSession is not null)
+        {
+            var targetPane = targetSession.ActivePaneGroup ?? targetSession.PaneGroups.FirstOrDefault();
+            var targetTab = targetPane?.ActiveTab ?? targetPane?.Tabs.FirstOrDefault();
+            var targetDirectory = targetTab?.Navigation.CurrentPath;
+
+            if (!string.IsNullOrWhiteSpace(targetDirectory))
+            {
+                var operationKind = GetFileDropOperationKind(e, targetDirectory);
+                if (CanDropFileItems(dragItems, targetDirectory, operationKind))
+                {
+                    var isCopy = operationKind == PendingFileOperationKind.Copy;
+                    e.Effects = isCopy ? DragDropEffects.Copy : DragDropEffects.Move;
+                    e.Handled = true;
+
+                    var transferItems = dragItems
+                        .Select(item => new FileTransferItem(item.SourcePath, item.Name, item.IsDirectory))
+                        .ToList();
+                    await ExecuteFileTransferAsync(
+                        transferItems,
+                        targetDirectory,
+                        operationKind,
+                        refreshActiveFolder: true,
+                        refreshTab: targetTab,
+                        confirmNonSelfCopy: IsExplicitCopyDrop(e),
+                        refreshPane: targetPane);
+                    return;
+                }
+            }
+        }
+
         e.Effects = DragDropEffects.None;
         e.Handled = true;
     }
+
 
     private string? GetMainTabFolderDropPath(DragEventArgs e)
     {
@@ -565,20 +659,25 @@ public partial class MainWindow
         }
     }
 
-    private void QueueFileTabHover(FolderTab targetTab)
+    private void QueueFileTabHover(WorkspaceSession? targetSession)
     {
-        if (ReferenceEquals(ActiveTab, targetTab))
+        if (targetSession is null
+            || IsSameWorkspaceSession(_activeWorkspaceSession, targetSession)
+            || IsSameWorkspaceSession(GetSelectedWorkspaceSession(), targetSession))
         {
             ClearFileTabHover();
             return;
         }
 
-        if (ReferenceEquals(_fileTabHoverTarget, targetTab) && _fileTabHoverTimer.IsEnabled)
+
+        if (string.Equals(_fileTabHoverTargetSessionId, targetSession.Id, StringComparison.Ordinal)
+            && _fileTabHoverTimer.IsEnabled)
         {
             return;
         }
 
-        _fileTabHoverTarget = targetTab;
+        _fileTabHoverTargetSessionId = targetSession.Id;
+        _fileTabHoverGeneration++;
         _fileTabHoverTimer.Stop();
         _fileTabHoverTimer.Start();
     }
@@ -586,63 +685,60 @@ public partial class MainWindow
     private async void FileTabHoverTimer_Tick(object? sender, EventArgs e)
     {
         _fileTabHoverTimer.Stop();
-        var targetTab = _fileTabHoverTarget;
-        _fileTabHoverTarget = null;
-        if (_draggedTab is not null
-            || targetTab is null
-            || !_workspaceSessions.Any(session => ReferenceEquals(GetSessionActiveTab(session), targetTab))
-            || ReferenceEquals(ActiveTab, targetTab))
+        var targetSessionId = _fileTabHoverTargetSessionId;
+        var currentGeneration = _fileTabHoverGeneration;
+        _fileTabHoverTargetSessionId = null;
+
+        if (_draggedTab is not null || string.IsNullOrEmpty(targetSessionId))
         {
             return;
         }
 
-        await ActivateFileDropHoverTabAsync(targetTab);
+        var targetSession = _workspaceSessions.FirstOrDefault(s => string.Equals(s.Id, targetSessionId, StringComparison.Ordinal));
+        if (targetSession is null
+            || IsSameWorkspaceSession(_activeWorkspaceSession, targetSession)
+            || IsSameWorkspaceSession(GetSelectedWorkspaceSession(), targetSession))
+        {
+            return;
+        }
+
+        await ActivateFileDropHoverWorkspaceAsync(targetSession, currentGeneration);
     }
 
-    private async Task ActivateFileDropHoverTabAsync(FolderTab targetTab)
+    private async Task ActivateFileDropHoverWorkspaceAsync(WorkspaceSession targetSession, int generation)
     {
-        var targetSession = _workspaceSessions.FirstOrDefault(session => ReferenceEquals(GetSessionActiveTab(session), targetTab));
-        if (targetSession is null)
+        if (_fileTabHoverGeneration != generation)
         {
             return;
         }
 
-        SaveActiveTabViewState();
-
-        var result = _workspaceController.TrySelectSession(_activeWorkspaceSession, targetSession);
-        if (!result.Success)
+        if (IsSameWorkspaceSession(_activeWorkspaceSession, targetSession)
+            && _displayedWorkspaceSessionIds.Count == 1
+            && _displayedWorkspaceSessionIds.Contains(targetSession.Id))
         {
+            ClearFileTabHover();
             return;
         }
 
-        if (result.ActiveSessionChanged)
-        {
-            CancelActiveLoadForWorkspaceSwitch(targetSession, "workspace-drop-hover");
-        }
+        // Clean hover state & bump generation before performing UI switch
+        // so any delayed DragLeave calls from the old layout will be invalidated.
+        _fileTabHoverTimer.Stop();
+        _fileTabHoverTargetSessionId = null;
+        _fileTabHoverGeneration++;
 
-        _isSwitchingTabs = true;
-        try
-        {
-            _activeWorkspaceSession = targetSession;
-            UpdateActiveWorkspaceSessionUi(targetSession);
-            ApplyWorkspaceSessionToFolderTabs();
-            RefreshWorkspaceDisplayPanes();
-            SelectWorkspaceSession(targetSession);
-        }
-        finally
-        {
-            _isSwitchingTabs = false;
-        }
-
-        _workspaceLocalState.Capture(markDirty: true, reason: "selected-tab");
-        await RestoreActiveTabAsync();
+        ResetToSingleWorkspaceDisplay(targetSession, "file-drop-hover");
+        SelectWorkspaceSession(targetSession);
+        await Task.CompletedTask;
     }
 
     private void ClearFileTabHover()
     {
-        _fileTabHoverTarget = null;
+        _fileTabHoverTargetSessionId = null;
+        _fileTabHoverGeneration++;
         _fileTabHoverTimer.Stop();
     }
+
+
 
     private void QueueMainTabHover(WorkspaceSession targetSession)
     {

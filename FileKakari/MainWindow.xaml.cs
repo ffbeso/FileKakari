@@ -172,8 +172,10 @@ public partial class MainWindow : Window
     private bool _activeRenameTextBoxMouseDown;
     private ListViewItem? _fileDropTargetItem;
     private readonly DispatcherTimer _fileTabHoverTimer = new() { Interval = FileTabHoverDelay };
-    private FolderTab? _fileTabHoverTarget;
+    private string? _fileTabHoverTargetSessionId;
+    private int _fileTabHoverGeneration;
     private readonly DispatcherTimer _subTabHoverTimer = new() { Interval = FileTabHoverDelay };
+
     private FolderPane? _subTabHoverPane;
     private FolderTab? _subTabHoverTarget;
     private readonly DispatcherTimer _subTabAutoScrollTimer = new() { Interval = SubTabAutoScrollInterval };

@@ -315,12 +315,14 @@ public partial class MainWindow
         foreach (var session in _workspaceSessions)
         {
             var isActiveSession = IsSameWorkspaceSession(session, _activeWorkspaceSession);
+            var activePane = session.ActivePaneGroup ?? session.PaneGroups.FirstOrDefault();
             foreach (var paneGroup in session.PaneGroups)
             {
-                paneGroup.IsActive = isActiveSession && ReferenceEquals(paneGroup, _activeWorkspaceSession.ActivePaneGroup);
+                paneGroup.IsActive = isActiveSession && ReferenceEquals(paneGroup, activePane);
             }
         }
     }
+
 
 
     private void WorkspaceSplitPanel_SplitRatioChanged(object? sender, WorkspaceSplitRatioChangedEventArgs e)

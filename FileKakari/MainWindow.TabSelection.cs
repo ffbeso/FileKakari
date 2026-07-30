@@ -152,6 +152,7 @@ public partial class MainWindow
             }
         }
 
+        UpdateWorkspacePaneActiveStates();
         SynchronizeWorkspaceSessionHostVisibility(reason);
 
         var displayedSessions = GetDisplayedWorkspaceSessionsInTabOrder();

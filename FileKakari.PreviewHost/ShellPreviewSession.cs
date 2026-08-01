@@ -145,9 +145,10 @@ public sealed class ShellPreviewSession : IDisposable
         if (!initSuccess && _comObject is NativeMethods.IInitializeWithStream streamInit)
         {
             initStage = "InitializeWithStream";
+            IStream? stream = null;
             try
             {
-                var stream = SHCreateStreamOnFile(filePath, 0); // STGM_READ = 0
+                stream = SHCreateStreamOnFile(filePath, 0); // STGM_READ = 0
                 if (stream is not null)
                 {
                     initHr = streamInit.Initialize(stream, 0);
@@ -157,11 +158,28 @@ public sealed class ShellPreviewSession : IDisposable
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PreviewHost] CreateStream exception: {ex.Message}");
+            }
+            finally
+            {
+                if (stream is not null && Marshal.IsComObject(stream))
+                {
+                    try
+                    {
+                        Marshal.FinalReleaseComObject(stream);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[PreviewHost] Stream release exception: {ex.Message}");
+                    }
+                }
+            }
         }
 
         swStage.Stop();
-        Console.WriteLine($"[PreviewHost] Initialize ({initStage}) elapsed={swStage.ElapsedMilliseconds}ms hr=0x{initHr:X8}");
+        Console.WriteLine($"[PreviewHost] Initialize ({initStage}) elapsed={swStage.ElapsedMilliseconds}ms hr=0x{initHr:X8} ManagedThreadId={Environment.CurrentManagedThreadId}");
 
         if (!initSuccess && initHr != 0)
         {
@@ -183,7 +201,7 @@ public sealed class ShellPreviewSession : IDisposable
         {
             _currentHandler.SetWindow(hostHwnd, ref rect);
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] SetWindow elapsed={swStage.ElapsedMilliseconds}ms");
+            Console.WriteLine($"[PreviewHost] SetWindow elapsed={swStage.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
         }
         catch (Exception ex)
         {
@@ -205,7 +223,7 @@ public sealed class ShellPreviewSession : IDisposable
             _currentHandler.SetRect(ref rect);
             _currentHandler.DoPreview();
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] DoPreview elapsed={swStage.ElapsedMilliseconds}ms total={totalSw.ElapsedMilliseconds}ms");
+            Console.WriteLine($"[PreviewHost] DoPreview elapsed={swStage.ElapsedMilliseconds}ms total={totalSw.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
         }
         catch (Exception ex)
         {
@@ -247,38 +265,57 @@ public sealed class ShellPreviewSession : IDisposable
 
     public void Unload()
     {
-        if (_currentHandler is not null)
-        {
-            var sw = Stopwatch.StartNew();
-            try
-            {
-                _currentHandler.Unload();
-            }
-            catch { }
-            finally
-            {
-                _currentHandler = null;
-            }
-            sw.Stop();
-            Console.WriteLine($"[PreviewHost] Unload elapsed={sw.ElapsedMilliseconds}ms");
-        }
+        var threadId = Environment.CurrentManagedThreadId;
+        var win32ThreadId = NativeMethods.GetCurrentThreadId();
+        Console.WriteLine($"[PreviewHost] Unload start ManagedThreadId={threadId} Win32ThreadId={win32ThreadId} path='{_currentFilePath}'");
 
-        if (_comObject is not null)
+        try
         {
-            try
+            if (_currentHandler is not null)
             {
-                Marshal.FinalReleaseComObject(_comObject);
-            }
-            catch { }
-            finally
-            {
-                _comObject = null;
+                var sw = Stopwatch.StartNew();
+                try
+                {
+                    _currentHandler.Unload();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[PreviewHost] Handler.Unload exception: {ex.Message}");
+                }
+                finally
+                {
+                    _currentHandler = null;
+                }
+                sw.Stop();
+                Console.WriteLine($"[PreviewHost] Unload elapsed={sw.ElapsedMilliseconds}ms");
             }
         }
+        finally
+        {
+            if (_comObject is not null)
+            {
+                try
+                {
+                    if (Marshal.IsComObject(_comObject))
+                    {
+                        Marshal.FinalReleaseComObject(_comObject);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[PreviewHost] FinalReleaseComObject exception: {ex.Message}");
+                }
+                finally
+                {
+                    _comObject = null;
+                }
+            }
 
-        _currentFilePath = "";
-        _currentClsid = "";
+            _currentFilePath = "";
+            _currentClsid = "";
+        }
     }
+
 
     public void Dispose()
     {

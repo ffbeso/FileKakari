@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
@@ -10,6 +11,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+
 
 namespace FileKakari.PreviewHost;
 
@@ -27,6 +29,8 @@ public sealed class PreviewHostServer : IDisposable
     private readonly ConcurrentQueue<Action> _staActionQueue = new();
     private readonly ShellPreviewSession _previewSession = new();
     private uint _staThreadId;
+    private int _isShutdownState;
+    private string _activeRequestId = "";
 
     private IntPtr _hostHwnd = IntPtr.Zero;
     private int _currentWidth = 400;
@@ -65,12 +69,47 @@ public sealed class PreviewHostServer : IDisposable
 
     private void EnqueueStaAction(Action action)
     {
+        if (Volatile.Read(ref _isShutdownState) != 0)
+        {
+            return;
+        }
+
         _staActionQueue.Enqueue(action);
+        if (_staThreadId != 0)
+        {
+            if (!NativeMethods.PostThreadMessage(_staThreadId, NativeMethods.WM_APP, IntPtr.Zero, IntPtr.Zero))
+            {
+                var err = Marshal.GetLastWin32Error();
+                Console.WriteLine($"[PreviewHost] PostThreadMessage failed Win32Error={err}");
+            }
+        }
+    }
+
+    public void RequestShutdown()
+    {
+        if (Interlocked.CompareExchange(ref _isShutdownState, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _cts.Cancel();
+        _staActionQueue.Enqueue(() =>
+        {
+            _previewSession.Unload();
+            if (_hostHwnd != IntPtr.Zero)
+            {
+                NativeMethods.DestroyWindow(_hostHwnd);
+                _hostHwnd = IntPtr.Zero;
+            }
+            OnShutdownRequested?.Invoke();
+        });
+
         if (_staThreadId != 0)
         {
             NativeMethods.PostThreadMessage(_staThreadId, NativeMethods.WM_APP, IntPtr.Zero, IntPtr.Zero);
         }
     }
+
 
 
     public async Task RunAsync()
@@ -220,14 +259,27 @@ public sealed class PreviewHostServer : IDisposable
                     var loadWPx = root.GetProperty("widthPx").GetInt32();
                     var loadHPx = root.GetProperty("heightPx").GetInt32();
 
+                    _activeRequestId = requestId;
+                    var captureReqId = requestId;
+
                     EnqueueStaAction(() =>
                     {
+                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        {
+                            return;
+                        }
+
                         var res = _previewSession.Load(filePath, clsid, _hostHwnd, loadWPx, loadHPx);
+                        if (_activeRequestId != captureReqId)
+                        {
+                            return;
+                        }
+
                         if (res.Success)
                         {
                             _ = SendMessageAsync(new PreviewLoadedEventMessage
                             {
-                                RequestId = requestId,
+                                RequestId = captureReqId,
                                 PaneId = loadPaneId,
                                 FilePath = filePath,
                                 PreviewHandlerClsid = clsid,
@@ -238,7 +290,7 @@ public sealed class PreviewHostServer : IDisposable
                         {
                             _ = SendMessageAsync(new PreviewFailedEventMessage
                             {
-                                RequestId = requestId,
+                                RequestId = captureReqId,
                                 PaneId = loadPaneId,
                                 Stage = res.Stage,
                                 ErrorCode = res.ErrorCode,
@@ -253,6 +305,11 @@ public sealed class PreviewHostServer : IDisposable
                     var unloadPaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
+                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        {
+                            return;
+                        }
+
                         _previewSession.Unload();
                         _ = SendMessageAsync(new PreviewUnloadedEventMessage
                         {
@@ -266,6 +323,11 @@ public sealed class PreviewHostServer : IDisposable
                     var showPaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
+                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        {
+                            return;
+                        }
+
                         ShowHost(true);
                         _ = SendMessageAsync(new ShownEventMessage { RequestId = requestId, PaneId = showPaneId });
                     });
@@ -275,6 +337,11 @@ public sealed class PreviewHostServer : IDisposable
                     var hidePaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
+                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        {
+                            return;
+                        }
+
                         ShowHost(false);
                         _ = SendMessageAsync(new HiddenEventMessage { RequestId = requestId, PaneId = hidePaneId });
                     });
@@ -290,7 +357,7 @@ public sealed class PreviewHostServer : IDisposable
                     break;
 
                 case "Shutdown":
-                    OnShutdownRequested?.Invoke();
+                    RequestShutdown();
                     break;
             }
         }
@@ -299,6 +366,7 @@ public sealed class PreviewHostServer : IDisposable
             _ = SendMessageAsync(new ProcessErrorEventMessage { ErrorMessage = ex.Message });
         }
     }
+
 
     private void AttachToParent(IntPtr parentHwnd, int widthPx, int heightPx, double dpiX, double dpiY)
     {
@@ -437,15 +505,7 @@ public sealed class PreviewHostServer : IDisposable
 
     public void Dispose()
     {
-        _cts.Cancel();
-        _previewSession.Dispose();
-        if (_hostHwnd != IntPtr.Zero)
-        {
-            NativeMethods.DestroyWindow(_hostHwnd);
-            _hostHwnd = IntPtr.Zero;
-        }
-
-
+        RequestShutdown();
         _reader?.Dispose();
         _writer?.Dispose();
         _pipeServer?.Dispose();

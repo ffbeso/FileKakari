@@ -28,8 +28,7 @@ public partial class MainWindow
             return;
         }
 
-        var offset = GetTabInsertIndicatorOffset(adornerTarget, target);
-        if (double.IsNaN(offset))
+        if (!TryCalculateTabInsertIndicatorGeometry(adornedElement, adornerTarget, target, out var insertPoint, out var tabBarRect))
         {
             HideTabInsertIndicator();
             return;
@@ -48,7 +47,7 @@ public partial class MainWindow
             layer.Add(_tabInsertIndicatorAdorner);
         }
 
-        _tabInsertIndicatorAdorner.Update(offset, target.Orientation);
+        _tabInsertIndicatorAdorner.Update(insertPoint, tabBarRect, target.Orientation);
     }
 
     private static FrameworkElement GetTabInsertIndicatorAdornerTarget(FrameworkElement preferredTarget)
@@ -64,31 +63,52 @@ public partial class MainWindow
         return preferredTarget;
     }
 
-    private static double GetTabInsertIndicatorOffset(FrameworkElement adornedElement, TabInsertDropTarget target)
+    private static bool TryCalculateTabInsertIndicatorGeometry(
+        FrameworkElement adornedElement,
+        FrameworkElement adornerTarget,
+        TabInsertDropTarget target,
+        out Point insertPoint,
+        out Rect tabBarRect)
     {
-        if (target.TargetElement is null)
-        {
-            return 0;
-        }
-
-        var orientation = target.Orientation;
-        var boundaryOffset = target.Zone == TabDropZone.After
-            ? (orientation == TabStripOrientation.Horizontal ? target.TargetElement.ActualWidth : target.TargetElement.ActualHeight)
-            : 0;
+        insertPoint = default;
+        tabBarRect = default;
 
         try
         {
-            var point = orientation == TabStripOrientation.Horizontal
-                ? new Point(boundaryOffset, 0)
-                : new Point(0, boundaryOffset);
-            var transformedPoint = target.TargetElement
-                .TransformToAncestor(adornedElement)
-                .Transform(point);
-            return orientation == TabStripOrientation.Horizontal ? transformedPoint.X : transformedPoint.Y;
+            var localBarRect = new Rect(0, 0, adornedElement.ActualWidth, adornedElement.ActualHeight);
+            var transformBar = adornedElement.TransformToAncestor(adornerTarget);
+            tabBarRect = transformBar.TransformBounds(localBarRect);
+
+            if (target.TargetElement is not null)
+            {
+                var orientation = target.Orientation;
+                var boundaryOffset = target.Zone == TabDropZone.After
+                    ? (orientation == TabStripOrientation.Horizontal ? target.TargetElement.ActualWidth : target.TargetElement.ActualHeight)
+                    : 0;
+                var localInsertPoint = orientation == TabStripOrientation.Horizontal
+                    ? new Point(boundaryOffset, 0)
+                    : new Point(0, boundaryOffset);
+
+                var transformTarget = target.TargetElement.TransformToAncestor(adornerTarget);
+                insertPoint = transformTarget.Transform(localInsertPoint);
+            }
+            else
+            {
+                insertPoint = target.Orientation == TabStripOrientation.Horizontal
+                    ? new Point(tabBarRect.Right, tabBarRect.Top)
+                    : new Point(tabBarRect.Left, tabBarRect.Bottom);
+            }
+
+            return !double.IsNaN(insertPoint.X)
+                && !double.IsNaN(insertPoint.Y)
+                && !double.IsNaN(tabBarRect.Width)
+                && !double.IsNaN(tabBarRect.Height)
+                && tabBarRect.Width > 0
+                && tabBarRect.Height > 0;
         }
         catch (InvalidOperationException)
         {
-            return double.NaN;
+            return false;
         }
     }
 
@@ -107,7 +127,8 @@ public partial class MainWindow
     private sealed class TabInsertIndicatorAdorner : Adorner
     {
         private readonly Pen _pen;
-        private double _offset;
+        private Point _insertPoint;
+        private Rect _tabBarRect;
         private TabStripOrientation _orientation = TabStripOrientation.Horizontal;
 
         public TabInsertIndicatorAdorner(UIElement adornedElement, Brush brush)
@@ -121,9 +142,10 @@ public partial class MainWindow
             }
         }
 
-        public void Update(double offset, TabStripOrientation orientation = TabStripOrientation.Horizontal)
+        public void Update(Point insertPoint, Rect tabBarRect, TabStripOrientation orientation)
         {
-            _offset = offset;
+            _insertPoint = insertPoint;
+            _tabBarRect = tabBarRect;
             _orientation = orientation;
             InvalidateVisual();
         }
@@ -131,28 +153,26 @@ public partial class MainWindow
         protected override void OnRender(DrawingContext drawingContext)
         {
             base.OnRender(drawingContext);
+            if (_tabBarRect.Width <= 0 || _tabBarRect.Height <= 0)
+            {
+                return;
+            }
+
             if (_orientation == TabStripOrientation.Horizontal)
             {
-                var height = Math.Max(0, AdornedElement.RenderSize.Height);
-                if (height <= 0)
-                {
-                    return;
-                }
-
-                var x = Math.Round(_offset) + 0.5;
-                drawingContext.DrawLine(_pen, new Point(x, 2), new Point(x, Math.Max(2, height - 2)));
+                var x = Math.Clamp(Math.Round(_insertPoint.X) + 0.5, _tabBarRect.Left + 0.5, _tabBarRect.Right - 0.5);
+                var y1 = _tabBarRect.Top + 2;
+                var y2 = Math.Max(y1, _tabBarRect.Bottom - 2);
+                drawingContext.DrawLine(_pen, new Point(x, y1), new Point(x, y2));
             }
             else
             {
-                var width = Math.Max(0, AdornedElement.RenderSize.Width);
-                if (width <= 0)
-                {
-                    return;
-                }
-
-                var y = Math.Round(_offset) + 0.5;
-                drawingContext.DrawLine(_pen, new Point(2, y), new Point(Math.Max(2, width - 2), y));
+                var y = Math.Clamp(Math.Round(_insertPoint.Y) + 0.5, _tabBarRect.Top + 0.5, _tabBarRect.Bottom - 0.5);
+                var x1 = _tabBarRect.Left + 2;
+                var x2 = Math.Max(x1, _tabBarRect.Right - 2);
+                drawingContext.DrawLine(_pen, new Point(x1, y), new Point(x2, y));
             }
         }
     }
+
 }

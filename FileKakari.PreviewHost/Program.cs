@@ -46,6 +46,7 @@ internal static class Program
         }
 
         using var server = new PreviewHostServer(pipeName, parentPid, token);
+        server.SetStaThreadId(NativeMethods.GetCurrentThreadId());
 
         var cts = new CancellationTokenSource();
         server.OnShutdownRequested += () => cts.Cancel();
@@ -71,6 +72,8 @@ internal static class Program
                 NativeMethods.DispatchMessage(ref msg);
             }
 
+            server.ProcessPendingStaActions();
+
             if (serverTask.IsCompleted)
             {
                 break;
@@ -82,4 +85,3 @@ internal static class Program
         server.Dispose();
     }
 }
-

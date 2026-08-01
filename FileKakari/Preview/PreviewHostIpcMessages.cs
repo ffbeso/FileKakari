@@ -114,6 +114,34 @@ public sealed class ShutdownCommand : IpcMessageBase
     public ShutdownCommand() { Type = "Shutdown"; }
 }
 
+public sealed class LoadPreviewCommand : IpcMessageBase
+{
+    public LoadPreviewCommand() { Type = "LoadPreview"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; set; } = "";
+
+    [JsonPropertyName("previewHandlerClsid")]
+    public string PreviewHandlerClsid { get; set; } = "";
+
+    [JsonPropertyName("widthPx")]
+    public int WidthPx { get; set; }
+
+    [JsonPropertyName("heightPx")]
+    public int HeightPx { get; set; }
+}
+
+public sealed class UnloadPreviewCommand : IpcMessageBase
+{
+    public UnloadPreviewCommand() { Type = "UnloadPreview"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+}
+
 // ==========================================
 // PreviewHost -> FileKakari (Events/Responses)
 // ==========================================
@@ -189,4 +217,49 @@ public sealed class ProcessErrorEvent : IpcMessageBase
 
     [JsonPropertyName("errorMessage")]
     public string ErrorMessage { get; set; } = "";
+}
+
+public sealed class PreviewLoadedEvent : IpcMessageBase
+{
+    public PreviewLoadedEvent() { Type = "PreviewLoaded"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; set; } = "";
+
+    [JsonPropertyName("previewHandlerClsid")]
+    public string PreviewHandlerClsid { get; set; } = "";
+
+    [JsonPropertyName("elapsedMs")]
+    public long ElapsedMs { get; set; }
+}
+
+public sealed class PreviewFailedEvent : IpcMessageBase
+{
+    public PreviewFailedEvent() { Type = "PreviewFailed"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+
+    [JsonPropertyName("stage")]
+    public string Stage { get; set; } = "";
+
+    [JsonPropertyName("errorCode")]
+    public int ErrorCode { get; set; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("elapsedMs")]
+    public long ElapsedMs { get; set; }
+}
+
+public sealed class PreviewUnloadedEvent : IpcMessageBase
+{
+    public PreviewUnloadedEvent() { Type = "PreviewUnloaded"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
 }

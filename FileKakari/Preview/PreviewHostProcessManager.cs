@@ -30,7 +30,35 @@ public sealed class PreviewHostProcessManager : IDisposable
     public event Action<AttachedEvent>? OnAttached;
     public event Action<ResizedEvent>? OnResized;
     public event Action<ProcessErrorEvent>? OnProcessError;
+    public event Action<PreviewLoadedEvent>? OnPreviewLoaded;
+    public event Action<PreviewFailedEvent>? OnPreviewFailed;
+    public event Action<PreviewUnloadedEvent>? OnPreviewUnloaded;
     public event Action? OnExited;
+
+    public async Task LoadPreviewAsync(string paneId, string filePath, string clsid, int widthPx, int heightPx, string requestId = "")
+    {
+        var cmd = new LoadPreviewCommand
+        {
+            RequestId = string.IsNullOrEmpty(requestId) ? Guid.NewGuid().ToString("N") : requestId,
+            PaneId = paneId,
+            FilePath = filePath,
+            PreviewHandlerClsid = clsid,
+            WidthPx = widthPx,
+            HeightPx = heightPx
+        };
+        await SendMessageAsync(cmd).ConfigureAwait(false);
+    }
+
+    public async Task UnloadPreviewAsync(string paneId, string requestId = "")
+    {
+        var cmd = new UnloadPreviewCommand
+        {
+            RequestId = string.IsNullOrEmpty(requestId) ? Guid.NewGuid().ToString("N") : requestId,
+            PaneId = paneId
+        };
+        await SendMessageAsync(cmd).ConfigureAwait(false);
+    }
+
 
     public async Task<bool> StartAsync()
     {
@@ -184,9 +212,34 @@ public sealed class PreviewHostProcessManager : IDisposable
                         }
                         break;
 
+                    case "PreviewLoaded":
+                        var loaded = JsonSerializer.Deserialize<PreviewLoadedEvent>(line);
+                        if (loaded is not null)
+                        {
+                            OnPreviewLoaded?.Invoke(loaded);
+                        }
+                        break;
+
+                    case "PreviewFailed":
+                        var failed = JsonSerializer.Deserialize<PreviewFailedEvent>(line);
+                        if (failed is not null)
+                        {
+                            OnPreviewFailed?.Invoke(failed);
+                        }
+                        break;
+
+                    case "PreviewUnloaded":
+                        var unloaded = JsonSerializer.Deserialize<PreviewUnloadedEvent>(line);
+                        if (unloaded is not null)
+                        {
+                            OnPreviewUnloaded?.Invoke(unloaded);
+                        }
+                        break;
+
                     case "Pong":
                         // Heartbeat response
                         break;
+
                 }
             }
             catch (OperationCanceledException)

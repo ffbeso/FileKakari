@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
@@ -23,6 +24,10 @@ public sealed class PreviewHostServer : IDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
 
+    private readonly ConcurrentQueue<Action> _staActionQueue = new();
+    private readonly ShellPreviewSession _previewSession = new();
+    private uint _staThreadId;
+
     private IntPtr _hostHwnd = IntPtr.Zero;
     private int _currentWidth = 400;
     private int _currentHeight = 300;
@@ -37,6 +42,36 @@ public sealed class PreviewHostServer : IDisposable
         _expectedParentPid = parentPid;
         _expectedSessionToken = sessionToken;
     }
+
+    public void SetStaThreadId(uint threadId)
+    {
+        _staThreadId = threadId;
+    }
+
+    public void ProcessPendingStaActions()
+    {
+        while (_staActionQueue.TryDequeue(out var action))
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                _ = SendMessageAsync(new ProcessErrorEventMessage { ErrorMessage = $"STA action error: {ex.Message}" });
+            }
+        }
+    }
+
+    private void EnqueueStaAction(Action action)
+    {
+        _staActionQueue.Enqueue(action);
+        if (_staThreadId != 0)
+        {
+            NativeMethods.PostThreadMessage(_staThreadId, NativeMethods.WM_APP, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
 
     public async Task RunAsync()
     {
@@ -145,12 +180,15 @@ public sealed class PreviewHostServer : IDisposable
                     var dpiX = root.TryGetProperty("dpiX", out var dx) ? dx.GetDouble() : 1.0;
                     var dpiY = root.TryGetProperty("dpiY", out var dy) ? dy.GetDouble() : 1.0;
 
-                    AttachToParent(parentHwnd, wPx, hPx, dpiX, dpiY);
-                    _ = SendMessageAsync(new AttachedEventMessage
+                    EnqueueStaAction(() =>
                     {
-                        RequestId = requestId,
-                        ChildHwnd = _hostHwnd.ToInt64(),
-                        PaneId = paneId
+                        AttachToParent(parentHwnd, wPx, hPx, dpiX, dpiY);
+                        _ = SendMessageAsync(new AttachedEventMessage
+                        {
+                            RequestId = requestId,
+                            ChildHwnd = _hostHwnd.ToInt64(),
+                            PaneId = paneId
+                        });
                     });
                     break;
 
@@ -161,26 +199,85 @@ public sealed class PreviewHostServer : IDisposable
                     var resDpiX = root.TryGetProperty("dpiX", out var rdx) ? rdx.GetDouble() : 1.0;
                     var resDpiY = root.TryGetProperty("dpiY", out var rdy) ? rdy.GetDouble() : 1.0;
 
-                    ResizeHost(newWPx, newHPx, resDpiX, resDpiY);
-                    _ = SendMessageAsync(new ResizedEventMessage
+                    EnqueueStaAction(() =>
                     {
-                        RequestId = requestId,
-                        PaneId = resPaneId,
-                        WidthPx = newWPx,
-                        HeightPx = newHPx
+                        ResizeHost(newWPx, newHPx, resDpiX, resDpiY);
+                        _previewSession.Resize(newWPx, newHPx);
+                        _ = SendMessageAsync(new ResizedEventMessage
+                        {
+                            RequestId = requestId,
+                            PaneId = resPaneId,
+                            WidthPx = newWPx,
+                            HeightPx = newHPx
+                        });
+                    });
+                    break;
+
+                case "LoadPreview":
+                    var loadPaneId = root.GetProperty("paneId").GetString() ?? "";
+                    var filePath = root.GetProperty("filePath").GetString() ?? "";
+                    var clsid = root.GetProperty("previewHandlerClsid").GetString() ?? "";
+                    var loadWPx = root.GetProperty("widthPx").GetInt32();
+                    var loadHPx = root.GetProperty("heightPx").GetInt32();
+
+                    EnqueueStaAction(() =>
+                    {
+                        var res = _previewSession.Load(filePath, clsid, _hostHwnd, loadWPx, loadHPx);
+                        if (res.Success)
+                        {
+                            _ = SendMessageAsync(new PreviewLoadedEventMessage
+                            {
+                                RequestId = requestId,
+                                PaneId = loadPaneId,
+                                FilePath = filePath,
+                                PreviewHandlerClsid = clsid,
+                                ElapsedMs = res.ElapsedMs
+                            });
+                        }
+                        else
+                        {
+                            _ = SendMessageAsync(new PreviewFailedEventMessage
+                            {
+                                RequestId = requestId,
+                                PaneId = loadPaneId,
+                                Stage = res.Stage,
+                                ErrorCode = res.ErrorCode,
+                                Message = res.ErrorMessage,
+                                ElapsedMs = res.ElapsedMs
+                            });
+                        }
+                    });
+                    break;
+
+                case "UnloadPreview":
+                    var unloadPaneId = root.GetProperty("paneId").GetString() ?? "";
+                    EnqueueStaAction(() =>
+                    {
+                        _previewSession.Unload();
+                        _ = SendMessageAsync(new PreviewUnloadedEventMessage
+                        {
+                            RequestId = requestId,
+                            PaneId = unloadPaneId
+                        });
                     });
                     break;
 
                 case "Show":
                     var showPaneId = root.GetProperty("paneId").GetString() ?? "";
-                    ShowHost(true);
-                    _ = SendMessageAsync(new ShownEventMessage { RequestId = requestId, PaneId = showPaneId });
+                    EnqueueStaAction(() =>
+                    {
+                        ShowHost(true);
+                        _ = SendMessageAsync(new ShownEventMessage { RequestId = requestId, PaneId = showPaneId });
+                    });
                     break;
 
                 case "Hide":
                     var hidePaneId = root.GetProperty("paneId").GetString() ?? "";
-                    ShowHost(false);
-                    _ = SendMessageAsync(new HiddenEventMessage { RequestId = requestId, PaneId = hidePaneId });
+                    EnqueueStaAction(() =>
+                    {
+                        ShowHost(false);
+                        _ = SendMessageAsync(new HiddenEventMessage { RequestId = requestId, PaneId = hidePaneId });
+                    });
                     break;
 
                 case "SetFocus":
@@ -341,11 +438,13 @@ public sealed class PreviewHostServer : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
+        _previewSession.Dispose();
         if (_hostHwnd != IntPtr.Zero)
         {
             NativeMethods.DestroyWindow(_hostHwnd);
             _hostHwnd = IntPtr.Zero;
         }
+
 
         _reader?.Dispose();
         _writer?.Dispose();
@@ -436,4 +535,49 @@ internal sealed class ProcessErrorEventMessage : EventBase
 
     [JsonPropertyName("errorMessage")]
     public string ErrorMessage { get; set; } = "";
+}
+
+internal sealed class PreviewLoadedEventMessage : EventBase
+{
+    public PreviewLoadedEventMessage() { Type = "PreviewLoaded"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+
+    [JsonPropertyName("filePath")]
+    public string FilePath { get; set; } = "";
+
+    [JsonPropertyName("previewHandlerClsid")]
+    public string PreviewHandlerClsid { get; set; } = "";
+
+    [JsonPropertyName("elapsedMs")]
+    public long ElapsedMs { get; set; }
+}
+
+internal sealed class PreviewFailedEventMessage : EventBase
+{
+    public PreviewFailedEventMessage() { Type = "PreviewFailed"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
+
+    [JsonPropertyName("stage")]
+    public string Stage { get; set; } = "";
+
+    [JsonPropertyName("errorCode")]
+    public int ErrorCode { get; set; }
+
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("elapsedMs")]
+    public long ElapsedMs { get; set; }
+}
+
+internal sealed class PreviewUnloadedEventMessage : EventBase
+{
+    public PreviewUnloadedEventMessage() { Type = "PreviewUnloaded"; }
+
+    [JsonPropertyName("paneId")]
+    public string PaneId { get; set; } = "";
 }

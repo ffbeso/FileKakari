@@ -1,6 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+
 
 namespace FileKakari.PreviewHost;
 
@@ -208,5 +210,56 @@ internal static class NativeMethods
 
     public const uint PM_REMOVE = 0x0001;
     public const uint WM_QUIT = 0x0012;
+    public const uint WM_APP = 0x8000;
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostThreadMessage(uint idThread, uint Msg, IntPtr wParam, IntPtr lParam);
+
     public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new(-4);
+
+
+    [ComImport]
+    [Guid("8895b1c6-b41f-4c1c-a562-0d564250836f")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IPreviewHandler
+    {
+        void SetWindow(IntPtr hwnd, ref RECT rect);
+        void SetRect(ref RECT rect);
+        void DoPreview();
+        void Unload();
+        void SetFocus();
+        void QueryFocus(out IntPtr phwnd);
+        void TranslateAccelerator(ref MSG pmsg);
+    }
+
+    [ComImport]
+    [Guid("b722edd8-2767-4019-846e-15c985070f44")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IInitializeWithFile
+    {
+        [PreserveSig]
+        int Initialize([MarshalAs(UnmanagedType.LPWStr)] string pszFilePath, uint grfMode);
+    }
+
+    [ComImport]
+    [Guid("b824b49d-22ac-4161-ac8a-9916e8fa3f7f")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IInitializeWithStream
+    {
+        [PreserveSig]
+        int Initialize(IStream pstream, uint grfMode);
+    }
+
+    [ComImport]
+    [Guid("7f73be3f-fb79-493c-a6c7-7ee14e24584b")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IInitializeWithItem
+    {
+        [PreserveSig]
+        int Initialize([MarshalAs(UnmanagedType.IUnknown)] object psi, uint grfMode);
+    }
 }

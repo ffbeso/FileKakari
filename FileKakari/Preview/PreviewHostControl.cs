@@ -10,8 +10,11 @@ public sealed class PreviewHostControl : HwndHost
 {
     private readonly PreviewHostProcessManager _processManager;
     private IntPtr _containerHwnd = IntPtr.Zero;
+    private long _currentChildHwndValue;
+    private TaskCompletionSource<bool>? _attachTcs;
 
     public PreviewHostProcessManager ProcessManager => _processManager;
+    public bool IsAttached { get; private set; }
 
 
     public PreviewHostControl(PreviewHostProcessManager processManager)
@@ -34,20 +37,62 @@ public sealed class PreviewHostControl : HwndHost
         }
     }
 
-
     private void ProcessManager_OnAttached(AttachedEvent evt)
     {
+        if (evt.ParentHwnd == _currentChildHwndValue && evt.ChildHwnd != 0)
+        {
+            IsAttached = true;
+            _attachTcs?.TrySetResult(true);
+        }
         Dispatcher.Invoke(InvalidateMeasure);
     }
 
     private void ProcessManager_OnExited()
     {
+        IsAttached = false;
+        _attachTcs?.TrySetResult(false);
     }
+
+    public async System.Threading.Tasks.Task<bool> WaitForAttachedAsync(TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
+    {
+        if (IsAttached)
+        {
+            return true;
+        }
+
+        var tcs = _attachTcs;
+        if (tcs is null)
+        {
+            return false;
+        }
+
+        using var timeoutCts = new System.Threading.CancellationTokenSource(timeout);
+        using var linkedCts = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+        try
+        {
+            using (linkedCts.Token.Register(() => tcs.TrySetCanceled()))
+            {
+                return await tcs.Task.ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (timeoutCts.IsCancellationRequested)
+            {
+                PreviewDiagnostics.Error("PreviewHostControl", "Attach timeout waiting for AttachedEvent.");
+            }
+            return false;
+        }
+    }
+
 
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
     {
         _containerHwnd = hwndParent.Handle;
+        IsAttached = false;
+        _attachTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         double scaleX = 1.0;
         double scaleY = 1.0;
@@ -78,10 +123,11 @@ public sealed class PreviewHostControl : HwndHost
 
         if (hwndChild != IntPtr.Zero)
         {
+            _currentChildHwndValue = hwndChild.ToInt64();
             // Send Attach IPC to PreviewHost with container HWND and Physical Pixels
             _ = _processManager.SendMessageAsync(new AttachCommand
             {
-                ParentHwnd = hwndChild.ToInt64(),
+                ParentHwnd = _currentChildHwndValue,
                 PaneId = "active-pane",
                 WidthPx = pixelWidth,
                 HeightPx = pixelHeight,
@@ -95,12 +141,16 @@ public sealed class PreviewHostControl : HwndHost
 
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
+        IsAttached = false;
+        _attachTcs?.TrySetResult(false);
+        _currentChildHwndValue = 0;
         _ = _processManager.SendMessageAsync(new HideCommand { PaneId = "active-pane" });
         if (hwnd.Handle != IntPtr.Zero)
         {
             DestroyWindow(hwnd.Handle);
         }
     }
+
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {

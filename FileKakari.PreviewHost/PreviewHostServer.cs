@@ -35,10 +35,12 @@ public sealed class PreviewHostServer : IDisposable
     public int ShutdownState => Volatile.Read(ref _shutdownState);
 
     private IntPtr _hostHwnd = IntPtr.Zero;
+    private IntPtr _parentHwnd = IntPtr.Zero;
     private int _currentWidth = 400;
     private int _currentHeight = 300;
     private double _currentDpiX = 1.0;
     private double _currentDpiY = 1.0;
+
 
     public event Action? OnShutdownRequested;
 
@@ -236,8 +238,10 @@ public sealed class PreviewHostServer : IDisposable
                         {
                             RequestId = requestId,
                             ChildHwnd = _hostHwnd.ToInt64(),
+                            ParentHwnd = parentHwnd.ToInt64(),
                             PaneId = paneId
                         });
+
                     });
                     break;
 
@@ -279,7 +283,23 @@ public sealed class PreviewHostServer : IDisposable
                             return;
                         }
 
+                        if (_parentHwnd == IntPtr.Zero || _hostHwnd == IntPtr.Zero)
+                        {
+                            _ = SendMessageAsync(new PreviewFailedEventMessage
+                            {
+                                RequestId = captureReqId,
+                                PaneId = loadPaneId,
+                                Stage = "AttachNotReady",
+                                ErrorCode = -1,
+                                Message = "Parent or host window is not attached.",
+                                ElapsedMs = 0
+                            });
+                            return;
+                        }
+
+
                         var res = _previewSession.Load(filePath, clsid, _hostHwnd, loadWPx, loadHPx);
+
                         if (_activeRequestId != captureReqId)
                         {
                             return;
@@ -380,7 +400,9 @@ public sealed class PreviewHostServer : IDisposable
 
     private void AttachToParent(IntPtr parentHwnd, int widthPx, int heightPx, double dpiX, double dpiY)
     {
+        _parentHwnd = parentHwnd;
         _currentWidth = widthPx;
+
         _currentHeight = heightPx;
         _currentDpiX = dpiX;
         _currentDpiY = dpiY;
@@ -552,9 +574,13 @@ internal sealed class AttachedEventMessage : EventBase
     [JsonPropertyName("childHwnd")]
     public long ChildHwnd { get; set; }
 
+    [JsonPropertyName("parentHwnd")]
+    public long ParentHwnd { get; set; }
+
     [JsonPropertyName("paneId")]
     public string PaneId { get; set; } = "";
 }
+
 
 internal sealed class ResizedEventMessage : EventBase
 {

@@ -164,9 +164,13 @@ public sealed class AttachedEvent : IpcMessageBase
     [JsonPropertyName("childHwnd")]
     public long ChildHwnd { get; set; }
 
+    [JsonPropertyName("parentHwnd")]
+    public long ParentHwnd { get; set; }
+
     [JsonPropertyName("paneId")]
     public string PaneId { get; set; } = "";
 }
+
 
 public sealed class ResizedEvent : IpcMessageBase
 {

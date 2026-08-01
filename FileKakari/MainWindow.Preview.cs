@@ -1514,8 +1514,9 @@ public partial class MainWindow
             return false;
         }
 
+        // 1. Clear only built-in preview content (do not unload/collapse PreviewHostControl)
+        ClearBuiltInPreviewContent();
         PreviewLoadingBar.Visibility = Visibility.Visible;
-        ClearPreviewContent();
 
         var manager = await EnsurePreviewHostProcessManagerAsync().ConfigureAwait(true);
         if (manager is null)
@@ -1528,6 +1529,7 @@ public partial class MainWindow
             return false;
         }
 
+        // 2. Place Control in Container & Set Visible
         if (_previewHostControl is null)
         {
             _previewHostControl = new PreviewHostControl(manager);
@@ -1537,18 +1539,54 @@ public partial class MainWindow
         ApplyShellPreviewHostBackground();
         PreviewShellHostContainer.Visibility = Visibility.Visible;
 
-        var wPx = Math.Max(1, (int)PreviewShellHostContainer.ActualWidth);
-        var hPx = Math.Max(1, (int)PreviewShellHostContainer.ActualHeight);
+        // 3. Yield to Dispatcher to allow BuildWindowCore execution
+        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Loaded);
+
+
+        // 4. Wait asynchronously for HWND Attach completion (3 sec timeout)
+        var attachTimeout = TimeSpan.FromSeconds(3);
+        var isAttached = await _previewHostControl.WaitForAttachedAsync(attachTimeout, cancellationToken).ConfigureAwait(true);
+
+        if (!isAttached)
+        {
+            PreviewLoadingBar.Visibility = Visibility.Collapsed;
+            PreviewDiagnostics.Error("PreviewHost", $"ReplacePreviewWithPreviewHost failed requestId=\"{requestId}\" reason=\"AttachTimeout\"");
+            if (fileInfo is not null && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+            {
+                ReplacePreviewWithUnsupportedInfo(fileInfo, "PreviewHost attach timeout.", "");
+            }
+            return false;
+        }
+
+        // 5. Re-check request validity
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != _previewGeneration ||
+            !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal) ||
+            !IsPreviewPaneActuallyVisible)
+        {
+            PreviewDiagnostics.Info("PreviewHost", $"ReplacePreviewWithPreviewHost cancelled after attach. requestId=\"{requestId}\"");
+            return false;
+        }
+
+        // 6. Get actual physical pixels after Attach and layout pass
+        var wPx = Math.Max(1, (int)_previewHostControl.ActualWidth);
+        var hPx = Math.Max(1, (int)_previewHostControl.ActualHeight);
         if (wPx <= 1 || hPx <= 1)
         {
-            wPx = 800;
-            hPx = 600;
+            wPx = Math.Max(1, (int)PreviewShellHostContainer.ActualWidth);
+            hPx = Math.Max(1, (int)PreviewShellHostContainer.ActualHeight);
+            if (wPx <= 1 || hPx <= 1)
+            {
+                wPx = 800;
+                hPx = 600;
+            }
         }
 
         PreviewDiagnostics.Info("PreviewHost", $"Sending LoadPreviewAsync via PreviewHost. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx}");
         await manager.LoadPreviewAsync(_activePreviewHostPaneId, path, clsid.ToString("B"), wPx, hPx, requestId).ConfigureAwait(true);
         return true;
     }
+
 
     private void OnPreviewHostPreviewLoaded(PreviewLoadedEvent evt)
     {
@@ -1906,9 +1944,8 @@ public partial class MainWindow
         _ = ClearWebViewAsync("clear-non-video-content");
     }
 
-    private void ClearPreviewContent(bool keepWebView = false, bool failOnShellHostDisposeFailure = false)
+    private void ClearBuiltInPreviewContent(bool keepWebView = false)
     {
-        PreviewDiagnostics.Info("Preview", $"ClearPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration} keepWebView={keepWebView}");
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;
@@ -1916,12 +1953,24 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
         PreviewLoadingBar.Visibility = Visibility.Collapsed;
-        ClearShellPreviewHost(failOnShellHostDisposeFailure);
         if (!keepWebView)
         {
             _ = ClearWebViewAsync("preview-type-changed");
         }
     }
+
+    private void ClearAllPreviewContent(bool keepWebView = false, bool failOnShellHostDisposeFailure = false)
+    {
+        PreviewDiagnostics.Info("Preview", $"ClearAllPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration} keepWebView={keepWebView}");
+        ClearBuiltInPreviewContent(keepWebView);
+        ClearShellPreviewHost(failOnShellHostDisposeFailure);
+    }
+
+    private void ClearPreviewContent(bool keepWebView = false, bool failOnShellHostDisposeFailure = false)
+    {
+        ClearAllPreviewContent(keepWebView, failOnShellHostDisposeFailure);
+    }
+
 
     private void ShowPreviewMessage(string message)
     {

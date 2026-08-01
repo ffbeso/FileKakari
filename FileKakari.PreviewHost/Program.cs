@@ -58,13 +58,13 @@ internal static class Program
         });
 
         // Run Win32 Message Pump on STA Thread
-        while (!cts.Token.IsCancellationRequested)
+        while (server.ShutdownState != 2 && !serverTask.IsCompleted)
         {
             while (NativeMethods.PeekMessage(out var msg, IntPtr.Zero, 0, 0, NativeMethods.PM_REMOVE))
             {
                 if (msg.message == NativeMethods.WM_QUIT)
                 {
-                    cts.Cancel();
+                    server.RequestShutdown();
                     break;
                 }
 
@@ -73,15 +73,10 @@ internal static class Program
             }
 
             server.ProcessPendingStaActions();
-
-            if (serverTask.IsCompleted)
-            {
-                break;
-            }
-
             Thread.Sleep(10);
         }
 
         server.Dispose();
+
     }
 }

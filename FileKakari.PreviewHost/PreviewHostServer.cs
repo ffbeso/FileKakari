@@ -29,8 +29,10 @@ public sealed class PreviewHostServer : IDisposable
     private readonly ConcurrentQueue<Action> _staActionQueue = new();
     private readonly ShellPreviewSession _previewSession = new();
     private uint _staThreadId;
-    private int _isShutdownState;
+    private int _shutdownState = 0; // 0: Running, 1: ShutdownRequested, 2: ShutdownCompleted
     private string _activeRequestId = "";
+
+    public int ShutdownState => Volatile.Read(ref _shutdownState);
 
     private IntPtr _hostHwnd = IntPtr.Zero;
     private int _currentWidth = 400;
@@ -69,7 +71,7 @@ public sealed class PreviewHostServer : IDisposable
 
     private void EnqueueStaAction(Action action)
     {
-        if (Volatile.Read(ref _isShutdownState) != 0)
+        if (Volatile.Read(ref _shutdownState) != 0)
         {
             return;
         }
@@ -87,21 +89,28 @@ public sealed class PreviewHostServer : IDisposable
 
     public void RequestShutdown()
     {
-        if (Interlocked.CompareExchange(ref _isShutdownState, 1, 0) != 0)
+        if (Interlocked.CompareExchange(ref _shutdownState, 1, 0) != 0)
         {
             return;
         }
 
-        _cts.Cancel();
         _staActionQueue.Enqueue(() =>
         {
-            _previewSession.Unload();
-            if (_hostHwnd != IntPtr.Zero)
+            try
             {
-                NativeMethods.DestroyWindow(_hostHwnd);
-                _hostHwnd = IntPtr.Zero;
+                _previewSession.Unload();
+                if (_hostHwnd != IntPtr.Zero)
+                {
+                    NativeMethods.DestroyWindow(_hostHwnd);
+                    _hostHwnd = IntPtr.Zero;
+                }
             }
-            OnShutdownRequested?.Invoke();
+            finally
+            {
+                Interlocked.Exchange(ref _shutdownState, 2);
+                _cts.Cancel();
+                OnShutdownRequested?.Invoke();
+            }
         });
 
         if (_staThreadId != 0)
@@ -109,6 +118,7 @@ public sealed class PreviewHostServer : IDisposable
             NativeMethods.PostThreadMessage(_staThreadId, NativeMethods.WM_APP, IntPtr.Zero, IntPtr.Zero);
         }
     }
+
 
 
 
@@ -264,7 +274,7 @@ public sealed class PreviewHostServer : IDisposable
 
                     EnqueueStaAction(() =>
                     {
-                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        if (Volatile.Read(ref _shutdownState) != 0)
                         {
                             return;
                         }
@@ -305,7 +315,7 @@ public sealed class PreviewHostServer : IDisposable
                     var unloadPaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
-                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        if (Volatile.Read(ref _shutdownState) != 0)
                         {
                             return;
                         }
@@ -323,7 +333,7 @@ public sealed class PreviewHostServer : IDisposable
                     var showPaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
-                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        if (Volatile.Read(ref _shutdownState) != 0)
                         {
                             return;
                         }
@@ -337,7 +347,7 @@ public sealed class PreviewHostServer : IDisposable
                     var hidePaneId = root.GetProperty("paneId").GetString() ?? "";
                     EnqueueStaAction(() =>
                     {
-                        if (Volatile.Read(ref _isShutdownState) != 0)
+                        if (Volatile.Read(ref _shutdownState) != 0)
                         {
                             return;
                         }

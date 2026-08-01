@@ -10,6 +10,8 @@ public partial class MainWindow
 {
     private void RunPreviewIntegrationTestIfNeeded()
     {
+        RunPreviewHostDiagnosticTestIfNeeded();
+
 #if DEBUG
         if (Environment.GetEnvironmentVariable("FILEKAKARI_AUTO_TEST") != "1")
         {
@@ -112,4 +114,18 @@ public partial class MainWindow
         });
 #endif
     }
+
+    private void RunPreviewHostDiagnosticTestIfNeeded()
+    {
+        var testFilePath = Environment.GetEnvironmentVariable("FILEKAKARI_PREVIEWHOST_TEST_FILE");
+        if (string.IsNullOrWhiteSpace(testFilePath))
+        {
+            return;
+        }
+
+        SetPreviewPaneVisibleByUser(true);
+        _ = FileKakari.Preview.PreviewHostTestRunner.TryRunDiagnosticTestAsync(PreviewHostTestContainer);
+    }
+
+
 }

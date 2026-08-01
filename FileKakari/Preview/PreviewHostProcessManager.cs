@@ -75,7 +75,9 @@ public sealed class PreviewHostProcessManager : IDisposable
             FileName = exePath,
             Arguments = $"--pipe \"{_pipeName}\" --parent-pid {currentPid} --token \"{_sessionToken}\"",
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         try
@@ -87,12 +89,32 @@ public sealed class PreviewHostProcessManager : IDisposable
                 return false;
             }
 
+            _process.OutputDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    PreviewDiagnostics.Info("PreviewHostStdOut", e.Data);
+                    PerfLog.Write($"[PreviewHostHostLog] {e.Data}");
+                }
+            };
+            _process.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    PreviewDiagnostics.Error("PreviewHostStdErr", e.Data);
+                    PerfLog.Write($"[PreviewHostHostErr] {e.Data}");
+                }
+            };
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
+
             _process.EnableRaisingEvents = true;
             _process.Exited += (s, e) =>
             {
                 PreviewDiagnostics.Info("PreviewHost", $"PreviewHost process exited. Code={_process.ExitCode}");
                 OnExited?.Invoke();
             };
+
 
             _jobObject.AddProcess(_process);
 

@@ -213,7 +213,9 @@ public partial class MainWindow
             ClearFileTabHover();
             e.Effects = DragDropEffects.Move;
             e.Handled = true;
-            ShowTabInsertIndicator(TabsControl, GetMainTabEndInsertDropTarget());
+
+            var insertTarget = GetMainTabDragInsertDropTarget(e);
+            ShowTabInsertIndicator(TabsControl, insertTarget);
 
             var targetSessionSub = GetDropTargetSession(e);
             if (targetSessionSub is not null)
@@ -226,6 +228,7 @@ public partial class MainWindow
             }
             return;
         }
+
 
         if (GetDroppedSession(e) is not null)
         {
@@ -400,10 +403,14 @@ public partial class MainWindow
             e.Handled = true;
             var subtab = draggedSubTab;
             var pane = draggedSubTabPane;
+            var insertTarget = GetMainTabDragInsertDropTarget(e);
+            var targetInsertIndex = insertTarget.IsInsert ? insertTarget.InsertIndex : _workspaceSessions.Count;
+
             ClearSubTabDragState();
-            await PromoteSubTabToMainTabAsync(pane, subtab);
+            await PromoteSubTabToMainTabAsync(pane, subtab, targetInsertIndex);
             return;
         }
+
 
         var draggedSession = GetDroppedSession(e);
         var targetSession = GetDropTargetSession(e);

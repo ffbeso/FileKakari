@@ -4275,7 +4275,7 @@ public partial class MainWindow : Window
         return Math.Clamp(targetMoveIndex, 0, pane.Tabs.Count);
     }
 
-    private async Task PromoteSubTabToMainTabAsync(FolderPane pane, FolderTab tab)
+    private async Task PromoteSubTabToMainTabAsync(FolderPane pane, FolderTab tab, int targetInsertIndex = -1)
     {
         if (_activeWorkspaceSession is not { } session)
         {
@@ -4341,11 +4341,19 @@ public partial class MainWindow : Window
             newSession.RegisterTabState(representativeTab.State);
         }
 
-        // 7. Add new session to _workspaceSessions and switch to it
+        // 7. Add new session to _workspaceSessions at calculated index and switch to it
         _isSwitchingTabs = true;
         try
         {
-            _workspaceSessions.Add(newSession);
+            if (targetInsertIndex >= 0)
+            {
+                var clampedIndex = Math.Clamp(targetInsertIndex, 0, _workspaceSessions.Count);
+                _workspaceSessions.Insert(clampedIndex, newSession);
+            }
+            else
+            {
+                _workspaceSessions.Add(newSession);
+            }
             _activeWorkspaceSession = newSession;
             UpdateActiveWorkspaceSessionUi(newSession);
             ApplyWorkspaceSessionToFolderTabs();
@@ -4356,6 +4364,7 @@ public partial class MainWindow : Window
         {
             _isSwitchingTabs = false;
         }
+
 
         // 8. Capture local state and restore
         _workspaceLocalState.Capture(markDirty: true, reason: "tabs");

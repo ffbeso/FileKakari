@@ -10,9 +10,8 @@ public partial class MainWindow
 {
     private void RunPreviewIntegrationTestIfNeeded()
     {
-        RunPreviewHostDiagnosticTestIfNeeded();
-
 #if DEBUG
+
         if (Environment.GetEnvironmentVariable("FILEKAKARI_AUTO_TEST") != "1")
         {
             return;
@@ -96,13 +95,14 @@ public partial class MainWindow
             await Dispatcher.InvokeAsync(async () =>
             {
                 var monacoClsid = new Guid("D8034CFA-F34B-41FE-AD45-62FCBB52A6DA");
-                await ReplacePreviewWithShellAsync(
+                await ReplacePreviewWithPreviewHostAsync(
                     "C:\\non_existent_file_xyz.bat",
                     monacoClsid,
                     null,
                     _previewGeneration,
                     "auto-test",
                     CancellationToken.None);
+
             });
             await Task.Delay(1500);
 
@@ -114,18 +114,4 @@ public partial class MainWindow
         });
 #endif
     }
-
-    private void RunPreviewHostDiagnosticTestIfNeeded()
-    {
-        var testFilePath = Environment.GetEnvironmentVariable("FILEKAKARI_PREVIEWHOST_TEST_FILE");
-        if (string.IsNullOrWhiteSpace(testFilePath))
-        {
-            return;
-        }
-
-        SetPreviewPaneVisibleByUser(true);
-        _ = FileKakari.Preview.PreviewHostTestRunner.TryRunDiagnosticTestAsync(PreviewHostTestContainer);
-    }
-
-
 }

@@ -637,7 +637,9 @@ public partial class MainWindow : Window
             SyncPreviewPaneSizeToSettings(_settingsService.Settings);
             CancelPreviewLoad();
             ClearWebViewForShutdown();
+            _previewHostProcessManager?.Dispose();
             _deviceChangeService.Dispose();
+
             _folderWatchService.Dispose();
             _scrollBehavior.StopAutoScroll();
             _statusSummaryCoordinator.Dispose();

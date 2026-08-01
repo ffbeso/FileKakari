@@ -4,8 +4,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using FileKakari.Preview;
 
 namespace FileKakari;
+
 
 public partial class MainWindow
 {
@@ -85,6 +87,11 @@ public partial class MainWindow
     private const double MinFileListPaneSize = 180;
     private const double PreviewSplitterSize = 5;
     private static readonly Guid WindowsTxtPreviewerClsid = new("1531D583-8375-4D3F-B5FB-D23BBD169F22");
+
+    private PreviewHostProcessManager? _previewHostProcessManager;
+    private PreviewHostControl? _previewHostControl;
+    private string _activePreviewHostPaneId = "primary";
+
 
     private bool IsPreviewPaneEnabledByUser => _settingsService.Settings.IsPreviewPaneVisible == true;
 
@@ -1309,8 +1316,9 @@ public partial class MainWindow
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
                 PreviewDiagnostics.Info("Preview", $"Provider result requestId=\"{requestId}\" kind=\"Shell\" path=\"{result.FileInfo?.FullPath ?? ""}\" clsid=\"{result.Clsid.Value:B}\" generation={generation}");
-                displayed = await ReplacePreviewWithShellAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, requestId, cancellationToken);
+                displayed = await ReplacePreviewWithPreviewHostAsync(result.FileInfo?.FullPath ?? "", result.Clsid.Value, result.FileInfo, generation, requestId, cancellationToken);
                 break;
+
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.WebView && result.FileInfo is not null:
                 PreviewDiagnostics.Info("Preview", $"Provider result requestId=\"{requestId}\" kind=\"WebView\" path=\"{result.FileInfo.FullPath}\" generation={generation}");
@@ -1467,7 +1475,109 @@ public partial class MainWindow
         PreviewUnsupportedCard.Visibility = Visibility.Visible;
     }
 
+    private async Task<PreviewHostProcessManager?> EnsurePreviewHostProcessManagerAsync()
+
+    {
+        if (_previewHostProcessManager is not null)
+        {
+            return _previewHostProcessManager;
+        }
+
+        var manager = new PreviewHostProcessManager();
+        manager.OnPreviewLoaded += OnPreviewHostPreviewLoaded;
+        manager.OnPreviewFailed += OnPreviewHostPreviewFailed;
+
+        var started = await manager.StartAsync().ConfigureAwait(true);
+        if (!started)
+        {
+            PreviewDiagnostics.Error("PreviewHost", "Failed to start PreviewHost process.");
+            manager.Dispose();
+            return null;
+        }
+
+        _previewHostProcessManager = manager;
+        return _previewHostProcessManager;
+    }
+
+    private async Task<bool> ReplacePreviewWithPreviewHostAsync(
+        string path,
+        Guid clsid,
+        FilePreviewInfo? fileInfo,
+        int generation,
+        string requestId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (generation != _previewGeneration || !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+        {
+            PreviewDiagnostics.Info("PreviewHost", $"ReplacePreviewWithPreviewHost skipped requestId=\"{requestId}\" reason=\"generation-mismatch\" current={_previewGeneration} requested={generation} path=\"{path}\"");
+            return false;
+        }
+
+        PreviewLoadingBar.Visibility = Visibility.Visible;
+        ClearPreviewContent();
+
+        var manager = await EnsurePreviewHostProcessManagerAsync().ConfigureAwait(true);
+        if (manager is null)
+        {
+            PreviewLoadingBar.Visibility = Visibility.Collapsed;
+            if (fileInfo is not null)
+            {
+                ReplacePreviewWithUnsupportedInfo(fileInfo, "PreviewHost process could not be started.", "");
+            }
+            return false;
+        }
+
+        if (_previewHostControl is null)
+        {
+            _previewHostControl = new PreviewHostControl(manager);
+            PreviewShellHostContainer.Child = _previewHostControl;
+        }
+
+        ApplyShellPreviewHostBackground();
+        PreviewShellHostContainer.Visibility = Visibility.Visible;
+
+        var wPx = Math.Max(1, (int)PreviewShellHostContainer.ActualWidth);
+        var hPx = Math.Max(1, (int)PreviewShellHostContainer.ActualHeight);
+        if (wPx <= 1 || hPx <= 1)
+        {
+            wPx = 800;
+            hPx = 600;
+        }
+
+        PreviewDiagnostics.Info("PreviewHost", $"Sending LoadPreviewAsync via PreviewHost. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx}");
+        await manager.LoadPreviewAsync(_activePreviewHostPaneId, path, clsid.ToString("B"), wPx, hPx, requestId).ConfigureAwait(true);
+        return true;
+    }
+
+    private void OnPreviewHostPreviewLoaded(PreviewLoadedEvent evt)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
+            {
+                PreviewLoadingBar.Visibility = Visibility.Collapsed;
+                PreviewDiagnostics.Info("PreviewHost", $"PreviewLoaded confirmed requestId=\"{evt.RequestId}\" elapsed={evt.ElapsedMs}ms");
+            }
+        });
+    }
+
+    private void OnPreviewHostPreviewFailed(PreviewFailedEvent evt)
+    {
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
+            {
+                PreviewLoadingBar.Visibility = Visibility.Collapsed;
+                PreviewDiagnostics.Error("PreviewHost", $"PreviewFailed stage=\"{evt.Stage}\" code=0x{evt.ErrorCode:X8} msg=\"{evt.Message}\"");
+                ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
+            }
+        });
+    }
+
+
     private async Task<bool> ReplacePreviewWithShellAsync(
+
         string path,
         Guid clsid,
         FilePreviewInfo? fileInfo,
@@ -1688,7 +1798,12 @@ public partial class MainWindow
 
     private void ClearShellPreviewHost(bool failOnDisposeFailure = false)
     {
-        if (PreviewShellHostContainer.Child is IDisposable disposableHost)
+        if (_previewHostProcessManager is not null)
+        {
+            _ = _previewHostProcessManager.UnloadPreviewAsync(_activePreviewHostPaneId);
+        }
+
+        if (PreviewShellHostContainer.Child is IDisposable disposableHost && !ReferenceEquals(disposableHost, _previewHostControl))
         {
             PreviewDiagnostics.Verbose("PreviewShell", "ClearShellPreviewHost disposing active host");
             try
@@ -1706,11 +1821,10 @@ public partial class MainWindow
             }
         }
 
-
-        PreviewShellHostContainer.Child = null;
         ApplyShellPreviewHostBackground();
         PreviewShellHostContainer.Visibility = Visibility.Collapsed;
     }
+
 
     private void ApplyShellPreviewHostBackground()
     {
@@ -1998,8 +2112,9 @@ public partial class MainWindow
             if (!isMedia && ShellPreviewHandlerRegistry.TryGetPreviewHandlerClsid(path, out var clsid))
             {
                 PreviewDiagnostics.Info("PreviewWebView", $"Fallback to provider=\"ShellPreviewHandlerProvider\" requestId=\"{requestId}\" reason=\"{ex.Message}\" path=\"{path}\"");
-                await ReplacePreviewWithShellAsync(path, clsid, fileInfo, generation, requestId, CancellationToken.None);
+                await ReplacePreviewWithPreviewHostAsync(path, clsid, fileInfo, generation, requestId, CancellationToken.None);
             }
+
             else
             {
                 PreviewDiagnostics.Info("PreviewWebView", $"Fallback to unsupported requestId=\"{requestId}\" reason=\"{ex.Message}\" path=\"{path}\" isMedia={isMedia}");

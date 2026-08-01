@@ -2247,14 +2247,10 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center" />
                         </Grid>
-                        <Grid x:Name="PreviewHostTestContainer"
-                              Margin="0"
-                              Panel.ZIndex="999"
-                              Background="{DynamicResource PanelBackgroundBrush}"
-                              Visibility="Collapsed" />
                     </Grid>
                 </Grid>
             </Border>
+
 
             <ContentControl x:Name="InternalPageHost"
                             Grid.RowSpan="3"

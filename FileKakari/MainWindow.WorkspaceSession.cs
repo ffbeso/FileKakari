@@ -91,7 +91,7 @@ public partial class MainWindow
         try
         {
             _workspaceSessions.Add(workspaceSession);
-            _activeWorkspaceSession = workspaceSession;
+            ResetToSingleWorkspaceDisplay(workspaceSession, "workspace-file-open");
             UpdateActiveWorkspaceSessionUi(workspaceSession);
             SelectWorkspaceSession(workspaceSession);
             ApplyWorkspaceSessionToFolderTabs();

@@ -238,7 +238,7 @@ internal static class NativeMethods
     }
 
     [ComImport]
-    [Guid("b722edd8-2767-4019-846e-15c985070f44")]
+    [Guid("b7d14566-0509-4cce-a71f-0a554233bd9b")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IInitializeWithFile
     {

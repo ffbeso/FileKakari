@@ -152,7 +152,7 @@ public sealed class PreviewHostServer : IDisposable
             await _pipeServer.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
 
             _reader = new StreamReader(_pipeServer, Encoding.UTF8);
-            _writer = new StreamWriter(_pipeServer, Encoding.UTF8) { AutoFlush = true };
+            _writer = new StreamWriter(_pipeServer, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             // Read Initialize Command
             var line = await _reader.ReadLineAsync(_cts.Token).ConfigureAwait(false);
@@ -416,7 +416,8 @@ public sealed class PreviewHostServer : IDisposable
         NativeMethods.SetParent(_hostHwnd, parentHwnd);
 
         // 2. Remove WS_POPUP, add WS_CHILD | WS_VISIBLE
-        var currentStyle = NativeMethods.GetWindowLongPtr(_hostHwnd, NativeMethods.GWL_STYLE).ToInt32();
+        var currentStyle = unchecked(
+            (int)NativeMethods.GetWindowLongPtr(_hostHwnd, NativeMethods.GWL_STYLE).ToInt64());
         currentStyle &= ~NativeMethods.WS_POPUP;
         currentStyle |= (NativeMethods.WS_CHILD | NativeMethods.WS_VISIBLE | NativeMethods.WS_CLIPSIBLINGS | NativeMethods.WS_CLIPCHILDREN);
         NativeMethods.SetWindowLongPtr(_hostHwnd, NativeMethods.GWL_STYLE, new IntPtr(currentStyle));
@@ -527,6 +528,7 @@ public sealed class PreviewHostServer : IDisposable
         try
         {
             await _writer.WriteLineAsync(json.AsMemory(), _cts.Token).ConfigureAwait(false);
+            await _writer.FlushAsync(_cts.Token).ConfigureAwait(false);
         }
         catch { }
         finally

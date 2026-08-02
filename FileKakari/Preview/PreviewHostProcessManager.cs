@@ -123,7 +123,7 @@ public sealed class PreviewHostProcessManager : IDisposable
             await _pipeClient.ConnectAsync(3000, _cts.Token).ConfigureAwait(false);
 
             _reader = new StreamReader(_pipeClient, Encoding.UTF8);
-            _writer = new StreamWriter(_pipeClient, Encoding.UTF8) { AutoFlush = true };
+            _writer = new StreamWriter(_pipeClient, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             // Send Initialize Command
             var initCmd = new InitializeCommand
@@ -175,6 +175,7 @@ public sealed class PreviewHostProcessManager : IDisposable
         try
         {
             await _writer.WriteLineAsync(json.AsMemory(), _cts.Token).ConfigureAwait(false);
+            await _writer.FlushAsync(_cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

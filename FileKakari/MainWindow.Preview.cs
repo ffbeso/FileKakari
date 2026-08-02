@@ -1514,22 +1514,25 @@ public partial class MainWindow
             return false;
         }
 
-        // 1. Clear only built-in preview content (do not unload/collapse PreviewHostControl)
+        // 1. Clear only built-in preview content
         ClearBuiltInPreviewContent();
-        PreviewLoadingBar.Visibility = Visibility.Visible;
 
+        // 2. Set loading request ID owner
+        SetLoadingRequestId(requestId);
+
+        // 3. Ensure ProcessManager is started
         var manager = await EnsurePreviewHostProcessManagerAsync().ConfigureAwait(true);
         if (manager is null)
         {
-            PreviewLoadingBar.Visibility = Visibility.Collapsed;
+            ClearLoadingRequestId(requestId);
             if (fileInfo is not null)
             {
-                ReplacePreviewWithUnsupportedInfo(fileInfo, "PreviewHost process could not be started.", "");
+                ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));
             }
             return false;
         }
 
-        // 2. Place Control in Container & Set Visible
+        // 4. Place Control in Container & Set Visible
         if (_previewHostControl is null)
         {
             _previewHostControl = new PreviewHostControl(manager);
@@ -1539,36 +1542,33 @@ public partial class MainWindow
         ApplyShellPreviewHostBackground();
         PreviewShellHostContainer.Visibility = Visibility.Visible;
 
-        // 3. Yield to Dispatcher to allow BuildWindowCore execution
-        await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Loaded);
-
-
-        // 4. Wait asynchronously for HWND Attach completion (3 sec timeout)
+        // 5. Ensure Attached (reuse existing attach or explicit re-attach)
         var attachTimeout = TimeSpan.FromSeconds(3);
-        var isAttached = await _previewHostControl.WaitForAttachedAsync(attachTimeout, cancellationToken).ConfigureAwait(true);
+        var isAttached = await _previewHostControl.EnsureAttachedAsync(requestId, attachTimeout, cancellationToken).ConfigureAwait(true);
 
         if (!isAttached)
         {
-            PreviewLoadingBar.Visibility = Visibility.Collapsed;
+            ClearLoadingRequestId(requestId);
             PreviewDiagnostics.Error("PreviewHost", $"ReplacePreviewWithPreviewHost failed requestId=\"{requestId}\" reason=\"AttachTimeout\"");
             if (fileInfo is not null && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
-                ReplacePreviewWithUnsupportedInfo(fileInfo, "PreviewHost attach timeout.", "");
+                ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));
             }
             return false;
         }
 
-        // 5. Re-check request validity
+        // 6. Re-check request validity
         cancellationToken.ThrowIfCancellationRequested();
         if (generation != _previewGeneration ||
             !string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal) ||
             !IsPreviewPaneActuallyVisible)
         {
+            ClearLoadingRequestId(requestId);
             PreviewDiagnostics.Info("PreviewHost", $"ReplacePreviewWithPreviewHost cancelled after attach. requestId=\"{requestId}\"");
             return false;
         }
 
-        // 6. Get actual physical pixels after Attach and layout pass
+        // 7. Get actual physical pixels
         var wPx = Math.Max(1, (int)_previewHostControl.ActualWidth);
         var hPx = Math.Max(1, (int)_previewHostControl.ActualHeight);
         if (wPx <= 1 || hPx <= 1)
@@ -1582,9 +1582,22 @@ public partial class MainWindow
             }
         }
 
-        PreviewDiagnostics.Info("PreviewHost", $"Sending LoadPreviewAsync via PreviewHost. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx}");
-        await manager.LoadPreviewAsync(_activePreviewHostPaneId, path, clsid.ToString("B"), wPx, hPx, requestId).ConfigureAwait(true);
-        return true;
+        try
+        {
+            PreviewDiagnostics.Info("PreviewHost", $"Sending LoadPreviewAsync via PreviewHost. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx}");
+            await manager.LoadPreviewAsync(_activePreviewHostPaneId, path, clsid.ToString("B"), wPx, hPx, requestId).ConfigureAwait(true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ClearLoadingRequestId(requestId);
+            PreviewDiagnostics.Error("PreviewHost", $"LoadPreviewAsync exception requestId=\"{requestId}\" msg=\"{ex.Message}\"");
+            if (fileInfo is not null && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+            {
+                ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));
+            }
+            return false;
+        }
     }
 
 
@@ -1592,9 +1605,9 @@ public partial class MainWindow
     {
         Dispatcher.InvokeAsync(() =>
         {
+            ClearLoadingRequestId(evt.RequestId);
             if (string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
-                PreviewLoadingBar.Visibility = Visibility.Collapsed;
                 PreviewDiagnostics.Info("PreviewHost", $"PreviewLoaded confirmed requestId=\"{evt.RequestId}\" elapsed={evt.ElapsedMs}ms");
             }
         });
@@ -1604,14 +1617,15 @@ public partial class MainWindow
     {
         Dispatcher.InvokeAsync(() =>
         {
+            ClearLoadingRequestId(evt.RequestId);
             if (string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
-                PreviewLoadingBar.Visibility = Visibility.Collapsed;
                 PreviewDiagnostics.Error("PreviewHost", $"PreviewFailed stage=\"{evt.Stage}\" code=0x{evt.ErrorCode:X8} msg=\"{evt.Message}\"");
                 ReplacePreviewWithMessage(_text.Get("PreviewUnsupported"));
             }
         });
     }
+
 
 
     private async Task<bool> ReplacePreviewWithShellAsync(
@@ -1944,6 +1958,25 @@ public partial class MainWindow
         _ = ClearWebViewAsync("clear-non-video-content");
     }
 
+    private string? _activePreviewLoadingRequestId;
+
+    private void SetLoadingRequestId(string requestId)
+    {
+        _activePreviewLoadingRequestId = requestId;
+        PreviewLoadingBar.Visibility = Visibility.Visible;
+        PreviewDiagnostics.Info("Preview", $"Loading owner set requestId=\"{requestId}\"");
+    }
+
+    private void ClearLoadingRequestId(string? requestId = null)
+    {
+        if (string.IsNullOrEmpty(requestId) || string.Equals(requestId, _activePreviewLoadingRequestId, StringComparison.Ordinal))
+        {
+            PreviewLoadingBar.Visibility = Visibility.Collapsed;
+            PreviewDiagnostics.Info("Preview", $"Loading owner cleared requestId=\"{requestId}\" (previousOwner=\"{_activePreviewLoadingRequestId}\")");
+            _activePreviewLoadingRequestId = null;
+        }
+    }
+
     private void ClearBuiltInPreviewContent(bool keepWebView = false)
     {
         PreviewTextBox.Text = "";
@@ -1952,12 +1985,13 @@ public partial class MainWindow
         PreviewImageScrollViewer.Visibility = Visibility.Collapsed;
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
-        PreviewLoadingBar.Visibility = Visibility.Collapsed;
+        ClearLoadingRequestId();
         if (!keepWebView)
         {
             _ = ClearWebViewAsync("preview-type-changed");
         }
     }
+
 
     private void ClearAllPreviewContent(bool keepWebView = false, bool failOnShellHostDisposeFailure = false)
     {

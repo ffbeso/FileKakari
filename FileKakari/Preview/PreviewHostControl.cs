@@ -42,18 +42,96 @@ public sealed class PreviewHostControl : HwndHost
         if (evt.ParentHwnd == _currentChildHwndValue && evt.ChildHwnd != 0)
         {
             IsAttached = true;
+            PreviewDiagnostics.Info("PreviewHostControl", $"AttachedEvent accepted. parentHwnd=0x{evt.ParentHwnd:X} childHwnd=0x{evt.ChildHwnd:X}");
             _attachTcs?.TrySetResult(true);
+        }
+        else
+        {
+            PreviewDiagnostics.Info("PreviewHostControl", $"AttachedEvent rejected (mismatch). evt.ParentHwnd=0x{evt.ParentHwnd:X} current=0x{_currentChildHwndValue:X}");
         }
         Dispatcher.Invoke(InvalidateMeasure);
     }
 
     private void ProcessManager_OnExited()
     {
+        ResetIsAttached("ProcessManager_OnExited");
+    }
+
+    public void ResetIsAttached(string reason)
+    {
+        if (IsAttached || _currentChildHwndValue != 0)
+        {
+            PreviewDiagnostics.Info("PreviewHostControl", $"IsAttached reset reason=\"{reason}\" previousIsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X}");
+        }
         IsAttached = false;
         _attachTcs?.TrySetResult(false);
     }
 
-    public async System.Threading.Tasks.Task<bool> WaitForAttachedAsync(TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
+    private Task<bool>? _pendingAttachTask;
+
+    public Task<bool> EnsureAttachedAsync(string requestId, TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
+    {
+        if (IsAttached && _currentChildHwndValue != 0)
+        {
+            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] existing attach reused. hwnd=0x{_currentChildHwndValue:X}");
+            return Task.FromResult(true);
+        }
+
+        lock (this)
+        {
+            if (_pendingAttachTask is not null && !_pendingAttachTask.IsCompleted)
+            {
+                PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] attach task deduplicated.");
+                return _pendingAttachTask;
+            }
+
+            _pendingAttachTask = ExecuteEnsureAttachedInternalAsync(requestId, timeout, cancellationToken);
+            return _pendingAttachTask;
+        }
+    }
+
+    private async Task<bool> ExecuteEnsureAttachedInternalAsync(string requestId, TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
+    {
+        PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] EnsureAttached start. IsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X}");
+
+        if (IsAttached && _currentChildHwndValue != 0)
+        {
+            return true;
+        }
+
+        _attachTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        var source = PresentationSource.FromVisual(this);
+        if (source?.CompositionTarget is not null)
+        {
+            scaleX = source.CompositionTarget.TransformToDevice.M11;
+            scaleY = source.CompositionTarget.TransformToDevice.M22;
+        }
+
+        // If container HWND already exists, send AttachCommand explicitly
+        if (_currentChildHwndValue != 0)
+        {
+            var pixelWidth = Math.Max(1, (int)Math.Ceiling(ActualWidth * scaleX));
+            var pixelHeight = Math.Max(1, (int)Math.Ceiling(ActualHeight * scaleY));
+
+            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] explicit attach sent. hwnd=0x{_currentChildHwndValue:X} size={pixelWidth}x{pixelHeight}");
+            await _processManager.SendMessageAsync(new AttachCommand
+            {
+                ParentHwnd = _currentChildHwndValue,
+                PaneId = "active-pane",
+                WidthPx = pixelWidth,
+                HeightPx = pixelHeight,
+                DpiX = scaleX,
+                DpiY = scaleY
+            }).ConfigureAwait(false);
+        }
+
+        return await WaitForAttachedAsync(requestId, timeout, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<bool> WaitForAttachedAsync(string requestId, TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
     {
         if (IsAttached)
         {
@@ -73,20 +151,23 @@ public sealed class PreviewHostControl : HwndHost
         {
             using (linkedCts.Token.Register(() => tcs.TrySetCanceled()))
             {
-                return await tcs.Task.ConfigureAwait(false);
+                var res = await tcs.Task.ConfigureAwait(false);
+                if (res)
+                {
+                    PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] Attach completed successfully.");
+                }
+                return res;
             }
         }
         catch (OperationCanceledException)
         {
             if (timeoutCts.IsCancellationRequested)
             {
-                PreviewDiagnostics.Error("PreviewHostControl", "Attach timeout waiting for AttachedEvent.");
+                PreviewDiagnostics.Error("PreviewHostControl", $"[req=\"{requestId}\"] Attach timeout.");
             }
             return false;
         }
     }
-
-
 
     protected override HandleRef BuildWindowCore(HandleRef hwndParent)
     {
@@ -124,6 +205,7 @@ public sealed class PreviewHostControl : HwndHost
         if (hwndChild != IntPtr.Zero)
         {
             _currentChildHwndValue = hwndChild.ToInt64();
+            PreviewDiagnostics.Info("PreviewHostControl", $"BuildWindowCore created container HWND=0x{_currentChildHwndValue:X}");
             // Send Attach IPC to PreviewHost with container HWND and Physical Pixels
             _ = _processManager.SendMessageAsync(new AttachCommand
             {
@@ -141,8 +223,7 @@ public sealed class PreviewHostControl : HwndHost
 
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
-        IsAttached = false;
-        _attachTcs?.TrySetResult(false);
+        ResetIsAttached("DestroyWindowCore");
         _currentChildHwndValue = 0;
         _ = _processManager.SendMessageAsync(new HideCommand { PaneId = "active-pane" });
         if (hwnd.Handle != IntPtr.Zero)
@@ -150,6 +231,7 @@ public sealed class PreviewHostControl : HwndHost
             DestroyWindow(hwnd.Handle);
         }
     }
+
 
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

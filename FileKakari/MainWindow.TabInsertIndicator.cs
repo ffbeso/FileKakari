@@ -142,27 +142,12 @@ public partial class MainWindow
             }
         }
 
-        public bool Update(Point insertPoint, Rect tabBarRect, TabStripOrientation orientation)
+        public void Update(Point insertPoint, Rect tabBarRect, TabStripOrientation orientation)
         {
-            var isHorizontal = orientation == TabStripOrientation.Horizontal;
-            var newTargetCoord = isHorizontal ? insertPoint.X : insertPoint.Y;
-            var oldTargetCoord = isHorizontal ? _insertPoint.X : _insertPoint.Y;
-
-            if (_orientation == orientation
-                && Math.Abs(newTargetCoord - oldTargetCoord) < 0.5
-                && Math.Abs(_tabBarRect.Left - tabBarRect.Left) < 0.5
-                && Math.Abs(_tabBarRect.Top - tabBarRect.Top) < 0.5
-                && Math.Abs(_tabBarRect.Width - tabBarRect.Width) < 0.5
-                && Math.Abs(_tabBarRect.Height - tabBarRect.Height) < 0.5)
-            {
-                return false;
-            }
-
             _insertPoint = insertPoint;
             _tabBarRect = tabBarRect;
             _orientation = orientation;
             InvalidateVisual();
-            return true;
         }
 
 

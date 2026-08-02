@@ -255,7 +255,8 @@ public sealed class PreviewHostServer : IDisposable
                     EnqueueStaAction(() =>
                     {
                         ResizeHost(newWPx, newHPx, resDpiX, resDpiY);
-                        _previewSession.Resize(newWPx, newHPx);
+                        var (clientWidthPx, clientHeightPx) = GetHostClientSize(newWPx, newHPx);
+                        _previewSession.Resize(clientWidthPx, clientHeightPx);
                         _ = SendMessageAsync(new ResizedEventMessage
                         {
                             RequestId = requestId,
@@ -298,7 +299,8 @@ public sealed class PreviewHostServer : IDisposable
                         }
 
 
-                        var res = _previewSession.Load(filePath, clsid, _hostHwnd, loadWPx, loadHPx);
+                        var (clientWidthPx, clientHeightPx) = GetHostClientSize(loadWPx, loadHPx);
+                        var res = _previewSession.Load(filePath, clsid, _hostHwnd, clientWidthPx, clientHeightPx);
 
                         if (_activeRequestId != captureReqId)
                         {
@@ -446,6 +448,16 @@ public sealed class PreviewHostServer : IDisposable
         }
     }
 
+    private (int WidthPx, int HeightPx) GetHostClientSize(int fallbackWidthPx, int fallbackHeightPx)
+    {
+        if (_hostHwnd != IntPtr.Zero && NativeMethods.GetClientRect(_hostHwnd, out var rect))
+        {
+            return (Math.Max(1, rect.Right - rect.Left), Math.Max(1, rect.Bottom - rect.Top));
+        }
+
+        return (Math.Max(1, fallbackWidthPx), Math.Max(1, fallbackHeightPx));
+    }
+
     private void ShowHost(bool show)
     {
         if (_hostHwnd != IntPtr.Zero)
@@ -497,12 +509,6 @@ public sealed class PreviewHostServer : IDisposable
                     var bgBrush = NativeMethods.CreateSolidBrush(0x001E1E1E);
                     NativeMethods.FillRect(hdc, ref rect, bgBrush);
                     NativeMethods.DeleteObject(bgBrush);
-
-                    // Render Dummy Text for Stage P1-A Verification
-                    NativeMethods.SetBkMode(hdc, NativeMethods.TRANSPARENT);
-                    NativeMethods.SetTextColor(hdc, 0x0000FF00); // Lime Green
-                    var label = $"[Stage P1-A Dummy PreviewHost]\nPID: {Process.GetCurrentProcess().Id}\nSize: {_currentWidth}x{_currentHeight} px\nDPI: {_currentDpiX * 100:F0}%";
-                    NativeMethods.DrawText(hdc, label, label.Length, ref rect, NativeMethods.DT_CENTER | NativeMethods.DT_VCENTER | NativeMethods.DT_SINGLELINE);
 
                     NativeMethods.EndPaint(hWnd, ref ps);
                     return IntPtr.Zero;

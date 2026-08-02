@@ -1568,13 +1568,22 @@ public partial class MainWindow
             return false;
         }
 
-        // 7. Get actual physical pixels
-        var wPx = Math.Max(1, (int)_previewHostControl.ActualWidth);
-        var hPx = Math.Max(1, (int)_previewHostControl.ActualHeight);
+        // 7. Convert the WPF layout size (DIPs) to physical pixels once.
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        var source = PresentationSource.FromVisual(_previewHostControl);
+        if (source?.CompositionTarget is not null)
+        {
+            scaleX = source.CompositionTarget.TransformToDevice.M11;
+            scaleY = source.CompositionTarget.TransformToDevice.M22;
+        }
+
+        var wPx = Math.Max(1, (int)Math.Ceiling(_previewHostControl.ActualWidth * scaleX));
+        var hPx = Math.Max(1, (int)Math.Ceiling(_previewHostControl.ActualHeight * scaleY));
         if (wPx <= 1 || hPx <= 1)
         {
-            wPx = Math.Max(1, (int)PreviewShellHostContainer.ActualWidth);
-            hPx = Math.Max(1, (int)PreviewShellHostContainer.ActualHeight);
+            wPx = Math.Max(1, (int)Math.Ceiling(PreviewShellHostContainer.ActualWidth * scaleX));
+            hPx = Math.Max(1, (int)Math.Ceiling(PreviewShellHostContainer.ActualHeight * scaleY));
             if (wPx <= 1 || hPx <= 1)
             {
                 wPx = 800;

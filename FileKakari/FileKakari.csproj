@@ -26,5 +26,20 @@
     <ProjectReference Include="..\FileKakari.PreviewHost\FileKakari.PreviewHost.csproj" />
   </ItemGroup>
 
+  <Target Name="IncludePreviewHostInPublish" BeforeTargets="ComputeFilesToPublish" Condition="'$(PublishSingleFile)' == 'true' and '$(BuildingPreviewHost)' != 'true'">
+    <PropertyGroup>
+      <_PreviewHostPublishDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)previewhost_publish\'))</_PreviewHostPublishDir>
+    </PropertyGroup>
+    <MSBuild Projects="..\FileKakari.PreviewHost\FileKakari.PreviewHost.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishSingleFile=true;PublishDir=$(_PreviewHostPublishDir);BuildingPreviewHost=true" />
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(_PreviewHostPublishDir)FileKakari.PreviewHost.exe">
+        <RelativePath>FileKakari.PreviewHost.exe</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
 
 </Project>

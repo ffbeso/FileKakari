@@ -849,7 +849,8 @@ public partial class MainWindow
             }
 
             SaveTabViewState(tab);
-            if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+            var isMultiPaneSession = _activeWorkspaceSession.PaneGroups.Count > 1;
+            if (isMultiPaneSession || WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
                 var rootOffset = (_activeWorkspaceSession.Workspace is not null && _activeWorkspaceSession.Workspace.HasRootPath) ? 1 : 0;
                 _activeWorkspaceSession.SelectedTabIndex = Math.Clamp(
@@ -860,8 +861,12 @@ public partial class MainWindow
             else
             {
                 var primaryPane = _activeWorkspaceSession.PaneGroups.FirstOrDefault(p => string.Equals(p.Id, "primary", StringComparison.OrdinalIgnoreCase)) ?? _activeWorkspaceSession.PaneGroups.FirstOrDefault();
-                _activeWorkspaceSession.SelectedTabIndex = primaryPane is not null ? Math.Clamp(primaryPane.Tabs.IndexOf(tab), 0, Math.Max(0, primaryPane.Tabs.Count - 1)) : 0;
-                _activeWorkspacePaneGroup.SelectedTabIndex = _activeWorkspaceSession.SelectedTabIndex;
+                var selectedTabIndex = primaryPane?.Tabs.IndexOf(tab) ?? -1;
+                if (selectedTabIndex >= 0)
+                {
+                    _activeWorkspaceSession.SelectedTabIndex = selectedTabIndex;
+                    _activeWorkspacePaneGroup.SelectedTabIndex = selectedTabIndex;
+                }
             }
             _activeWorkspacePaneGroup.RefreshDisplay();
         }

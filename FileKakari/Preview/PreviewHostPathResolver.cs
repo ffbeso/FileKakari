@@ -9,6 +9,27 @@ public static class PreviewHostPathResolver
 
     public static string? ResolvePreviewHostPath()
     {
+        // 0. Check in directory containing the actual process executable (Single-File / SelfExtract support)
+        if (!string.IsNullOrEmpty(Environment.ProcessPath))
+        {
+            try
+            {
+                var processDir = Path.GetDirectoryName(Environment.ProcessPath);
+                if (!string.IsNullOrEmpty(processDir))
+                {
+                    var processDirCandidate = Path.Combine(processDir, ExecutableName);
+                    if (File.Exists(processDirCandidate))
+                    {
+                        return processDirCandidate;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore path resolution errors
+            }
+        }
+
         var baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
         // 1. Check in current application directory (Publish / same dir)

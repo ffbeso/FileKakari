@@ -673,8 +673,6 @@ public partial class MainWindow : Window
 
             UpdateNavigationButtons();
             LogMemoryMetrics("startup");
-
-            RunPreviewIntegrationTestIfNeeded();
         };
 
 

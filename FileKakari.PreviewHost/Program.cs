@@ -48,9 +48,6 @@ internal static class Program
         using var server = new PreviewHostServer(pipeName, parentPid, token);
         server.SetStaThreadId(NativeMethods.GetCurrentThreadId());
 
-        var cts = new CancellationTokenSource();
-        server.OnShutdownRequested += () => cts.Cancel();
-
         // Run server in background Task
         var serverTask = Task.Run(async () =>
         {
@@ -58,7 +55,7 @@ internal static class Program
         });
 
         // Run Win32 Message Pump on STA Thread
-        while (server.ShutdownState != 2 && !serverTask.IsCompleted)
+        while (server.ShutdownState != 2)
         {
             while (NativeMethods.PeekMessage(out var msg, IntPtr.Zero, 0, 0, NativeMethods.PM_REMOVE))
             {
@@ -72,11 +69,14 @@ internal static class Program
                 NativeMethods.DispatchMessage(ref msg);
             }
 
+            if (serverTask.IsCompleted && server.ShutdownState == 0)
+            {
+                server.RequestShutdown();
+            }
+
             server.ProcessPendingStaActions();
             Thread.Sleep(10);
         }
-
-        server.Dispose();
 
     }
 }

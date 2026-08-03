@@ -20,6 +20,7 @@ public sealed class PreviewHostProcessManager : IDisposable
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
     private readonly PreviewHostJobObject _jobObject = new();
+    private int _disposeState;
     private readonly string _sessionToken = Guid.NewGuid().ToString("N");
     private readonly string _pipeName = $"FileKakari.PreviewHost.{Process.GetCurrentProcess().Id}.{Guid.NewGuid():N}";
 
@@ -122,8 +123,8 @@ public sealed class PreviewHostProcessManager : IDisposable
             _pipeClient = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await _pipeClient.ConnectAsync(3000, _cts.Token).ConfigureAwait(false);
 
-            _reader = new StreamReader(_pipeClient, Encoding.UTF8);
-            _writer = new StreamWriter(_pipeClient, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _reader = new StreamReader(_pipeClient, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+            _writer = new StreamWriter(_pipeClient, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true);
 
             // Send Initialize Command
             var initCmd = new InitializeCommand
@@ -278,19 +279,46 @@ public sealed class PreviewHostProcessManager : IDisposable
 
     public void Dispose()
     {
-        _cts.Cancel();
+        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        {
+            return;
+        }
+
         if (_writer is not null)
         {
             try
             {
                 SendMessageAsync(new ShutdownCommand()).Wait(200);
             }
-            catch { }
+            catch (AggregateException ex) when (ex.InnerException is not null && IsExpectedShutdownException(ex.InnerException)) { }
+            catch (TaskCanceledException) { }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
         }
 
-        _reader?.Dispose();
-        _writer?.Dispose();
-        _pipeClient?.Dispose();
+        _cts.Cancel();
+
+        try
+        {
+            _writer?.Flush();
+            _writer?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+
+        try
+        {
+            _reader?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+
+        try
+        {
+            _pipeClient?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
 
         if (_process is { HasExited: false })
         {
@@ -308,5 +336,10 @@ public sealed class PreviewHostProcessManager : IDisposable
         _jobObject.Dispose();
         _sendLock.Dispose();
         _cts.Dispose();
+    }
+
+    private static bool IsExpectedShutdownException(Exception exception)
+    {
+        return exception is TaskCanceledException or IOException or ObjectDisposedException;
     }
 }

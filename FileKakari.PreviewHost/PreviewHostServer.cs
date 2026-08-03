@@ -25,6 +25,7 @@ public sealed class PreviewHostServer : IDisposable
     private StreamWriter? _writer;
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
+    private int _disposeState;
 
     private readonly ConcurrentQueue<Action> _staActionQueue = new();
     private readonly ShellPreviewSession _previewSession = new();
@@ -151,8 +152,8 @@ public sealed class PreviewHostServer : IDisposable
 
             await _pipeServer.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
 
-            _reader = new StreamReader(_pipeServer, Encoding.UTF8);
-            _writer = new StreamWriter(_pipeServer, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            _reader = new StreamReader(_pipeServer, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
+            _writer = new StreamWriter(_pipeServer, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true);
 
             // Read Initialize Command
             var line = await _reader.ReadLineAsync(_cts.Token).ConfigureAwait(false);
@@ -545,10 +546,35 @@ public sealed class PreviewHostServer : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        {
+            return;
+        }
+
         RequestShutdown();
-        _reader?.Dispose();
-        _writer?.Dispose();
-        _pipeServer?.Dispose();
+
+        try
+        {
+            _writer?.Flush();
+            _writer?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+
+        try
+        {
+            _reader?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+
+        try
+        {
+            _pipeServer?.Dispose();
+        }
+        catch (IOException) { }
+        catch (ObjectDisposedException) { }
+
         _sendLock.Dispose();
         _cts.Dispose();
     }

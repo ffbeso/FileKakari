@@ -64,8 +64,6 @@ public partial class SettingsView : UserControl
         DefaultSubTabBarWidthLabel.Text = _text.Get("SettingsDefaultSubTabBarWidth");
         AutoPlayVideoPreviewCheckBox.Content = _text.Get("SettingsAutoPlayVideoPreview");
         AutoPlayVideoPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayVideoPreviewDescription");
-        AutoPlayAudioPreviewCheckBox.Content = _text.Get("SettingsAutoPlayAudioPreview");
-        AutoPlayAudioPreviewDescriptionText.Text = _text.Get("SettingsAutoPlayAudioPreviewDescription");
         FontFamilyLabel.Text = _text.Get("SettingsFontFamily");
         FontSizeLabel.Text = _text.Get("SettingsFontSize");
         RowHeightLabel.Text = _text.Get("SettingsRowHeight");
@@ -132,7 +130,6 @@ public partial class SettingsView : UserControl
         SubTabPlacementComboBox.SelectedValue = AppSettings.NormalizeSubTabPlacement(Result.SubTabPlacement);
         DefaultSubTabBarWidthBox.Text = Result.DefaultSubTabBarWidth.ToString(CultureInfo.InvariantCulture);
         AutoPlayVideoPreviewCheckBox.IsChecked = Result.AutoPlayVideoPreview;
-        AutoPlayAudioPreviewCheckBox.IsChecked = Result.AutoPlayAudioPreview ?? Result.AutoPlayVideoPreview;
         FontFamilyComboBox.SelectedItem = GetFontFamilyChoices().Contains(Result.FontFamily, StringComparer.OrdinalIgnoreCase)
             ? Result.FontFamily
             : AppSettings.DefaultFontFamily;
@@ -223,7 +220,6 @@ public partial class SettingsView : UserControl
             : SubTabPlacement.Top;
         Result.DefaultSubTabBarWidth = ParseSettingDouble(DefaultSubTabBarWidthBox.Text, AppSettings.BuiltInDefaultSubTabBarWidth);
         Result.AutoPlayVideoPreview = AutoPlayVideoPreviewCheckBox.IsChecked == true;
-        Result.AutoPlayAudioPreview = AutoPlayAudioPreviewCheckBox.IsChecked == true;
         var selectedFontFamily = FontFamilyComboBox.SelectedItem as string;
         Result.FontFamily = string.IsNullOrWhiteSpace(selectedFontFamily)
             ? AppSettings.DefaultFontFamily

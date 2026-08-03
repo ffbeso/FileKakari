@@ -16,10 +16,9 @@ public static class MediaPreviewHtmlBuilder
         string mediaPath,
         bool isVideo,
         bool isAudio,
-        bool autoPlayVideoSetting,
-        bool autoPlayAudioSetting)
+        bool autoPlayVideoSetting)
     {
-        var autoPlay = isVideo ? autoPlayVideoSetting : autoPlayAudioSetting;
+        var autoPlay = isVideo && autoPlayVideoSetting;
         var muted = isVideo && autoPlay;
         var mediaType = isVideo ? "video" : isAudio ? "audio" : "media";
         var autoplayAttr = autoPlay ? "autoplay" : "";

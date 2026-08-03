@@ -2081,13 +2081,11 @@ public partial class MainWindow
                 var isVideo = IsVideoPreviewPath(path);
                 var isAudio = IsAudioPreviewPath(path);
                 var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
-                var autoPlayAudioSetting = _settingsService.Settings.AutoPlayAudioPreview ?? _settingsService.Settings.AutoPlayVideoPreview;
                 var document = MediaPreviewHtmlBuilder.Build(
                     path,
                     isVideo,
                     isAudio,
-                    autoPlayVideoSetting,
-                    autoPlayAudioSetting);
+                    autoPlayVideoSetting);
 
                 try
                 {
@@ -2116,7 +2114,7 @@ public partial class MainWindow
                     _currentWebViewMediaGeneration = generation;
                     _currentWebViewMediaType = document.MediaType;
                     _currentWebViewMediaAutoPlayVideoSetting = autoPlayVideoSetting;
-                    _currentWebViewMediaAutoPlayAudioSetting = autoPlayAudioSetting;
+                    _currentWebViewMediaAutoPlayAudioSetting = false;
                     _currentWebViewMediaEffectiveAutoPlay = document.EffectiveAutoPlay;
                     _currentWebViewMediaEffectiveMuted = document.EffectiveMuted;
                     path = tempHtmlPath;
@@ -2126,7 +2124,7 @@ public partial class MainWindow
                     }
                     else
                     {
-                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"audio\"\r\nautoPlaySetting={autoPlayAudioSetting.ToString().ToLowerInvariant()}\r\neffectiveAutoPlay={document.EffectiveAutoPlay.ToString().ToLowerInvariant()}\r\neffectiveMuted=false\r\ngeneration={generation}");
+                        PreviewDiagnostics.Verbose("PreviewMedia", $"Build\r\nmediaType=\"audio\"\r\nautoPlaySetting=false\r\neffectiveAutoPlay=false\r\neffectiveMuted=false\r\ngeneration={generation}");
                     }
                 }
                 catch (Exception ex)

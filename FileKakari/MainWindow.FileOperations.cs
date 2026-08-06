@@ -908,6 +908,15 @@ public partial class MainWindow
         }
     }
 
+    private void RenameTextBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is TextBox textBox && textBox.DataContext is FileEntry { IsRenaming: true })
+        {
+            PrepareRenameTextBoxMouseInput(textBox);
+            e.Handled = true;
+        }
+    }
+
     private void RenameTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         if (sender is TextBox textBox && textBox.DataContext is FileEntry { IsRenaming: true })

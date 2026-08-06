@@ -112,12 +112,19 @@ internal sealed class FileListHitTestService
         if (source is null
             || IsInsideScrollBar(source)
             || FindVisualParent<GridViewColumnHeader>(source) is not null
+            || IsInsideRenameTextBox(source)
             || !IsPointInsideVisibleColumnRange(itemsListPosition))
         {
             return null;
         }
 
-        return FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
+        var entry = FindVisualParent<ListViewItem>(source)?.DataContext as FileEntry;
+        if (entry is { IsRenaming: true })
+        {
+            return null;
+        }
+
+        return entry;
     }
 
     public bool IsFileListBackgroundHit(DependencyObject? source)

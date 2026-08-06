@@ -108,6 +108,7 @@
                          Loaded="RenameTextBox_Loaded"
                          PreviewMouseDown="RenameTextBox_PreviewMouseDown"
                          MouseDown="RenameTextBox_MouseDown"
+                         MouseDoubleClick="RenameTextBox_MouseDoubleClick"
                          GotKeyboardFocus="RenameTextBox_GotKeyboardFocus"
                          PreviewKeyDown="RenameTextBox_PreviewKeyDown"
                          LostFocus="RenameTextBox_LostFocus">
@@ -823,6 +824,7 @@
                                              Loaded="RenameTextBox_Loaded"
                                              PreviewMouseDown="RenameTextBox_PreviewMouseDown"
                                              MouseDown="RenameTextBox_MouseDown"
+                                             MouseDoubleClick="RenameTextBox_MouseDoubleClick"
                                              GotKeyboardFocus="RenameTextBox_GotKeyboardFocus"
                                              PreviewKeyDown="RenameTextBox_PreviewKeyDown"
                                              LostFocus="RenameTextBox_LostFocus">

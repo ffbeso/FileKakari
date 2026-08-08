@@ -41,6 +41,8 @@ public sealed class SessionTabState
 
     public bool SortAscending { get; set; } = true;
 
+    public GroupMode GroupMode { get; set; } = GroupMode.None;
+
     public FileDisplayMode ViewMode { get; set; } = FileDisplayMode.Details;
 
     public bool IsFolderLocked { get; set; }

@@ -58,6 +58,11 @@ public partial class MainWindow
             _viewModeController.PopulateMenu(viewSubMenu);
             menu.Items.Add(viewSubMenu);
 
+            if (ActiveTabState is { } normalState)
+            {
+                PopulateGroupSubMenu(menu, normalState, ItemsList);
+            }
+
             AddUserCommandsSubMenu(menu, navigation.CurrentPath, selectedEntries, addLeadingSeparator: true);
         }
         else
@@ -102,6 +107,74 @@ public partial class MainWindow
         };
         item.Click += async (_, _) => await action();
         return item;
+    }
+
+    private void PopulateGroupSubMenu(ItemsControl parentMenu, WorkspaceTabState targetState, ListView targetListView)
+    {
+        var groupSubMenu = new MenuItem
+        {
+            Header = _text.Get("ContextGroup")
+        };
+        ApplyMenuItemStyle(groupSubMenu);
+
+        AddGroupMenuItem(groupSubMenu, targetState, targetListView, GroupMode.None, _text.Get("GroupModeNone"));
+        AddGroupMenuItem(groupSubMenu, targetState, targetListView, GroupMode.Extension, _text.Get("GroupModeExtension"));
+        AddGroupMenuItem(groupSubMenu, targetState, targetListView, GroupMode.Date, _text.Get("GroupModeDate"));
+        AddGroupMenuItem(groupSubMenu, targetState, targetListView, GroupMode.SimilarName, _text.Get("GroupModeSimilarName"));
+
+        parentMenu.Items.Add(groupSubMenu);
+    }
+
+    private void AddGroupMenuItem(MenuItem parentMenu, WorkspaceTabState targetState, ListView targetListView, GroupMode mode, string header)
+    {
+        var item = new MenuItem
+        {
+            Header = header,
+            IsCheckable = true,
+            IsChecked = targetState.GroupMode == mode
+        };
+        ApplyMenuItemStyle(item);
+        item.Click += async (_, _) =>
+        {
+            await SwitchGroupModeAsync(targetState, targetListView, mode);
+        };
+        parentMenu.Items.Add(item);
+    }
+
+    private async Task SwitchGroupModeAsync(WorkspaceTabState targetState, ListView targetListView, GroupMode mode)
+    {
+        if (targetState.GroupMode == mode)
+        {
+            return;
+        }
+
+        var selectedPaths = targetState.SelectedPaths;
+        var offset = targetState.VerticalOffset;
+
+        targetState.GroupMode = mode;
+
+        if (ReferenceEquals(targetListView, ItemsList))
+        {
+            ApplyTabSort(targetState);
+        }
+        else if (targetListView.DataContext is FolderPane pane)
+        {
+            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, mode);
+            FileGroupHelper.ApplyGroupMode(pane.FileList, mode);
+        }
+
+        if (ReferenceEquals(targetListView, ItemsList))
+        {
+            await RestoreScrollOffsetAsync(offset);
+            RestoreSelection(selectedPaths);
+        }
+        else if (targetListView.DataContext is FolderPane pane)
+        {
+            await RestoreWorkspacePaneScrollOffsetAsync(pane, offset);
+            SelectItemsInPaneByPaths(pane, selectedPaths, focus: false, scrollIntoView: false);
+        }
+
+        _workspaceLocalState.MarkDirty("group-mode");
     }
 
     private void CopyPathsToClipboard(IReadOnlyList<FileEntry> entries)
@@ -221,6 +294,8 @@ public partial class MainWindow
             ApplyMenuItemStyle(viewSubMenu);
             _viewModeController.PopulateWorkspaceMenu(viewSubMenu, pane, state, reason => _workspaceLocalState.MarkDirty(reason), ApplyDisplayModeToPane);
             menu.Items.Add(viewSubMenu);
+
+            PopulateGroupSubMenu(menu, state, listView);
 
             AddUserCommandsSubMenu(menu, tab.Navigation.CurrentPath, selectedEntries, addLeadingSeparator: true);
         }

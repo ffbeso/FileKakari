@@ -1612,13 +1612,53 @@ public partial class MainWindow
 
     private void OnPreviewHostPreviewLoaded(PreviewLoadedEvent evt)
     {
-        Dispatcher.InvokeAsync(() =>
+        Dispatcher.InvokeAsync(async () =>
         {
             ClearLoadingRequestId(evt.RequestId);
-            if (string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
+            if (!string.Equals(evt.RequestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
-                PreviewDiagnostics.Info("PreviewHost", $"PreviewLoaded confirmed requestId=\"{evt.RequestId}\" elapsed={evt.ElapsedMs}ms");
+                return;
             }
+
+            var currentGen = _previewGeneration;
+            var requestId = evt.RequestId;
+            var loadedTimestamp = DateTime.Now;
+
+            PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] PreviewLoaded confirmed elapsed={evt.ElapsedMs}ms. Scheduling delayed layout correction...");
+
+            // Schedule delayed layout correction at DispatcherPriority.Loaded (max 1 correction per load)
+            await Dispatcher.InvokeAsync(async () =>
+            {
+                var execTimestamp = DateTime.Now;
+                var delayMs = (execTimestamp - loadedTimestamp).TotalMilliseconds;
+
+                if (!string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
+                {
+                    PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Delayed layout correction cancelled: requestId-mismatch (active=\"{_activePreviewRequestId}\"). scheduled={loadedTimestamp:HH:mm:ss.fff} exec={execTimestamp:HH:mm:ss.fff}");
+                    return;
+                }
+
+                if (currentGen != _previewGeneration)
+                {
+                    PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Delayed layout correction cancelled: generation-outdated (currentGen={_previewGeneration}). scheduled={loadedTimestamp:HH:mm:ss.fff} exec={execTimestamp:HH:mm:ss.fff}");
+                    return;
+                }
+
+                if (!IsPreviewPaneActuallyVisible)
+                {
+                    PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Delayed layout correction cancelled: pane-invisible. scheduled={loadedTimestamp:HH:mm:ss.fff} exec={execTimestamp:HH:mm:ss.fff}");
+                    return;
+                }
+
+                if (_previewHostControl is null)
+                {
+                    PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Delayed layout correction cancelled: host-null. scheduled={loadedTimestamp:HH:mm:ss.fff} exec={execTimestamp:HH:mm:ss.fff}");
+                    return;
+                }
+
+                PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Executing delayed layout correction (delay={delayMs:F1}ms).");
+                await _previewHostControl.RequestResizeAsync(isCorrection: true, requestId: requestId, generation: currentGen).ConfigureAwait(true);
+            }, System.Windows.Threading.DispatcherPriority.Loaded);
         });
     }
 

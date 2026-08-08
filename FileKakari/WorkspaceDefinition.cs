@@ -77,6 +77,8 @@ public sealed class WorkspaceTabDefinition
 
     public bool SortAscending { get; init; } = true;
 
+    public GroupMode GroupMode { get; init; } = GroupMode.None;
+
     public FileDisplayMode ViewMode { get; init; } = FileDisplayMode.Details;
 
     public string FilterText { get; init; } = "";

@@ -118,6 +118,7 @@ internal sealed class TabOperationsService
             tab.State.FilterText,
             _normalizeSortColumn(tab.State.SortColumn),
             tab.State.SortAscending,
+            tab.State.GroupMode,
             AppSettings.NormalizeDisplayMode(tab.State.ViewMode),
             tab.State.VerticalOffset,
             tab.State.SelectedPaths.ToList(),
@@ -134,6 +135,7 @@ internal sealed class TabOperationsService
             FilterText = state.FilterText,
             SortColumn = _normalizeSortColumn(state.SortColumn),
             SortAscending = state.SortAscending,
+            GroupMode = state.GroupMode,
             VerticalOffset = state.VerticalOffset,
             SelectedPaths = state.SelectedPaths.ToList()
         };
@@ -192,6 +194,7 @@ internal sealed record ClosedTabState(
     string FilterText,
     string SortColumn,
     bool SortAscending,
+    GroupMode GroupMode,
     FileDisplayMode ViewMode,
     double VerticalOffset,
     IReadOnlyList<string> SelectedPaths,

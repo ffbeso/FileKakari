@@ -245,14 +245,14 @@ public sealed class FileListState : INotifyPropertyChanged
         LastExternalChangeAt = changedAt ?? DateTimeOffset.UtcNow;
     }
 
-    public void ApplySort(string sortColumn, bool sortAscending, bool sortFoldersFirst, Dictionary<string, int>? currentOrder = null)
+    public void ApplySort(string sortColumn, bool sortAscending, bool sortFoldersFirst, Dictionary<string, int>? currentOrder = null, GroupMode groupMode = GroupMode.None)
     {
         _displaySortColumn = sortColumn;
         _displaySortAscending = sortAscending;
         _displaySortFoldersFirst = sortFoldersFirst;
         if (ItemsView is ListCollectionView listView)
         {
-            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder);
+            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode);
         }
         else
         {

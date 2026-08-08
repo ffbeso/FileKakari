@@ -413,13 +413,15 @@ public partial class MainWindow
         _sortApplyCount++;
         if (ItemsView is ListCollectionView listView)
         {
-            listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder);
+            listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder, targetState.GroupMode);
         }
         else
         {
             ItemsView.SortDescriptions.Clear();
             ItemsView.SortDescriptions.Add(new SortDescription(FileListSortHelper.GetSortPropertyName(targetState.SortColumn), targetState.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
         }
+
+        FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode);
 
         UpdateNormalPaneColumnHeaders();
 

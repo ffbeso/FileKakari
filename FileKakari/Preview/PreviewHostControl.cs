@@ -234,10 +234,24 @@ public sealed class PreviewHostControl : HwndHost
 
 
 
-    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
-    {
-        base.OnRenderSizeChanged(sizeInfo);
+    private int _lastSentWidthPx = -1;
+    private int _lastSentHeightPx = -1;
 
+    public int LastSentWidthPx => _lastSentWidthPx;
+    public int LastSentHeightPx => _lastSentHeightPx;
+
+    public RECT GetHostClientRect()
+    {
+        if (_currentChildHwndValue != 0)
+        {
+            GetClientRect(new IntPtr(_currentChildHwndValue), out var rect);
+            return rect;
+        }
+        return default;
+    }
+
+    public async Task RequestResizeAsync(bool isCorrection = false, string? requestId = null, int generation = 0)
+    {
         double scaleX = 1.0;
         double scaleY = 1.0;
         var source = PresentationSource.FromVisual(this);
@@ -250,14 +264,40 @@ public sealed class PreviewHostControl : HwndHost
         var pixelWidth = Math.Max(0, (int)Math.Ceiling(ActualWidth * scaleX));
         var pixelHeight = Math.Max(0, (int)Math.Ceiling(ActualHeight * scaleY));
 
-        _ = _processManager.SendMessageAsync(new ResizeCommand
+        var clientRect = GetHostClientRect();
+        if (!isCorrection && pixelWidth == _lastSentWidthPx && pixelHeight == _lastSentHeightPx)
+        {
+            return;
+        }
+
+        var prevWidth = _lastSentWidthPx;
+        var prevHeight = _lastSentHeightPx;
+        _lastSentWidthPx = pixelWidth;
+        _lastSentHeightPx = pixelHeight;
+
+        if (isCorrection)
+        {
+            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\" gen={generation}] Delayed layout correction executing. ActualSize={ActualWidth:F1}x{ActualHeight:F1} scale={scaleX:F2}x{scaleY:F2} DIP->px={pixelWidth}x{pixelHeight} GetClientRect=({clientRect.Left},{clientRect.Top},{clientRect.Right},{clientRect.Bottom}) w={clientRect.Right - clientRect.Left} h={clientRect.Bottom - clientRect.Top} prevSent={prevWidth}x{prevHeight} newSent={pixelWidth}x{pixelHeight}");
+        }
+        else
+        {
+            PreviewDiagnostics.Verbose("PreviewHostControl", $"Resize sent. ActualSize={ActualWidth:F1}x{ActualHeight:F1} scale={scaleX:F2}x{scaleY:F2} DIP->px={pixelWidth}x{pixelHeight} GetClientRect=({clientRect.Left},{clientRect.Top},{clientRect.Right},{clientRect.Bottom})");
+        }
+
+        await _processManager.SendMessageAsync(new ResizeCommand
         {
             PaneId = "active-pane",
             WidthPx = pixelWidth,
             HeightPx = pixelHeight,
             DpiX = scaleX,
             DpiY = scaleY
-        });
+        }).ConfigureAwait(false);
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        _ = RequestResizeAsync(isCorrection: false);
     }
 
     protected override void Dispose(bool disposing)
@@ -277,6 +317,18 @@ public sealed class PreviewHostControl : HwndHost
     private const int WS_VISIBLE = 0x10000000;
     private const int WS_CLIPSIBLINGS = 0x04000000;
     private const int WS_CLIPCHILDREN = 0x02000000;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern IntPtr CreateWindowEx(

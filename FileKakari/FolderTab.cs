@@ -49,6 +49,12 @@ public sealed class FolderTab : INotifyPropertyChanged
         set => State.SortAscending = value;
     }
 
+    public GroupMode GroupMode
+    {
+        get => State.GroupMode;
+        set => State.GroupMode = value;
+    }
+
     public FileDisplayMode ViewMode
     {
         get => State.ViewMode;

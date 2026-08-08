@@ -208,6 +208,7 @@ sealed class FolderPaneController
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
+            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);

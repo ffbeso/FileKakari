@@ -199,12 +199,14 @@ public sealed class ShellPreviewSession : IDisposable
         swStage.Restart();
         try
         {
+            Console.WriteLine($"[PreviewHost] SetWindow start hostHwnd=0x{hostHwnd.ToInt64():X} rect=(0,0,{rect.Right},{rect.Bottom}) ManagedThreadId={Environment.CurrentManagedThreadId}");
             _currentHandler.SetWindow(hostHwnd, ref rect);
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] SetWindow elapsed={swStage.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
+            Console.WriteLine($"[PreviewHost] SetWindow success elapsed={swStage.ElapsedMilliseconds}ms");
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[PreviewHost] SetWindow failed HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
             Unload();
             return new LoadResult
             {
@@ -220,13 +222,16 @@ public sealed class ShellPreviewSession : IDisposable
         swStage.Restart();
         try
         {
+            Console.WriteLine($"[PreviewHost] SetRect start rect=(0,0,{rect.Right},{rect.Bottom})");
             _currentHandler.SetRect(ref rect);
+            Console.WriteLine($"[PreviewHost] DoPreview start");
             _currentHandler.DoPreview();
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] DoPreview elapsed={swStage.ElapsedMilliseconds}ms total={totalSw.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
+            Console.WriteLine($"[PreviewHost] DoPreview success elapsed={swStage.ElapsedMilliseconds}ms total={totalSw.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
         }
         catch (Exception ex)
         {
+            Console.WriteLine($"[PreviewHost] DoPreview/SetRect failed HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
             Unload();
             return new LoadResult
             {
@@ -252,15 +257,24 @@ public sealed class ShellPreviewSession : IDisposable
     {
         if (_currentHandler is null)
         {
+            Console.WriteLine($"[PreviewHost] Resize skipped: _currentHandler is null widthPx={widthPx} heightPx={heightPx}");
             return;
         }
 
         var rect = new NativeMethods.RECT { Left = 0, Top = 0, Right = Math.Max(1, widthPx), Bottom = Math.Max(1, heightPx) };
+        var sw = Stopwatch.StartNew();
         try
         {
+            Console.WriteLine($"[PreviewHost] Resize SetRect start rect=(0,0,{rect.Right},{rect.Bottom}) ManagedThreadId={Environment.CurrentManagedThreadId}");
             _currentHandler.SetRect(ref rect);
+            sw.Stop();
+            Console.WriteLine($"[PreviewHost] Resize SetRect success elapsed={sw.ElapsedMilliseconds}ms");
         }
-        catch { }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Console.WriteLine($"[PreviewHost] Resize SetRect exception HRESULT=0x{ex.HResult:X8} msg='{ex.Message}' elapsed={sw.ElapsedMilliseconds}ms");
+        }
     }
 
     public void Unload()

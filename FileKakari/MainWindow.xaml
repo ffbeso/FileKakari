@@ -717,6 +717,7 @@
                       GotKeyboardFocus="ItemsList_GotKeyboardFocus"
                       SelectionChanged="ItemsList_SelectionChanged"
                       VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                       VirtualizingPanel.VirtualizationMode="Recycling"
                       VirtualizingPanel.ScrollUnit="Pixel"
                       VirtualizingPanel.CacheLength="1"
@@ -725,6 +726,17 @@
                       ScrollViewer.VerticalScrollBarVisibility="Auto"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       BorderThickness="0">
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
+                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                                </Border>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
                 <ListView.Resources>
                     <Style TargetType="ScrollViewer">
                         <Setter Property="Background" Value="Transparent" />
@@ -1937,6 +1949,7 @@
                                               Loaded="WorkspacePaneFileList_Loaded"
                                               Unloaded="WorkspacePaneFileList_Unloaded"
                                               VirtualizingPanel.IsVirtualizing="True"
+                                              VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                                               VirtualizingPanel.VirtualizationMode="Recycling"
                                               VirtualizingPanel.ScrollUnit="Pixel"
                                               VirtualizingPanel.CacheLength="1"
@@ -1956,6 +1969,17 @@
                                               DragOver="WorkspacePaneFileList_DragOver"
                                               DragLeave="WorkspacePaneFileList_DragLeave"
                                               Drop="WorkspacePaneFileList_Drop">
+                                        <ListView.GroupStyle>
+                                            <GroupStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
+                                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ListView.GroupStyle>
                                         <ListView.Resources>
                                             <Style TargetType="ScrollViewer">
                                                 <Setter Property="Background" Value="Transparent" />

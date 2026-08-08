@@ -28,6 +28,8 @@ public sealed class WorkspaceTabState
 
     public bool SortAscending { get; set; } = true;
 
+    public GroupMode GroupMode { get; set; } = GroupMode.None;
+
     public FileDisplayMode ViewMode { get; set; }
 
     public string? CachedPath { get; set; }

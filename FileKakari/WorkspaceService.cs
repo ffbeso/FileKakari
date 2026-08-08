@@ -242,6 +242,7 @@ public sealed class WorkspaceService
             BasePath = basePath,
             SortColumn = tab.State.SortColumn,
             SortAscending = tab.State.SortAscending,
+            GroupMode = tab.State.GroupMode,
             ViewMode = tab.State.ViewMode,
             IsFolderLocked = tab.IsFolderLocked
         };
@@ -648,6 +649,7 @@ public sealed class WorkspaceService
             CurrentPath = path,
             SortColumn = string.IsNullOrWhiteSpace(tab.SortColumn) ? "Name" : tab.SortColumn.Trim(),
             SortAscending = tab.SortAscending,
+            GroupMode = tab.GroupMode,
             ViewMode = AppSettings.NormalizeDisplayMode(tab.ViewMode),
             IsFolderLocked = tab.IsFolderLocked || tab.Fixed
         };
@@ -701,6 +703,7 @@ public sealed class WorkspaceService
             CurrentPath = currentPath,
             SortColumn = string.IsNullOrWhiteSpace(state.SortColumn) ? tab.SortColumn : state.SortColumn.Trim(),
             SortAscending = state.SortAscending ?? tab.SortAscending,
+            GroupMode = state.GroupMode ?? tab.GroupMode,
             ViewMode = state.ViewMode is null ? tab.ViewMode : AppSettings.NormalizeDisplayMode(state.ViewMode.Value),
             FilterText = state.FilterText ?? tab.FilterText,
             SelectedPaths = state.SelectedPaths ?? tab.SelectedPaths,
@@ -728,6 +731,7 @@ public sealed class WorkspaceService
             CurrentPath = currentPath,
             SortColumn = string.IsNullOrWhiteSpace(state.SortColumn) ? "Name" : state.SortColumn.Trim(),
             SortAscending = state.SortAscending ?? true,
+            GroupMode = state.GroupMode ?? GroupMode.None,
             ViewMode = state.ViewMode is null ? FileDisplayMode.Details : AppSettings.NormalizeDisplayMode(state.ViewMode.Value),
             FilterText = state.FilterText ?? "",
             SelectedPaths = state.SelectedPaths ?? [],
@@ -813,6 +817,7 @@ public sealed class WorkspaceService
             ViewMode = AppSettings.NormalizeDisplayMode(tab.State.ViewMode),
             SortColumn = tab.State.SortColumn,
             SortAscending = tab.State.SortAscending,
+            GroupMode = tab.State.GroupMode,
             FilterText = tab.State.FilterText,
             SelectedPaths = tab.State.SelectedPaths,
             ScrollOffset = tab.State.VerticalOffset,
@@ -1112,6 +1117,8 @@ public sealed class WorkspaceService
 
         public bool SortAscending { get; set; } = true;
 
+        public GroupMode GroupMode { get; set; } = GroupMode.None;
+
         public FileDisplayMode ViewMode { get; set; } = FileDisplayMode.Details;
 
         public bool IsFolderLocked { get; set; }
@@ -1177,6 +1184,9 @@ public sealed class WorkspaceService
 
         [JsonPropertyName("sortAscending")]
         public bool? SortAscending { get; set; }
+
+        [JsonPropertyName("groupMode")]
+        public GroupMode? GroupMode { get; set; }
 
         [JsonPropertyName("filterText")]
         public string? FilterText { get; set; }

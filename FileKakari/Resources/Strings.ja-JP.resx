@@ -297,4 +297,9 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="ResetSubTabBarWidthToDefault" xml:space="preserve"><value>サブタブ幅を既定値に戻す</value></data>
   <data name="SettingsPlacementHorizontal" xml:space="preserve"><value>横（上部）</value></data>
   <data name="SettingsPlacementVertical" xml:space="preserve"><value>縦（左側）</value></data>
+  <data name="ContextGroup" xml:space="preserve"><value>グループ化</value></data>
+  <data name="GroupModeNone" xml:space="preserve"><value>(なし)</value></data>
+  <data name="GroupModeExtension" xml:space="preserve"><value>拡張子</value></data>
+  <data name="GroupModeDate" xml:space="preserve"><value>更新日時</value></data>
+  <data name="GroupModeSimilarName" xml:space="preserve"><value>名前（類似）</value></data>
 </root>

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace FileKakari;
@@ -45,19 +45,26 @@ public sealed class FileEntryComparer : IComparer
         }
 
         var result = CompareByColumn(left, right);
+        if (result != 0)
+        {
+            return _ascending ? result : -result;
+        }
+
+        if (_currentOrder is not null
+            && _currentOrder.TryGetValue(left.FullPath, out var leftIndex)
+            && _currentOrder.TryGetValue(right.FullPath, out var rightIndex))
+        {
+            return leftIndex.CompareTo(rightIndex);
+        }
+
+        if (!string.Equals(_columnId, "Name", StringComparison.Ordinal))
+        {
+            result = CompareText(left.Name, right.Name);
+        }
+
         if (result == 0)
         {
-            if (_currentOrder is not null
-                && _currentOrder.TryGetValue(left.FullPath, out var leftIndex)
-                && _currentOrder.TryGetValue(right.FullPath, out var rightIndex))
-            {
-                return leftIndex.CompareTo(rightIndex);
-            }
-
-            if (!string.Equals(_columnId, "Name", StringComparison.Ordinal))
-            {
-                result = CompareText(left.Name, right.Name);
-            }
+            result = CompareText(left.FullPath, right.FullPath);
         }
 
         return _ascending ? result : -result;

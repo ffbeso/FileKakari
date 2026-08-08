@@ -206,6 +206,7 @@ public partial class MainWindow
                 RootPath = session.RootPath,
                 SortColumn = representativeTab.State.SortColumn,
                 SortAscending = representativeTab.State.SortAscending,
+                GroupMode = representativeTab.State.GroupMode,
                 ViewMode = AppSettings.NormalizeDisplayMode(representativeTab.State.ViewMode),
                 IsFolderLocked = session.IsLocked,
                 LocalState = _workspaceService.BuildLocalState(session),
@@ -229,6 +230,7 @@ public partial class MainWindow
             RootPath = session.RootPath,
             SortColumn = tab.State.SortColumn,
             SortAscending = tab.State.SortAscending,
+            GroupMode = tab.State.GroupMode,
             ViewMode = AppSettings.NormalizeDisplayMode(tab.State.ViewMode),
             IsFolderLocked = session.IsLocked,
             Name = session.Name

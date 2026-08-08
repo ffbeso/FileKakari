@@ -6,7 +6,7 @@ namespace FileKakari;
 
 public sealed class SimilarNameGroupIndex
 {
-    private static readonly char[] Delimiters = new[] { ' ', '　', '-', '_', '・', '「', '『', '[', '(', '【', '“', '”', '"' };
+    private static readonly char[] Delimiters = new[] { ' ', '　', '-', '_', '「', '『', '[', '(', '【', '“', '”', '"' };
 
     private readonly Dictionary<string, string> _pathToGroupKey = new(StringComparer.OrdinalIgnoreCase);
 

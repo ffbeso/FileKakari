@@ -21,7 +21,11 @@ internal static class FileGroupHelper
     {
         if (mode == GroupMode.SimilarName)
         {
-            return FileNameNormalizer.Normalize(entry.Name, entry.IsDirectory);
+            if (entry.IsDirectory)
+            {
+                return "フォルダ";
+            }
+            return FileNameNormalizer.Normalize(entry.Name);
         }
 
         if (mode == GroupMode.Extension)
@@ -106,8 +110,8 @@ internal static class FileGroupHelper
                 return 0;
             }
 
-            string groupX = FileNameNormalizer.Normalize(x.Name, false);
-            string groupY = FileNameNormalizer.Normalize(y.Name, false);
+            string groupX = FileNameNormalizer.Normalize(x.Name);
+            string groupY = FileNameNormalizer.Normalize(y.Name);
             string keyX = FileNameNormalizer.BuildCompareKey(groupX);
             string keyY = FileNameNormalizer.BuildCompareKey(groupY);
             return string.Compare(keyX, keyY, StringComparison.OrdinalIgnoreCase);

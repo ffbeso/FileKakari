@@ -28,13 +28,16 @@ public static class FileNameNormalizer
     // Cache display name to normalized key mapping for consistency
     private static readonly ConcurrentDictionary<string, string> KeyToDisplayCache = new(StringComparer.OrdinalIgnoreCase);
 
-    public static string Normalize(string rawFileName, bool isDirectory)
+    /// <summary>
+    /// Normalizes a file name string into a group title.
+    /// Removal Rules (Phase 2-A):
+    /// 1. Recording attribute tags: [字], [再], [新], [終], etc.
+    /// 2. Date/Datetime: YYYY-MM-DD / YYYYMMDD, YYYYMMDD_hhmmss, YYYY年MM月DD日, 6-digit year-month (20YYMM)
+    /// 3. Explicit episode numbers: 第XX話, 第XX回, #XX, ＃XX, EPXX, EXX
+    /// 4. Trim separators: space, _, -, ・
+    /// </summary>
+    public static string Normalize(string rawFileName)
     {
-        if (isDirectory)
-        {
-            return "フォルダ";
-        }
-
         string baseName = Path.GetFileNameWithoutExtension(rawFileName);
         if (string.IsNullOrWhiteSpace(baseName))
         {

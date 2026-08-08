@@ -441,30 +441,4 @@ public partial class MainWindow
             }
         }
     }
-
-    public static void VerifyFileNameNormalizerCases()
-    {
-        var cases = new (string Input, bool IsDir, string ExpectedGroup)[]
-        {
-            ("水曜日のダウンタウン 2026-08-01.ts", false, "水曜日のダウンタウン"),
-            ("水曜日のダウンタウン 2026-08-08.ts", false, "水曜日のダウンタウン"),
-            ("相棒 season24 第12話.ts", false, "相棒 season24"),
-            ("相棒 season24 第13話.ts", false, "相棒 season24"),
-            ("NEWS23 20260808.ts", false, "NEWS23"),
-            ("NHKニュース7 2026-08-08.ts", false, "NHKニュース7"),
-            ("season24 第12話.ts", false, "season24"),
-            ("100分de名著 202608.ts", false, "100分de名著"),
-            ("20260808.mp4", false, "20260808"),
-            ("[字].mp4", false, "[字]"),
-            ("鬼滅の刃 「刀鍛冶の里」.mp4", false, "鬼滅の刃 「刀鍛冶の里」"),
-            ("鬼滅の刃 「遊郭編」.mp4", false, "鬼滅の刃 「遊郭編」"),
-            ("保存フォルダ", true, "フォルダ"),
-        };
-
-        foreach (var c in cases)
-        {
-            var result = FileNameNormalizer.Normalize(c.Input, c.IsDir);
-            PerfLog.Write($"[NormalizerVerify] input=\"{c.Input}\" result=\"{result}\" expected=\"{c.ExpectedGroup}\" pass={(result == c.ExpectedGroup)}");
-        }
-    }
 }

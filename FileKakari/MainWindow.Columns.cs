@@ -400,6 +400,18 @@ public partial class MainWindow
         ApplyTabSort(tab.State, null);
     }
 
+    private FolderPane? FindPaneForState(WorkspaceTabState targetState)
+    {
+        foreach (var pane in GetDisplayedWorkspacePanes())
+        {
+            if (pane.Tabs.Any(t => t.State == targetState))
+            {
+                return pane;
+            }
+        }
+        return _primaryPaneGroup;
+    }
+
     private void ApplyTabSort(WorkspaceTabState targetState, Dictionary<string, int>? currentOrder = null)
     {
         using var previewSuppression = SuppressPreviewForProgrammaticSelection("reload");
@@ -411,9 +423,11 @@ public partial class MainWindow
 
         var stopwatch = Stopwatch.StartNew();
         _sortApplyCount++;
+        var pane = FindPaneForState(targetState);
+        SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName ? pane?.FileList.EnsureSimilarNameIndex() : null;
         if (ItemsView is ListCollectionView listView)
         {
-            listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder, targetState.GroupMode);
+            listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder, targetState.GroupMode, groupIndex);
         }
         else
         {
@@ -421,7 +435,7 @@ public partial class MainWindow
             ItemsView.SortDescriptions.Add(new SortDescription(FileListSortHelper.GetSortPropertyName(targetState.SortColumn), targetState.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
         }
 
-        FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode);
+        FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode, groupIndex);
 
         UpdateNormalPaneColumnHeaders();
 

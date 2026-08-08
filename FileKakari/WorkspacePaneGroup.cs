@@ -27,9 +27,25 @@ public sealed class FileListState : INotifyPropertyChanged
     private string? _loadStateId;
     private string? _loadPath;
 
+    public SimilarNameGroupIndex? SimilarNameIndex { get; private set; }
+
     public FileListState()
     {
         ItemsView = CollectionViewSource.GetDefaultView(Items);
+    }
+
+    public SimilarNameGroupIndex EnsureSimilarNameIndex()
+    {
+        if (SimilarNameIndex == null)
+        {
+            SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
+        }
+        return SimilarNameIndex;
+    }
+
+    public void RebuildSimilarNameIndex()
+    {
+        SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -233,6 +249,7 @@ public sealed class FileListState : INotifyPropertyChanged
     {
         Items.Clear();
         Items.AddRange(items);
+        RebuildSimilarNameIndex();
         ItemsView.Refresh();
         CurrentPath = path;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
@@ -252,7 +269,8 @@ public sealed class FileListState : INotifyPropertyChanged
         _displaySortFoldersFirst = sortFoldersFirst;
         if (ItemsView is ListCollectionView listView)
         {
-            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode);
+            SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? EnsureSimilarNameIndex() : null;
+            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex);
         }
         else
         {

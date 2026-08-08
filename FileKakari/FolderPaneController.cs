@@ -207,16 +207,18 @@ sealed class FolderPaneController
 
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
-            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null);
-            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode);
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
+            SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName ? pane.FileList.EnsureSimilarNameIndex() : null;
+            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null, targetState.GroupMode);
+            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
             UpdateStatus(pane);
             pane.RefreshDisplay();
-            _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
+            long groupBuildMs = groupIndex?.LastBuildElapsedMs ?? 0;
+            _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} groupBuildMs={groupBuildMs} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
         }
         catch (OperationCanceledException ex)
         {

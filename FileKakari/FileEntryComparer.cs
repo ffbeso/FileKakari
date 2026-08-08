@@ -10,19 +10,22 @@ public sealed class FileEntryComparer : IComparer
     private readonly bool _foldersFirst;
     private readonly Dictionary<string, int>? _currentOrder;
     private readonly GroupMode _groupMode;
+    private readonly SimilarNameGroupIndex? _groupIndex;
 
     public FileEntryComparer(
         string columnId,
         bool ascending,
         bool foldersFirst,
         Dictionary<string, int>? currentOrder = null,
-        GroupMode groupMode = GroupMode.None)
+        GroupMode groupMode = GroupMode.None,
+        SimilarNameGroupIndex? groupIndex = null)
     {
         _columnId = ColumnLayoutService.NormalizeColumnId(columnId);
         _ascending = ascending;
         _foldersFirst = foldersFirst;
         _currentOrder = currentOrder;
         _groupMode = groupMode;
+        _groupIndex = groupIndex;
     }
 
     public int Compare(object? x, object? y)
@@ -44,7 +47,7 @@ public sealed class FileEntryComparer : IComparer
 
         if (_groupMode != GroupMode.None)
         {
-            var groupComparison = FileGroupHelper.CompareGroup(left, right, _groupMode);
+            var groupComparison = FileGroupHelper.CompareGroup(left, right, _groupMode, _groupIndex);
             if (groupComparison != 0)
             {
                 return groupComparison;

@@ -159,8 +159,9 @@ public partial class MainWindow
         }
         else if (targetListView.DataContext is FolderPane pane)
         {
+            SimilarNameGroupIndex? groupIndex = mode == GroupMode.SimilarName ? pane.FileList.EnsureSimilarNameIndex() : null;
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, mode);
-            FileGroupHelper.ApplyGroupMode(pane.FileList, mode);
+            FileGroupHelper.ApplyGroupMode(pane.FileList, mode, groupIndex);
         }
 
         if (ReferenceEquals(targetListView, ItemsList))

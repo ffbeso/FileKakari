@@ -17,7 +17,7 @@ public enum GroupMode
 
 internal static class FileGroupHelper
 {
-    public static string GetGroupKey(FileEntry entry, GroupMode mode)
+    public static string GetGroupKey(FileEntry entry, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         if (mode == GroupMode.SimilarName)
         {
@@ -25,7 +25,7 @@ internal static class FileGroupHelper
             {
                 return "フォルダ";
             }
-            return FileNameNormalizer.Normalize(entry.Name);
+            return groupIndex?.GetGroupKey(entry) ?? FileNameNormalizer.Normalize(entry.Name);
         }
 
         if (mode == GroupMode.Extension)
@@ -97,7 +97,7 @@ internal static class FileGroupHelper
         return 5;
     }
 
-    public static int CompareGroup(FileEntry x, FileEntry y, GroupMode mode)
+    public static int CompareGroup(FileEntry x, FileEntry y, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         if (mode == GroupMode.SimilarName)
         {
@@ -110,8 +110,8 @@ internal static class FileGroupHelper
                 return 0;
             }
 
-            string groupX = FileNameNormalizer.Normalize(x.Name);
-            string groupY = FileNameNormalizer.Normalize(y.Name);
+            string groupX = groupIndex?.GetGroupKey(x) ?? FileNameNormalizer.Normalize(x.Name);
+            string groupY = groupIndex?.GetGroupKey(y) ?? FileNameNormalizer.Normalize(y.Name);
             string keyX = FileNameNormalizer.BuildCompareKey(groupX);
             string keyY = FileNameNormalizer.BuildCompareKey(groupY);
             return string.Compare(keyX, keyY, StringComparison.OrdinalIgnoreCase);
@@ -145,7 +145,7 @@ internal static class FileGroupHelper
         return 0;
     }
 
-    public static void ApplyGroupMode(ICollectionView? view, GroupMode mode)
+    public static void ApplyGroupMode(ICollectionView? view, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         if (view is not ListCollectionView listCollectionView)
         {
@@ -154,7 +154,9 @@ internal static class FileGroupHelper
 
         var currentGroup = listCollectionView.GroupDescriptions.FirstOrDefault() as FileEntryGroupDescription;
         var currentMode = currentGroup?.Mode ?? GroupMode.None;
-        if (currentMode == mode)
+        var currentGroupIndex = currentGroup?.GroupIndex;
+
+        if (currentMode == mode && ReferenceEquals(currentGroupIndex, groupIndex))
         {
             return;
         }
@@ -162,27 +164,27 @@ internal static class FileGroupHelper
         listCollectionView.GroupDescriptions.Clear();
         if (mode != GroupMode.None)
         {
-            listCollectionView.GroupDescriptions.Add(new FileEntryGroupDescription(mode));
+            listCollectionView.GroupDescriptions.Add(new FileEntryGroupDescription(mode, groupIndex));
         }
     }
 
-    public static void ApplyGroupMode(ListView? listView, GroupMode mode)
+    public static void ApplyGroupMode(ListView? listView, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         if (listView?.ItemsSource is System.Collections.IEnumerable itemsSource)
         {
-            ApplyGroupMode(CollectionViewSource.GetDefaultView(itemsSource), mode);
+            ApplyGroupMode(CollectionViewSource.GetDefaultView(itemsSource), mode, groupIndex);
         }
         else if (listView?.Items is not null)
         {
-            ApplyGroupMode(listView.Items, mode);
+            ApplyGroupMode(listView.Items, mode, groupIndex);
         }
     }
 
-    public static void ApplyGroupMode(FileListState? fileList, GroupMode mode)
+    public static void ApplyGroupMode(FileListState? fileList, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         if (fileList is not null)
         {
-            ApplyGroupMode(fileList.ItemsView, mode);
+            ApplyGroupMode(fileList.ItemsView, mode, groupIndex);
         }
     }
 }
@@ -190,17 +192,19 @@ internal static class FileGroupHelper
 internal sealed class FileEntryGroupDescription : GroupDescription
 {
     public GroupMode Mode { get; }
+    public SimilarNameGroupIndex? GroupIndex { get; set; }
 
-    public FileEntryGroupDescription(GroupMode mode)
+    public FileEntryGroupDescription(GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
         Mode = mode;
+        GroupIndex = groupIndex;
     }
 
     public override object GroupNameFromItem(object item, int level, CultureInfo culture)
     {
         if (item is FileEntry entry)
         {
-            return FileGroupHelper.GetGroupKey(entry, Mode);
+            return FileGroupHelper.GetGroupKey(entry, Mode, GroupIndex);
         }
         return "";
     }

@@ -1519,7 +1519,8 @@ public partial class MainWindow
             }
             else
             {
-                WriteDiagLog($"event=pane-load-skip switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCount={pane.FileList.Items.Count} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
+                WriteDiagLog($"event=pane-load-skip-restore-viewstate switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCount={pane.FileList.Items.Count} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
+                loadTasks.Add(RestoreWorkspacePaneStateAsync(pane, FileListRestorePolicy.ExactRestore, "workspace-switch", switchId));
             }
         }
         if (loadTasks.Count > 0)

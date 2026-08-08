@@ -592,6 +592,13 @@ public partial class MainWindow
                 return;
             }
 
+            SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
+                ? pane.FileList.EnsureSimilarNameIndex()
+                : null;
+            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, targetState.GroupMode);
+            _folderPaneController.ApplyFilter(pane, targetState.FilterText);
+
             if (policy == FileListRestorePolicy.ExactRestore)
             {
                 await RestoreWorkspacePaneExactStateAsync(pane, targetState, workspaceSwitchId, session);

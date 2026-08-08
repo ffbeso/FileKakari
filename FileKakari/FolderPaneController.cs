@@ -119,6 +119,7 @@ sealed class FolderPaneController
             if (CanReuseDisplayedItems(pane, targetState, cachedItems, cachedSortFoldersFirst))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                ApplyViewStateToPane(pane, targetState, cachedSortFoldersFirst);
                 UpdateStatus(pane);
                 pane.RefreshDisplay();
                 PerfLog.WriteVerbose(
@@ -128,10 +129,9 @@ sealed class FolderPaneController
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, cachedSortFoldersFirst, null);
             pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
+            ApplyViewStateToPane(pane, targetState, cachedSortFoldersFirst);
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
-            ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
             {
@@ -208,16 +208,13 @@ sealed class FolderPaneController
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
-            SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName ? pane.FileList.EnsureSimilarNameIndex() : null;
-            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null, targetState.GroupMode);
-            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+            ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
-            ApplyFilter(pane, targetState.FilterText);
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
             UpdateStatus(pane);
             pane.RefreshDisplay();
-            long groupBuildMs = groupIndex?.LastBuildElapsedMs ?? 0;
+            long groupBuildMs = pane.FileList.SimilarNameIndex?.LastBuildElapsedMs ?? 0;
             _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} groupBuildMs={groupBuildMs} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
         }
         catch (OperationCanceledException ex)
@@ -513,5 +510,16 @@ sealed class FolderPaneController
     private static string FormatEntryPath(FileEntry? entry)
     {
         return entry?.FullPath?.Replace("\"", "\\\"", StringComparison.Ordinal) ?? "";
+    }
+
+    private void ApplyViewStateToPane(FolderPane pane, WorkspaceTabState targetState, bool sortFoldersFirst)
+    {
+        SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
+            ? pane.FileList.EnsureSimilarNameIndex()
+            : null;
+
+        FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+        pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null, targetState.GroupMode);
+        ApplyFilter(pane, targetState.FilterText);
     }
 }

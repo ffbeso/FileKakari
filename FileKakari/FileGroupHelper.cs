@@ -161,6 +161,7 @@ internal static class FileGroupHelper
             return;
         }
 
+        PerfLog.WriteVerbose($"apply-group-mode mode={mode} previousMode={currentMode} hasIndex={groupIndex != null}");
         listCollectionView.GroupDescriptions.Clear();
         if (mode != GroupMode.None)
         {

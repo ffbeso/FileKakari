@@ -186,6 +186,7 @@ sealed class WorkspaceSessionFactory
         state.VerticalOffset = tabDefinition.ScrollOffset;
         state.SortColumn = string.IsNullOrWhiteSpace(tabDefinition.SortColumn) ? "Name" : tabDefinition.SortColumn.Trim();
         state.SortAscending = tabDefinition.SortAscending;
+        state.GroupMode = tabDefinition.GroupMode;
         state.ViewMode = AppSettings.NormalizeDisplayMode(tabDefinition.ViewMode);
     }
 }

@@ -27,25 +27,38 @@ public sealed class FileListState : INotifyPropertyChanged
     private string? _loadStateId;
     private string? _loadPath;
 
+    private int _itemsRevision;
+    private int _builtIndexRevision = -1;
+
     public SimilarNameGroupIndex? SimilarNameIndex { get; private set; }
+    public AnchorScrollState? PendingAnchorScrollState { get; set; }
 
     public FileListState()
     {
         ItemsView = CollectionViewSource.GetDefaultView(Items);
     }
 
+    public void InvalidateSimilarNameIndex()
+    {
+        _itemsRevision++;
+        SimilarNameIndex = null;
+    }
+
     public SimilarNameGroupIndex EnsureSimilarNameIndex()
     {
-        if (SimilarNameIndex == null)
+        if (SimilarNameIndex == null || _builtIndexRevision != _itemsRevision)
         {
             SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
+            _builtIndexRevision = _itemsRevision;
         }
         return SimilarNameIndex;
     }
 
     public void RebuildSimilarNameIndex()
     {
+        _itemsRevision++;
         SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
+        _builtIndexRevision = _itemsRevision;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -249,7 +262,7 @@ public sealed class FileListState : INotifyPropertyChanged
     {
         Items.Clear();
         Items.AddRange(items);
-        RebuildSimilarNameIndex();
+        InvalidateSimilarNameIndex();
         ItemsView.Refresh();
         CurrentPath = path;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;

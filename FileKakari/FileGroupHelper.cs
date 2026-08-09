@@ -169,8 +169,21 @@ internal static class FileGroupHelper
         }
     }
 
+    public static void ApplyVirtualizationForGroupMode(ListView? listView, GroupMode mode)
+    {
+        if (listView == null) return;
+
+        var targetMode = mode == GroupMode.None ? VirtualizationMode.Recycling : VirtualizationMode.Standard;
+        if (VirtualizingPanel.GetVirtualizationMode(listView) != targetMode)
+        {
+            VirtualizingPanel.SetVirtualizationMode(listView, targetMode);
+            VirtualizingPanel.SetIsVirtualizingWhenGrouping(listView, true);
+        }
+    }
+
     public static void ApplyGroupMode(ListView? listView, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
     {
+        ApplyVirtualizationForGroupMode(listView, mode);
         if (listView?.ItemsSource is System.Collections.IEnumerable itemsSource)
         {
             ApplyGroupMode(CollectionViewSource.GetDefaultView(itemsSource), mode, groupIndex);

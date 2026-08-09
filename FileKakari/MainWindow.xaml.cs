@@ -4998,6 +4998,10 @@ public partial class MainWindow : Window
             }
 
             displayedTab.State.VerticalOffset = e.VerticalOffset;
+            if (displayedTab.State.GroupMode != GroupMode.None)
+            {
+                displayedTab.State.AnchorState = AnchorScrollService.CaptureAnchorState(GetFolderPaneListView(pane), displayedTab.State.GroupMode, e.VerticalOffset);
+            }
             return;
         }
 

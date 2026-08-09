@@ -30,6 +30,8 @@ public sealed class WorkspaceTabState
 
     public GroupMode GroupMode { get; set; } = GroupMode.None;
 
+    public AnchorScrollState? AnchorState { get; set; }
+
     public FileDisplayMode ViewMode { get; set; }
 
     public string? CachedPath { get; set; }

@@ -267,6 +267,14 @@ public partial class MainWindow
             }
         }
 
+        if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
+        {
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher))
+            {
+                return;
+            }
+        }
+
         // First Stage: ContextIdle
         await Dispatcher.InvokeAsync(() =>
         {
@@ -836,6 +844,11 @@ public partial class MainWindow
             SaveCurrentFilterToState(targetState);
             targetState.SortColumn = NormalizeSortColumn(targetState.SortColumn);
             targetState.VerticalOffset = normalPane?.ScrollOffset ?? GetCurrentVerticalOffset();
+            if (targetState.GroupMode != GroupMode.None)
+            {
+                var lv = normalPane is not null ? GetFolderPaneListView(normalPane) : ItemsList;
+                targetState.AnchorState = AnchorScrollService.CaptureAnchorState(lv, targetState.GroupMode, targetState.VerticalOffset);
+            }
             targetState.SelectedPaths = normalPane?.SelectedPaths.ToList()
                 ?? ItemsList.SelectedItems
                     .OfType<FileEntry>()

@@ -11,6 +11,7 @@ public sealed class FileEntryComparer : IComparer
     private readonly Dictionary<string, int>? _currentOrder;
     private readonly GroupMode _groupMode;
     private readonly SimilarNameGroupIndex? _groupIndex;
+    private readonly GroupRepresentativeIndex? _representativeIndex;
 
     public FileEntryComparer(
         string columnId,
@@ -18,7 +19,8 @@ public sealed class FileEntryComparer : IComparer
         bool foldersFirst,
         Dictionary<string, int>? currentOrder = null,
         GroupMode groupMode = GroupMode.None,
-        SimilarNameGroupIndex? groupIndex = null)
+        SimilarNameGroupIndex? groupIndex = null,
+        GroupRepresentativeIndex? representativeIndex = null)
     {
         _columnId = ColumnLayoutService.NormalizeColumnId(columnId);
         _ascending = ascending;
@@ -26,6 +28,7 @@ public sealed class FileEntryComparer : IComparer
         _currentOrder = currentOrder;
         _groupMode = groupMode;
         _groupIndex = groupIndex;
+        _representativeIndex = representativeIndex;
     }
 
     public int Compare(object? x, object? y)
@@ -47,10 +50,26 @@ public sealed class FileEntryComparer : IComparer
 
         if (_groupMode != GroupMode.None)
         {
-            var groupComparison = FileGroupHelper.CompareGroup(left, right, _groupMode, _groupIndex);
-            if (groupComparison != 0)
+            string groupLeft = FileGroupHelper.GetGroupKey(left, _groupMode, _groupIndex);
+            string groupRight = FileGroupHelper.GetGroupKey(right, _groupMode, _groupIndex);
+
+            if (!string.Equals(groupLeft, groupRight, StringComparison.OrdinalIgnoreCase))
             {
-                return groupComparison;
+                if (string.Equals(groupLeft, "フォルダ", StringComparison.OrdinalIgnoreCase)) return -1;
+                if (string.Equals(groupRight, "フォルダ", StringComparison.OrdinalIgnoreCase)) return 1;
+
+                var repLeft = _representativeIndex?.GetRepresentative(groupLeft) ?? left;
+                var repRight = _representativeIndex?.GetRepresentative(groupRight) ?? right;
+
+                int groupResult = CompareByColumn(repLeft, repRight);
+                if (groupResult != 0)
+                {
+                    return _ascending ? groupResult : -groupResult;
+                }
+
+                string keyL = FileNameNormalizer.BuildCompareKey(groupLeft);
+                string keyR = FileNameNormalizer.BuildCompareKey(groupRight);
+                return string.Compare(keyL, keyR, StringComparison.OrdinalIgnoreCase);
             }
         }
 

@@ -283,7 +283,8 @@ public sealed class FileListState : INotifyPropertyChanged
         if (ItemsView is ListCollectionView listView)
         {
             SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? EnsureSimilarNameIndex() : null;
-            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex);
+            GroupRepresentativeIndex? repIndex = groupMode != GroupMode.None ? GroupRepresentativeIndex.Build(Items, groupMode, sortColumn, sortAscending, sortFoldersFirst, groupIndex) : null;
+            listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex, repIndex);
         }
         else
         {

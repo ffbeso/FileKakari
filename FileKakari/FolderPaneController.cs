@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace FileKakari;
@@ -18,6 +19,7 @@ sealed class FolderPaneController
     private readonly Func<bool> _sortFoldersFirst;
     private readonly Func<string, bool> _shouldLoadExtraColumns;
     private readonly Func<FolderPane, WorkspaceTabState, bool> _isCurrentPaneOwner;
+    private readonly Func<FolderPane, ListView?>? _getListView;
     private int _statusVersion;
 
     internal FolderPaneController(
@@ -31,7 +33,8 @@ sealed class FolderPaneController
         DevListPerfOptions devListPerfOptions,
         Func<bool> sortFoldersFirst,
         Func<string, bool> shouldLoadExtraColumns,
-        Func<FolderPane, WorkspaceTabState, bool> isCurrentPaneOwner)
+        Func<FolderPane, WorkspaceTabState, bool> isCurrentPaneOwner,
+        Func<FolderPane, ListView?>? getListView = null)
     {
         _displayPanes = displayPanes;
         _fileService = fileService;
@@ -44,6 +47,7 @@ sealed class FolderPaneController
         _sortFoldersFirst = sortFoldersFirst;
         _shouldLoadExtraColumns = shouldLoadExtraColumns;
         _isCurrentPaneOwner = isCurrentPaneOwner;
+        _getListView = getListView;
     }
 
     internal void ClearDisplayPanes()
@@ -205,10 +209,17 @@ sealed class FolderPaneController
                 return;
             }
 
+            AnchorScrollState? capturedAnchor = null;
+            if (targetState.GroupMode != GroupMode.None)
+            {
+                capturedAnchor = AnchorScrollService.CaptureAnchorState(_getListView?.Invoke(pane), targetState.GroupMode, targetState.VerticalOffset);
+            }
+
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
             ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
+            pane.FileList.PendingAnchorScrollState = capturedAnchor;
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;

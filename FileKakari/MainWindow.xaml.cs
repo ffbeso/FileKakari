@@ -569,7 +569,8 @@ public partial class MainWindow : Window
             ShouldLoadExtraColumns,
             (pane, state) => FindSessionContainingPane(pane) is { } session
                 && _workspaceSessions.Contains(session)
-                && ReferenceEquals(pane.ActiveTabState, state));
+                && ReferenceEquals(pane.ActiveTabState, state),
+            GetFolderPaneListView);
         _workspacePaneUiController = new WorkspacePaneUiController(
             _workspacePaneGroups,
             _folderPaneController,

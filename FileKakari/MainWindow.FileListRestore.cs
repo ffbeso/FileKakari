@@ -258,6 +258,15 @@ public partial class MainWindow
             return;
         }
 
+        if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
+        {
+            pane.FileList.PendingAnchorScrollState = null;
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher))
+            {
+                return;
+            }
+        }
+
         // First Stage: ContextIdle
         await Dispatcher.InvokeAsync(() =>
         {

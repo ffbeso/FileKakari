@@ -30,7 +30,7 @@ public sealed class WorkspaceTabState
         get => _currentPath;
         set
         {
-            if (!string.Equals(_currentPath, value, StringComparison.OrdinalIgnoreCase))
+            if (!IsSamePath(_currentPath, value))
             {
                 _currentPath = value;
                 CollapsedGroupKeys.Clear();
@@ -55,6 +55,24 @@ public sealed class WorkspaceTabState
                 CollapsedGroupKeys.Clear();
             }
         }
+    }
+
+    private static bool IsSamePath(string path1, string path2)
+    {
+        if (string.Equals(path1, path2, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(path1) || string.IsNullOrWhiteSpace(path2))
+        {
+            return false;
+        }
+
+        var norm1 = NavigationState.NormalizePath(path1) ?? path1.TrimEnd('\\', '/');
+        var norm2 = NavigationState.NormalizePath(path2) ?? path2.TrimEnd('\\', '/');
+
+        return string.Equals(norm1, norm2, StringComparison.OrdinalIgnoreCase);
     }
 
     public AnchorScrollState? AnchorState { get; set; }

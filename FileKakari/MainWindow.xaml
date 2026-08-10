@@ -809,9 +809,7 @@
                                         <ControlTemplate TargetType="{x:Type GroupItem}">
                                             <Expander IsExpanded="True"
                                                       Style="{StaticResource FileGroupExpanderStyle}"
-                                                      Expanded="FileGroupExpander_Expanded"
-                                                      Collapsed="FileGroupExpander_Collapsed"
-                                                      Loaded="FileGroupExpander_Loaded">
+                                                      local:MainWindow.TrackCollapse="True">
                                                 <Expander.Header>
                                                     <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
                                                         <StackPanel Orientation="Horizontal">
@@ -2068,11 +2066,8 @@
                                                         <Setter Property="Template">
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="{x:Type GroupItem}">
-                                                                    <Expander IsExpanded="True"
-                                                                              Style="{StaticResource FileGroupExpanderStyle}"
-                                                                              Expanded="FileGroupExpander_Expanded"
-                                                                              Collapsed="FileGroupExpander_Collapsed"
-                                                                              Loaded="FileGroupExpander_Loaded">
+                                                                    <Expander IsExpanded="True" Style="{StaticResource FileGroupExpanderStyle}"
+                                                                              local:MainWindow.TrackCollapse="True">
                                                                         <Expander.Header>
                                                                             <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
                                                                                 <StackPanel Orientation="Horizontal">

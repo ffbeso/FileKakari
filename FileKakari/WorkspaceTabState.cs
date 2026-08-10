@@ -20,7 +20,23 @@ public sealed class WorkspaceTabState
 
     public string BasePath { get; set; } = "";
 
-    public string CurrentPath { get; set; }
+    private string _currentPath = "";
+    private GroupMode _groupMode = GroupMode.None;
+
+    public HashSet<string> CollapsedGroupKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public string CurrentPath
+    {
+        get => _currentPath;
+        set
+        {
+            if (!string.Equals(_currentPath, value, StringComparison.OrdinalIgnoreCase))
+            {
+                _currentPath = value;
+                CollapsedGroupKeys.Clear();
+            }
+        }
+    }
 
     public string FilterText { get; set; } = "";
 
@@ -28,7 +44,18 @@ public sealed class WorkspaceTabState
 
     public bool SortAscending { get; set; } = true;
 
-    public GroupMode GroupMode { get; set; } = GroupMode.None;
+    public GroupMode GroupMode
+    {
+        get => _groupMode;
+        set
+        {
+            if (_groupMode != value)
+            {
+                _groupMode = value;
+                CollapsedGroupKeys.Clear();
+            }
+        }
+    }
 
     public AnchorScrollState? AnchorState { get; set; }
 

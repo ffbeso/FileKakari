@@ -37,11 +37,13 @@
                                                 </Grid.ColumnDefinitions>
                                                 <Path x:Name="Arrow"
                                                       Grid.Column="0"
-                                                      Data="M 0 0 L 4 4 L 8 0 Z"
+                                                      Width="8"
+                                                      Height="8"
+                                                      Data="M 1 2 L 7 2 L 4 6 Z"
                                                       Fill="{DynamicResource SecondaryTextBrush}"
                                                       HorizontalAlignment="Center"
                                                       VerticalAlignment="Center"
-                                                      Margin="4,0,6,0"
+                                                      Margin="6,0,6,0"
                                                       RenderTransformOrigin="0.5,0.5">
                                                     <Path.RenderTransform>
                                                         <RotateTransform Angle="-90"/>

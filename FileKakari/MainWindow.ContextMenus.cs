@@ -153,6 +153,16 @@ public partial class MainWindow
 
         targetState.GroupMode = mode;
 
+        if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath))
+        {
+            var pane = targetListView.DataContext as FolderPane ?? FindPaneForState(targetState);
+            if (pane is not null)
+            {
+                await ReloadFolderPaneAsync(pane);
+                return;
+            }
+        }
+
         if (ReferenceEquals(targetListView, ItemsList))
         {
             ApplyTabSort(targetState);

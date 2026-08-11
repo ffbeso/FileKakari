@@ -571,7 +571,7 @@ public partial class MainWindow
         }
     }
 
-    private void WorkspacePaneGridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+    private async void WorkspacePaneGridViewColumnHeader_Click(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is not GridViewColumnHeader header)
         {
@@ -631,6 +631,13 @@ public partial class MainWindow
         {
             targetState.SortColumn = columnId;
             targetState.SortAscending = true;
+        }
+
+        if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath))
+        {
+            await ReloadFolderPaneAsync(pane);
+            _workspaceLocalState.MarkDirty("sort");
+            return;
         }
 
         using (SuppressPreviewForProgrammaticSelection("reload"))

@@ -356,7 +356,7 @@ public partial class MainWindow
         _columnLayout.SaveColumnWidthsForPath(path, targetSession, pane.Id, widths, OnWorkspaceColumnWidthsDirty, tabStateId);
     }
 
-    private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+    private async void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is not GridViewColumnHeader header || header.Column?.Header is not TextBlock textBlock || textBlock.Tag is not string columnId)
         {
@@ -389,6 +389,17 @@ public partial class MainWindow
         {
             targetState.SortColumn = columnId;
             targetState.SortAscending = true;
+        }
+
+        if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath))
+        {
+            var pane = FindPaneForState(targetState);
+            if (pane is not null)
+            {
+                await ReloadFolderPaneAsync(pane);
+                _workspaceLocalState.MarkDirty("sort");
+                return;
+            }
         }
 
         ApplyTabSort(targetState, currentOrder);

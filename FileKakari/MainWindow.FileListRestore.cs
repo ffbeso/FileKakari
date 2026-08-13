@@ -227,7 +227,11 @@ public partial class MainWindow
         return result.Restored;
     }
 
-    private async Task RestoreListViewScrollOffsetAsync(double offset)
+    private async Task RestoreScrollViewerOffsetCoreAsync(
+        Func<ScrollViewer?> getScrollViewer,
+        double offset,
+        Func<bool>? isStaleCheck = null,
+        Action? onFirstStageAction = null)
     {
         if (offset < 0)
         {
@@ -237,14 +241,32 @@ public partial class MainWindow
         // First Stage: ContextIdle
         await Dispatcher.InvokeAsync(() =>
         {
-            FindItemsScrollViewer()?.ScrollToVerticalOffset(offset);
+            if (isStaleCheck?.Invoke() == true)
+            {
+                return;
+            }
+
+            getScrollViewer()?.ScrollToVerticalOffset(offset);
+            onFirstStageAction?.Invoke();
         }, DispatcherPriority.ContextIdle);
 
-        // Second Stage: Render
+        // Second Stage: Render (to override any virtualization adjustments or ScrollIntoView side-effects)
         await Dispatcher.InvokeAsync(() =>
         {
-            FindItemsScrollViewer()?.ScrollToVerticalOffset(offset);
+            if (isStaleCheck?.Invoke() == true)
+            {
+                return;
+            }
+
+            getScrollViewer()?.ScrollToVerticalOffset(offset);
         }, DispatcherPriority.Render);
+    }
+
+    private async Task RestoreListViewScrollOffsetAsync(double offset)
+    {
+        await RestoreScrollViewerOffsetCoreAsync(
+            FindItemsScrollViewer,
+            offset);
     }
 
     private async Task RestoreWorkspacePaneScrollOffsetAsync(
@@ -275,46 +297,32 @@ public partial class MainWindow
             }
         }
 
-        // First Stage: ContextIdle
-        await Dispatcher.InvokeAsync(() =>
+        Func<bool>? isStale = (workspaceSwitchId > 0 && session is not null)
+            ? () => !CanApplyWorkspaceSwitch(workspaceSwitchId, session)
+            : null;
+
+        ScrollViewer? GetPaneScrollViewer()
         {
-            if (workspaceSwitchId > 0
-                && session is not null
-                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
-            {
-                return;
-            }
+            return GetFolderPaneListView(pane) is { } listView
+                ? FindVisualChild<ScrollViewer>(listView)
+                : null;
+        }
 
-            if (GetFolderPaneListView(pane) is { } listView
-                && FindVisualChild<ScrollViewer>(listView) is { } scrollViewer)
-            {
-                scrollViewer.ScrollToVerticalOffset(offset);
-            }
-
+        void OnFirstStage()
+        {
             pane.ScrollOffset = offset;
             if (pane.ActiveTabState is { } state
                 && string.Equals(pane.FileList.LoadedStateId, state.Id, StringComparison.Ordinal))
             {
                 state.VerticalOffset = offset;
             }
-        }, DispatcherPriority.ContextIdle);
+        }
 
-        // Second Stage: Render (to override any virtualization adjustments or ScrollIntoView side-effects)
-        await Dispatcher.InvokeAsync(() =>
-        {
-            if (workspaceSwitchId > 0
-                && session is not null
-                && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
-            {
-                return;
-            }
-
-            if (GetFolderPaneListView(pane) is { } listView
-                && FindVisualChild<ScrollViewer>(listView) is { } scrollViewer)
-            {
-                scrollViewer.ScrollToVerticalOffset(offset);
-            }
-        }, DispatcherPriority.Render);
+        await RestoreScrollViewerOffsetCoreAsync(
+            GetPaneScrollViewer,
+            offset,
+            isStale,
+            OnFirstStage);
     }
 
     private async Task ReloadFolderPaneAsync(

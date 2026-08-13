@@ -2479,6 +2479,7 @@ public partial class MainWindow
             e.Handled = true;
             textBox.Text = pane.CurrentPath;
             textBox.Visibility = Visibility.Collapsed;
+            GetFolderPaneListView(pane)?.Focus();
             return;
         }
 

@@ -343,6 +343,12 @@ public partial class MainWindow
             return;
         }
 
+        if (PathBarHost.Visibility == Visibility.Visible)
+        {
+            _breadcrumbPathBar.BeginEdit();
+            return;
+        }
+
         if (ActiveNavigation is { } navigation)
         {
             ShowPanePathTextBox(NormalPanePathBox, navigation.CurrentPath);
@@ -351,11 +357,19 @@ public partial class MainWindow
 
     private void FocusWorkspacePaneTextBox(string tag)
     {
+        var activePane = GetActiveFolderPane();
         var candidates = FindVisualChildren<TextBox>(WorkspaceSplitGrid)
             .Where(textBox => string.Equals(textBox.Tag as string, tag, StringComparison.Ordinal))
             .ToList();
-        var target = candidates.FirstOrDefault(textBox => ReferenceEquals(textBox.DataContext, _activeWorkspacePaneGroup))
+
+        TextBox? target = null;
+        if (activePane is not null)
+        {
+            target = candidates.FirstOrDefault(tb => GetWorkspacePaneFromSender(tb) == activePane);
+        }
+        target ??= candidates.FirstOrDefault(textBox => ReferenceEquals(textBox.DataContext, _activeWorkspacePaneGroup))
             ?? candidates.FirstOrDefault();
+
         if (target is not null)
         {
             if (string.Equals(tag, "PanePathBox", StringComparison.Ordinal)

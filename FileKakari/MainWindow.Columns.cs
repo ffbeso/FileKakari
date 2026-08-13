@@ -196,17 +196,7 @@ public partial class MainWindow
                     $"column-apply target=\"workspace-pane\" source=\"tab-state\" sessionId=\"{targetSession?.Id ?? "null"}\" paneId=\"{pane.Id}\" tabStateId=\"{tabStateId ?? "null"}\" " +
                     $"path=\"{path ?? ""}\" resolvedPath=\"{resolvedPath ?? ""}\" generatedKey=\"{generatedKey}\" gridHash={gridView.GetHashCode()}");
 
-                foreach (var column in gridView.Columns)
-                {
-                    if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
-                    {
-                        var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id, tabStateId);
-                        if (width > 0)
-                        {
-                            column.Width = width;
-                        }
-                    }
-                }
+                ApplyColumnWidths(gridView.Columns, columnId => _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id, tabStateId));
             }
         }
         finally
@@ -316,6 +306,38 @@ public partial class MainWindow
         }
     }
 
+    private static Dictionary<string, double> ExtractColumnWidths(IEnumerable<GridViewColumn> columns)
+    {
+        var widths = new Dictionary<string, double>();
+        foreach (var column in columns)
+        {
+            if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
+            {
+                var width = GetPersistableColumnWidth(column);
+                if (width > 0)
+                {
+                    widths[columnId] = width;
+                }
+            }
+        }
+        return widths;
+    }
+
+    private static void ApplyColumnWidths(IEnumerable<GridViewColumn> columns, Func<string, double> widthProvider)
+    {
+        foreach (var column in columns)
+        {
+            if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
+            {
+                var width = widthProvider(columnId);
+                if (width > 0)
+                {
+                    column.Width = width;
+                }
+            }
+        }
+    }
+
     private void SaveWorkspacePaneColumnWidthsForTab(FolderPane pane, FolderTab tab)
     {
         var listView = FindListViewForPane(pane);
@@ -324,23 +346,8 @@ public partial class MainWindow
             return;
         }
 
-        var widths = new Dictionary<string, double>();
-        var hasValidWidth = false;
-
-        foreach (var column in gridView.Columns)
-        {
-            if (column.Header is TextBlock textBlock && textBlock.Tag is string columnId)
-            {
-                var width = GetPersistableColumnWidth(column);
-                if (width > 0)
-                {
-                    widths[columnId] = width;
-                    hasValidWidth = true;
-                }
-            }
-        }
-
-        if (!hasValidWidth)
+        var widths = ExtractColumnWidths(gridView.Columns);
+        if (widths.Count == 0)
         {
             return;
         }

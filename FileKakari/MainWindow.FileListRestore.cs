@@ -743,8 +743,6 @@ public partial class MainWindow
             }
         }, DispatcherPriority.Send);
 
-        // Wait for container layout generation before restoring scroll offset.
-        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
         if (workspaceSwitchId > 0
             && session is not null
             && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))

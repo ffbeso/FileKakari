@@ -30,59 +30,14 @@ public partial class MainWindow
         }
 
         var selectedEntries = GetSelectedEntries();
-        var isSpecialView = SpecialLocationService.IsSpecialUri(navigation.CurrentPath);
-        var isDisconnected = activeTab.IsDisconnected;
-        var canOperateInFolder = !isSpecialView && !isDisconnected;
-        var canPaste = (IsInternalClipboardValid() || ClipboardContainsExternalFileTransfer()) && canOperateInFolder;
-        var menu = new ContextMenu
-        {
-            PlacementTarget = ItemsList
-        };
-
-        if (clickedEntry is null)
-        {
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextPaste"), canPaste, () => PastePendingFileOperationAsync()));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem(_text.Get("NewFolderButton"), canOperateInFolder, () => CreateNewItemAsync(NewItemKind.Folder)));
-            menu.Items.Add(CreateMenuItem(_text.Get("NewFileButton"), canOperateInFolder, () => CreateNewItemAsync(NewItemKind.TextFile)));
-
-            var sep = new Separator();
-            ApplySeparatorStyle(sep);
-            menu.Items.Add(sep);
-
-            var viewSubMenu = new MenuItem
-            {
-                Header = _text.Get("ContextView")
-            };
-            ApplyMenuItemStyle(viewSubMenu);
-            _viewModeController.PopulateMenu(viewSubMenu);
-            menu.Items.Add(viewSubMenu);
-
-            if (ActiveTabState is { } normalState)
-            {
-                PopulateGroupSubMenu(menu, normalState, ItemsList);
-            }
-
-            AddUserCommandsSubMenu(menu, navigation.CurrentPath, selectedEntries, addLeadingSeparator: true);
-        }
-        else
-        {
-            var singleSelection = selectedEntries.Count == 1;
-            var singleDirectory = singleSelection && selectedEntries[0].IsDirectory;
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !isDisconnected, () => OpenSelectedAsync()));
-            AddUserCommandsSubMenu(menu, navigation.CurrentPath, selectedEntries, addLeadingSeparator: false);
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !isDisconnected, () => OpenSelectedAsync(openDirectoryInNewTab: true)));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextCopy"), canOperateInFolder, () => SetPendingFileOperationAsync(PendingFileOperationKind.Copy)));
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextCut"), canOperateInFolder, () => SetPendingFileOperationAsync(PendingFileOperationKind.Move)));
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextPaste"), canPaste, () => PastePendingFileOperationAsync()));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextRename"), singleSelection && canOperateInFolder, () => BeginRenameSelected()));
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextDelete"), canOperateInFolder, () => DeleteSelectedAsync()));
-            menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextCopyPath"), true, () => CopyPathsToClipboard(selectedEntries)));
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextProperties"), true, () => ShowPropertiesAsync(selectedEntries)));
-        }
+        var menu = BuildLightweightContextMenu(
+            pane: null,
+            placementTarget: ItemsList,
+            state: ActiveTabState,
+            currentPath: navigation.CurrentPath,
+            isDisconnected: activeTab.IsDisconnected,
+            selectedEntries: selectedEntries,
+            clickedEntry: clickedEntry);
 
         menu.IsOpen = true;
     }
@@ -279,12 +234,33 @@ public partial class MainWindow
         }
 
         var selectedEntries = listView.SelectedItems.OfType<FileEntry>().ToList();
-        var isSpecialView = SpecialLocationService.IsSpecialUri(tab.Navigation.CurrentPath);
-        var canOperateInFolder = !isSpecialView && !tab.IsDisconnected;
+        var menu = BuildLightweightContextMenu(
+            pane: pane,
+            placementTarget: listView,
+            state: state,
+            currentPath: tab.Navigation.CurrentPath,
+            isDisconnected: tab.IsDisconnected,
+            selectedEntries: selectedEntries,
+            clickedEntry: clickedEntry);
+
+        menu.IsOpen = true;
+    }
+
+    private ContextMenu BuildLightweightContextMenu(
+        FolderPane? pane,
+        ListView placementTarget,
+        WorkspaceTabState? state,
+        string currentPath,
+        bool isDisconnected,
+        IReadOnlyList<FileEntry> selectedEntries,
+        FileEntry? clickedEntry)
+    {
+        var isSpecialView = SpecialLocationService.IsSpecialUri(currentPath);
+        var canOperateInFolder = !isSpecialView && !isDisconnected;
         var canPaste = (IsInternalClipboardValid() || ClipboardContainsExternalFileTransfer()) && canOperateInFolder;
         var menu = new ContextMenu
         {
-            PlacementTarget = listView
+            PlacementTarget = placementTarget
         };
 
         if (clickedEntry is null)
@@ -303,33 +279,56 @@ public partial class MainWindow
                 Header = _text.Get("ContextView")
             };
             ApplyMenuItemStyle(viewSubMenu);
-            _viewModeController.PopulateWorkspaceMenu(viewSubMenu, pane, state, reason => _workspaceLocalState.MarkDirty(reason), ApplyDisplayModeToPane);
+            if (pane is not null && state is not null)
+            {
+                _viewModeController.PopulateWorkspaceMenu(viewSubMenu, pane, state, reason => _workspaceLocalState.MarkDirty(reason), ApplyDisplayModeToPane);
+            }
+            else
+            {
+                _viewModeController.PopulateMenu(viewSubMenu);
+            }
             menu.Items.Add(viewSubMenu);
 
-            PopulateGroupSubMenu(menu, state, listView);
+            if (state is not null)
+            {
+                PopulateGroupSubMenu(menu, state, placementTarget);
+            }
 
-            AddUserCommandsSubMenu(menu, tab.Navigation.CurrentPath, selectedEntries, addLeadingSeparator: true);
+            AddUserCommandsSubMenu(menu, currentPath, selectedEntries, addLeadingSeparator: true);
         }
         else
         {
             var singleSelection = selectedEntries.Count == 1;
             var singleDirectory = singleSelection && selectedEntries[0].IsDirectory;
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !tab.IsDisconnected, () => OpenWorkspacePaneSelectionAsync(pane, selectedEntries[0])));
-            AddUserCommandsSubMenu(menu, tab.Navigation.CurrentPath, selectedEntries, addLeadingSeparator: false);
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !tab.IsDisconnected, () => CreateWorkspacePaneSubTabAsync(pane, selectedEntries[0].FullPath, tab)));
+
+            if (pane is not null)
+            {
+                menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !isDisconnected, () => OpenWorkspacePaneSelectionAsync(pane, selectedEntries[0])));
+                AddUserCommandsSubMenu(menu, currentPath, selectedEntries, addLeadingSeparator: false);
+                menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !isDisconnected, () => CreateWorkspacePaneSubTabAsync(pane, selectedEntries[0].FullPath, pane.ActiveTab!)));
+            }
+            else
+            {
+                menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !isDisconnected, () => OpenSelectedAsync()));
+                AddUserCommandsSubMenu(menu, currentPath, selectedEntries, addLeadingSeparator: false);
+                menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !isDisconnected, () => OpenSelectedAsync(openDirectoryInNewTab: true)));
+            }
+
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem(_text.Get("ContextCopy"), canOperateInFolder, () => SetPendingFileOperationAsync(PendingFileOperationKind.Copy, pane)));
             menu.Items.Add(CreateMenuItem(_text.Get("ContextCut"), canOperateInFolder, () => SetPendingFileOperationAsync(PendingFileOperationKind.Move, pane)));
             menu.Items.Add(CreateMenuItem(_text.Get("ContextPaste"), canPaste, () => PastePendingFileOperationAsync(pane)));
             menu.Items.Add(new Separator());
-            menu.Items.Add(CreateMenuItem(_text.Get("ContextRename"), singleSelection && canOperateInFolder && IsRenameable(selectedEntries[0]), () => BeginRenameSelected(pane)));
+
+            var canRename = singleSelection && canOperateInFolder && (pane is null || IsRenameable(selectedEntries[0]));
+            menu.Items.Add(CreateMenuItem(_text.Get("ContextRename"), canRename, () => BeginRenameSelected(pane)));
             menu.Items.Add(CreateMenuItem(_text.Get("ContextDelete"), canOperateInFolder, () => DeleteSelectedAsync(pane)));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem(_text.Get("ContextCopyPath"), true, () => CopyPathsToClipboard(selectedEntries)));
             menu.Items.Add(CreateMenuItem(_text.Get("ContextProperties"), true, () => ShowPropertiesAsync(selectedEntries)));
         }
 
-        menu.IsOpen = true;
+        return menu;
     }
 
     private void WorkspacePaneSubTabBar_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)

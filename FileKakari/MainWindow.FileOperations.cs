@@ -434,10 +434,7 @@ public partial class MainWindow
         }
         finally
         {
-            SuppressFolderWatchRefreshForSelfOperation("delete");
-            _isFileOperationInProgress = false;
-            await ProcessPendingFolderWatchRefreshAsync();
-            await ProcessPendingDriveListRefreshAsync();
+            await FinalizeSelfFileOperationAsync("delete");
         }
     }
 
@@ -746,10 +743,7 @@ public partial class MainWindow
         }
         finally
         {
-            SuppressFolderWatchRefreshForSelfOperation("create");
-            _isFileOperationInProgress = false;
-            await ProcessPendingFolderWatchRefreshAsync();
-            await ProcessPendingDriveListRefreshAsync();
+            await FinalizeSelfFileOperationAsync("create");
         }
     }
 
@@ -854,10 +848,7 @@ public partial class MainWindow
         }
         finally
         {
-            SuppressFolderWatchRefreshForSelfOperation("undo");
-            _isFileOperationInProgress = false;
-            await ProcessPendingFolderWatchRefreshAsync();
-            await ProcessPendingDriveListRefreshAsync();
+            await FinalizeSelfFileOperationAsync("undo");
         }
     }
 
@@ -1151,5 +1142,13 @@ public partial class MainWindow
         {
         }
         return PendingFileOperationKind.Copy;
+    }
+
+    private async Task FinalizeSelfFileOperationAsync(string operationName)
+    {
+        SuppressFolderWatchRefreshForSelfOperation(operationName);
+        _isFileOperationInProgress = false;
+        await ProcessPendingFolderWatchRefreshAsync();
+        await ProcessPendingDriveListRefreshAsync();
     }
 }

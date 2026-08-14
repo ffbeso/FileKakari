@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace FileKakari;
@@ -17,16 +18,6 @@ public partial class MainWindow
     public static bool GetTrackCollapse(DependencyObject obj) => (bool)obj.GetValue(TrackCollapseProperty);
     public static void SetTrackCollapse(DependencyObject obj, bool value) => obj.SetValue(TrackCollapseProperty, value);
 
-    private static readonly DependencyProperty IsApplyingStateProperty =
-        DependencyProperty.RegisterAttached(
-            "IsApplyingState",
-            typeof(bool),
-            typeof(MainWindow),
-            new PropertyMetadata(false));
-
-    private static bool GetIsApplyingState(DependencyObject obj) => (bool)obj.GetValue(IsApplyingStateProperty);
-    private static void SetIsApplyingState(DependencyObject obj, bool value) => obj.SetValue(IsApplyingStateProperty, value);
-
     private static void OnTrackCollapseChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Expander expander) return;
@@ -35,16 +26,16 @@ public partial class MainWindow
         {
             expander.DataContextChanged += Expander_DataContextChanged;
             expander.Loaded += Expander_Loaded;
-            expander.Expanded += FileGroupExpander_Expanded;
-            expander.Collapsed += FileGroupExpander_Collapsed;
+            expander.PreviewMouseLeftButtonDown += Expander_PreviewMouseLeftButtonDown;
+            expander.PreviewKeyDown += Expander_PreviewKeyDown;
             ApplyCollapseState(expander);
         }
         else
         {
             expander.DataContextChanged -= Expander_DataContextChanged;
             expander.Loaded -= Expander_Loaded;
-            expander.Expanded -= FileGroupExpander_Expanded;
-            expander.Collapsed -= FileGroupExpander_Collapsed;
+            expander.PreviewMouseLeftButtonDown -= Expander_PreviewMouseLeftButtonDown;
+            expander.PreviewKeyDown -= Expander_PreviewKeyDown;
         }
     }
 
@@ -64,6 +55,49 @@ public partial class MainWindow
         }
     }
 
+    private static void Expander_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Expander expander) return;
+        var source = e.OriginalSource as DependencyObject;
+        if (!IsInsideGroupHeader(source)) return;
+
+        ToggleGroupStateByUser(expander);
+        e.Handled = true;
+    }
+
+    private static void Expander_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not Expander expander) return;
+        if (e.Key == Key.Space || e.Key == Key.Enter)
+        {
+            ToggleGroupStateByUser(expander);
+            e.Handled = true;
+        }
+    }
+
+    private static void ToggleGroupStateByUser(Expander expander)
+    {
+        if (expander.DataContext is not CollectionViewGroup group) return;
+
+        var pane = FindParentFolderPane(expander);
+        var tabState = pane?.ActiveTabState;
+        if (tabState == null) return;
+
+        string groupKey = group.Name?.ToString() ?? "";
+        if (string.IsNullOrEmpty(groupKey)) return;
+
+        if (tabState.CollapsedGroupKeys.Contains(groupKey))
+        {
+            tabState.CollapsedGroupKeys.Remove(groupKey);
+        }
+        else
+        {
+            tabState.CollapsedGroupKeys.Add(groupKey);
+        }
+
+        ApplyCollapseState(expander);
+    }
+
     private static void ApplyCollapseState(Expander expander)
     {
         if (expander.DataContext is not CollectionViewGroup group) return;
@@ -76,56 +110,7 @@ public partial class MainWindow
         if (string.IsNullOrEmpty(groupKey)) return;
 
         bool shouldBeCollapsed = tabState.CollapsedGroupKeys.Contains(groupKey);
-        bool targetIsExpanded = !shouldBeCollapsed;
-
-        if (expander.IsExpanded != targetIsExpanded)
-        {
-            try
-            {
-                SetIsApplyingState(expander, true);
-                expander.IsExpanded = targetIsExpanded;
-            }
-            finally
-            {
-                SetIsApplyingState(expander, false);
-            }
-        }
-    }
-
-    private static void FileGroupExpander_Collapsed(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Expander expander) return;
-        if (GetIsApplyingState(expander)) return;
-
-        if (expander.DataContext is not CollectionViewGroup group) return;
-
-        var pane = FindParentFolderPane(expander);
-        var tabState = pane?.ActiveTabState;
-        if (tabState == null) return;
-
-        string groupKey = group.Name?.ToString() ?? "";
-        if (!string.IsNullOrEmpty(groupKey))
-        {
-            tabState.CollapsedGroupKeys.Add(groupKey);
-        }
-    }
-
-    private static void FileGroupExpander_Expanded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Expander expander) return;
-        if (GetIsApplyingState(expander)) return;
-
-        if (expander.DataContext is not CollectionViewGroup group) return;
-
-        var pane = FindParentFolderPane(expander);
-        var tabState = pane?.ActiveTabState;
-        if (tabState == null) return;
-
-        string groupKey = group.Name?.ToString() ?? "";
-        if (!string.IsNullOrEmpty(groupKey))
-        {
-            tabState.CollapsedGroupKeys.Remove(groupKey);
-        }
+        expander.IsExpanded = !shouldBeCollapsed;
     }
 
     private static FolderPane? FindParentFolderPane(DependencyObject child)
@@ -163,6 +148,7 @@ public partial class MainWindow
 
         var tabState = pane.ActiveTabState;
         var groups = pane.ItemsView?.Groups;
+
         if (groups != null)
         {
             foreach (var g in groups)

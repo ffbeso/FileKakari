@@ -376,7 +376,7 @@ public partial class MainWindow
                 return;
             }
 
-            if (_owner.IsInsideScrollBar(source))
+            if (_owner.IsInsideScrollBar(source) || MainWindow.IsInsideGroupHeader(source))
             {
                 return;
             }

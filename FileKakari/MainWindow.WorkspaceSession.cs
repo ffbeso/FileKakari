@@ -944,7 +944,8 @@ public partial class MainWindow
             return;
         }
 
-        if (IsInsideScrollBar(e.OriginalSource as DependencyObject))
+        if (IsInsideScrollBar(e.OriginalSource as DependencyObject)
+            || IsInsideGroupHeader(e.OriginalSource as DependencyObject))
         {
             return;
         }

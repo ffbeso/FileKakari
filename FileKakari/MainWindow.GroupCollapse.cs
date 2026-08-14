@@ -180,4 +180,24 @@ public partial class MainWindow
             ApplyCollapseState(expander);
         }
     }
+
+    public static bool IsInsideGroupHeader(DependencyObject? source)
+    {
+        var curr = source;
+        while (curr != null && curr is not ListView)
+        {
+            if (curr is ItemsPresenter)
+            {
+                return false;
+            }
+
+            if (curr is FrameworkElement fe && Equals(fe.Tag, "GroupHeader"))
+            {
+                return true;
+            }
+
+            curr = VisualTreeHelper.GetParent(curr);
+        }
+        return false;
+    }
 }

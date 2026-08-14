@@ -816,7 +816,7 @@
                                                       Style="{StaticResource FileGroupExpanderStyle}"
                                                       local:MainWindow.TrackCollapse="True">
                                                 <Expander.Header>
-                                                    <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
+                                                    <Border Tag="GroupHeader" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
                                                             <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
@@ -2074,7 +2074,7 @@
                                                                     <Expander IsExpanded="True" Style="{StaticResource FileGroupExpanderStyle}"
                                                                               local:MainWindow.TrackCollapse="True">
                                                                         <Expander.Header>
-                                                                            <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
+                                                                            <Border Tag="GroupHeader" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
                                                                                 <StackPanel Orientation="Horizontal">
                                                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
                                                                                     <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>

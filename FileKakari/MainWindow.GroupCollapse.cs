@@ -17,6 +17,16 @@ public partial class MainWindow
     public static bool GetTrackCollapse(DependencyObject obj) => (bool)obj.GetValue(TrackCollapseProperty);
     public static void SetTrackCollapse(DependencyObject obj, bool value) => obj.SetValue(TrackCollapseProperty, value);
 
+    private static readonly DependencyProperty IsApplyingStateProperty =
+        DependencyProperty.RegisterAttached(
+            "IsApplyingState",
+            typeof(bool),
+            typeof(MainWindow),
+            new PropertyMetadata(false));
+
+    private static bool GetIsApplyingState(DependencyObject obj) => (bool)obj.GetValue(IsApplyingStateProperty);
+    private static void SetIsApplyingState(DependencyObject obj, bool value) => obj.SetValue(IsApplyingStateProperty, value);
+
     private static void OnTrackCollapseChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Expander expander) return;
@@ -24,6 +34,7 @@ public partial class MainWindow
         if ((bool)e.NewValue)
         {
             expander.DataContextChanged += Expander_DataContextChanged;
+            expander.Loaded += Expander_Loaded;
             expander.Expanded += FileGroupExpander_Expanded;
             expander.Collapsed += FileGroupExpander_Collapsed;
             ApplyCollapseState(expander);
@@ -31,12 +42,21 @@ public partial class MainWindow
         else
         {
             expander.DataContextChanged -= Expander_DataContextChanged;
+            expander.Loaded -= Expander_Loaded;
             expander.Expanded -= FileGroupExpander_Expanded;
             expander.Collapsed -= FileGroupExpander_Collapsed;
         }
     }
 
     private static void Expander_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is Expander expander)
+        {
+            ApplyCollapseState(expander);
+        }
+    }
+
+    private static void Expander_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is Expander expander)
         {
@@ -56,12 +76,27 @@ public partial class MainWindow
         if (string.IsNullOrEmpty(groupKey)) return;
 
         bool shouldBeCollapsed = tabState.CollapsedGroupKeys.Contains(groupKey);
-        expander.IsExpanded = !shouldBeCollapsed;
+        bool targetIsExpanded = !shouldBeCollapsed;
+
+        if (expander.IsExpanded != targetIsExpanded)
+        {
+            try
+            {
+                SetIsApplyingState(expander, true);
+                expander.IsExpanded = targetIsExpanded;
+            }
+            finally
+            {
+                SetIsApplyingState(expander, false);
+            }
+        }
     }
 
     private static void FileGroupExpander_Collapsed(object sender, RoutedEventArgs e)
     {
         if (sender is not Expander expander) return;
+        if (GetIsApplyingState(expander)) return;
+
         if (expander.DataContext is not CollectionViewGroup group) return;
 
         var pane = FindParentFolderPane(expander);
@@ -78,6 +113,8 @@ public partial class MainWindow
     private static void FileGroupExpander_Expanded(object sender, RoutedEventArgs e)
     {
         if (sender is not Expander expander) return;
+        if (GetIsApplyingState(expander)) return;
+
         if (expander.DataContext is not CollectionViewGroup group) return;
 
         var pane = FindParentFolderPane(expander);

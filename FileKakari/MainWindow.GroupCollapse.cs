@@ -104,4 +104,80 @@ public partial class MainWindow
         }
         return null;
     }
+
+    private void GroupHeader_ExpandAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not DependencyObject dep) return;
+        var (pane, rootElement) = GetParentFolderPaneInfoFromElement(dep);
+        if (pane?.ActiveTabState == null) return;
+
+        pane.ActiveTabState.CollapsedGroupKeys.Clear();
+        if (rootElement != null)
+        {
+            UpdateGroupExpandersInElement(rootElement);
+        }
+    }
+
+    private void GroupHeader_CollapseAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not DependencyObject dep) return;
+        var (pane, rootElement) = GetParentFolderPaneInfoFromElement(dep);
+        if (pane?.ActiveTabState == null) return;
+
+        var tabState = pane.ActiveTabState;
+        var groups = pane.ItemsView?.Groups;
+        if (groups != null)
+        {
+            foreach (var g in groups)
+            {
+                if (g is CollectionViewGroup cvg)
+                {
+                    string key = cvg.Name?.ToString() ?? "";
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        tabState.CollapsedGroupKeys.Add(key);
+                    }
+                }
+            }
+        }
+
+        if (rootElement != null)
+        {
+            UpdateGroupExpandersInElement(rootElement);
+        }
+    }
+
+    private static (FolderPane? Pane, FrameworkElement? Element) GetParentFolderPaneInfoFromElement(DependencyObject element)
+    {
+        DependencyObject? target = element;
+        if (element is MenuItem menuItem)
+        {
+            var cm = menuItem.Parent as ContextMenu
+                     ?? ItemsControl.ItemsControlFromItemContainer(menuItem) as ContextMenu;
+            if (cm?.PlacementTarget != null)
+            {
+                target = cm.PlacementTarget;
+            }
+        }
+
+        var curr = target ?? element;
+        while (curr != null)
+        {
+            if (curr is FrameworkElement fe && fe.DataContext is FolderPane pane)
+            {
+                return (pane, fe);
+            }
+            curr = VisualTreeHelper.GetParent(curr);
+        }
+        return (null, null);
+    }
+
+    private static void UpdateGroupExpandersInElement(FrameworkElement rootElement)
+    {
+        var expanders = FindVisualChildren<Expander>(rootElement);
+        foreach (var expander in expanders)
+        {
+            ApplyCollapseState(expander);
+        }
+    }
 }

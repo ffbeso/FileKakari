@@ -12,6 +12,11 @@
         <local:PaneCountToColumnsConverter x:Key="PaneCountToColumnsConverter" />
         <local:ObjectsEqualConverter x:Key="ObjectsEqualConverter" />
 
+        <ContextMenu x:Key="GroupHeaderContextMenu">
+            <MenuItem Header="すべて展開" Click="GroupHeader_ExpandAll_Click"/>
+            <MenuItem Header="すべて折りたたむ" Click="GroupHeader_CollapseAll_Click"/>
+        </ContextMenu>
+
         <Style x:Key="FileGroupExpanderStyle" TargetType="{x:Type Expander}">
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             <Setter Property="Background" Value="Transparent" />
@@ -811,7 +816,7 @@
                                                       Style="{StaticResource FileGroupExpanderStyle}"
                                                       local:MainWindow.TrackCollapse="True">
                                                 <Expander.Header>
-                                                    <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
+                                                    <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
                                                             <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>
@@ -2069,7 +2074,7 @@
                                                                     <Expander IsExpanded="True" Style="{StaticResource FileGroupExpanderStyle}"
                                                                               local:MainWindow.TrackCollapse="True">
                                                                         <Expander.Header>
-                                                                            <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2">
+                                                                            <Border Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="8,4" Margin="0,2,0,2" ContextMenu="{StaticResource GroupHeaderContextMenu}">
                                                                                 <StackPanel Orientation="Horizontal">
                                                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
                                                                                     <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource SubtleTextBrush}" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"/>

@@ -54,6 +54,33 @@ public partial class MainWindow
         }
     }
 
+    public ListView? FindWorkspacePaneListView(FolderPane pane)
+    {
+        return FindVisualChildren<ListView>(WorkspaceSplitGrid)
+            .FirstOrDefault(lv => ReferenceEquals(lv.DataContext, pane));
+    }
+
+    public static void SyncPaneGroupCollapseState(FolderPane? pane)
+    {
+        if (pane?.ActiveTabState == null) return;
+
+        if (Application.Current?.MainWindow is MainWindow window)
+        {
+            if (ReferenceEquals(pane, window.GetNormalFolderPane()))
+            {
+                SyncGroupCollapseTabState(window.ItemsList, pane.ActiveTabState);
+            }
+            else
+            {
+                var listView = window.FindWorkspacePaneListView(pane);
+                if (listView != null)
+                {
+                    SyncGroupCollapseTabState(listView, pane.ActiveTabState);
+                }
+            }
+        }
+    }
+
     private static void OnTrackCollapseChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Expander expander) return;

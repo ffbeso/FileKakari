@@ -143,6 +143,7 @@ sealed class FolderPaneController
             }
             UpdateStatus(pane);
             pane.RefreshDisplay();
+            MainWindow.SyncPaneGroupCollapseState(pane);
             _performanceLogger.Write($"folder-pane-cache-restore paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\" lastExternalChange=\"{FormatTimestamp(pane.FileList.LastExternalChangeAt)}\"");
             return;
         }
@@ -426,6 +427,7 @@ sealed class FolderPaneController
             }
             UpdateStatus(pane);
             pane.RefreshDisplay();
+            MainWindow.SyncPaneGroupCollapseState(pane);
             _performanceLogger.Write($"folder-pane-cache-restore paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\" special=true");
             return;
         }

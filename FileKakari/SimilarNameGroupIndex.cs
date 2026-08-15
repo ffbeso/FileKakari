@@ -6,7 +6,22 @@ namespace FileKakari;
 
 public sealed class SimilarNameGroupIndex
 {
-    private static readonly char[] Delimiters = new[] { ' ', '　', '-', '_', '「', '『', '[', '(', '【', '“', '”', '"' };
+    private static readonly char[] StrongDelimiters = new[]
+    {
+        ' ', '　', '-', '_', '・',
+        '「', '」', '『', '』',
+        '(', ')', '（', '）',
+        '[', ']', '［', '］',
+        '【', '】',
+        '“', '”', '"'
+    };
+
+    private static readonly char[] ConditionalDelimiters = new[]
+    {
+        '！', '!', '▽', '▼', '★', '☆', '◆', '◇', '■', '□', '♪'
+    };
+
+    private static readonly char[] AllDelimiters = StrongDelimiters.Concat(ConditionalDelimiters).ToArray();
 
     private readonly Dictionary<string, string> _pathToGroupKey = new(StringComparer.OrdinalIgnoreCase);
 
@@ -51,55 +66,7 @@ public sealed class SimilarNameGroupIndex
 
         foreach (var item in fileItems)
         {
-            string p2a = item.P2A;
-            int startIdx = 0;
-            while (startIdx < p2a.Length && Array.IndexOf(Delimiters, p2a[startIdx]) >= 0)
-            {
-                startIdx++;
-            }
-
-            string candidate;
-            if (startIdx < p2a.Length)
-            {
-                int nextIdx = p2a.IndexOfAny(Delimiters, startIdx);
-                if (nextIdx > startIdx)
-                {
-                    string firstToken = p2a.Substring(startIdx, nextIdx - startIdx).Trim(Delimiters);
-                    if (IsEnglishArticle(firstToken))
-                    {
-                        // 先頭トークンが冠詞の場合、次の区切り位置まで拡張
-                        int secondIdx = p2a.IndexOfAny(Delimiters, nextIdx + 1);
-                        if (secondIdx > nextIdx)
-                        {
-                            string extendedToken = p2a.Substring(startIdx, secondIdx - startIdx).Trim(Delimiters);
-                            candidate = extendedToken.Length > 2 ? extendedToken : p2a;
-                        }
-                        else
-                        {
-                            string extendedToken = p2a.Substring(startIdx).Trim(Delimiters);
-                            candidate = extendedToken.Length > 2 ? extendedToken : p2a;
-                        }
-                    }
-                    else
-                    {
-                        candidate = firstToken.Length > 2 ? firstToken : p2a;
-                    }
-                }
-                else if (startIdx > 0)
-                {
-                    string token = p2a.Substring(startIdx).Trim(Delimiters);
-                    candidate = token.Length > 2 ? token : p2a;
-                }
-                else
-                {
-                    candidate = p2a;
-                }
-            }
-            else
-            {
-                candidate = p2a;
-            }
-
+            string candidate = ExtractCandidateToken(item.P2A);
             rawToCandidate[item.Entry.FullPath] = candidate;
             candidateCounts[candidate] = candidateCounts.TryGetValue(candidate, out int count) ? count + 1 : 1;
         }
@@ -120,6 +87,84 @@ public sealed class SimilarNameGroupIndex
 
         sw.Stop();
         LastBuildElapsedMs = sw.ElapsedMilliseconds;
+    }
+
+    private static string ExtractCandidateToken(string p2a)
+    {
+        int startIdx = 0;
+        while (startIdx < p2a.Length && Array.IndexOf(AllDelimiters, p2a[startIdx]) >= 0)
+        {
+            startIdx++;
+        }
+
+        if (startIdx >= p2a.Length)
+        {
+            return p2a;
+        }
+
+        int curr = startIdx;
+        while (curr < p2a.Length)
+        {
+            int nextIdx = p2a.IndexOfAny(AllDelimiters, curr);
+            if (nextIdx < 0)
+            {
+                break;
+            }
+
+            char delim = p2a[nextIdx];
+            if (Array.IndexOf(StrongDelimiters, delim) >= 0)
+            {
+                return EvaluateToken(p2a, startIdx, nextIdx);
+            }
+            else if (Array.IndexOf(ConditionalDelimiters, delim) >= 0)
+            {
+                string prefixRaw = p2a.Substring(startIdx, nextIdx - startIdx).Trim(AllDelimiters);
+                string compareKey = FileNameNormalizer.BuildCompareKey(prefixRaw).Trim();
+                if (compareKey.Length >= 7)
+                {
+                    return EvaluateToken(p2a, startIdx, nextIdx);
+                }
+                else
+                {
+                    curr = nextIdx + 1;
+                }
+            }
+            else
+            {
+                curr = nextIdx + 1;
+            }
+        }
+
+        if (startIdx > 0)
+        {
+            string token = p2a.Substring(startIdx).Trim(AllDelimiters);
+            return token.Length > 2 ? token : p2a;
+        }
+
+        return p2a;
+    }
+
+    private static string EvaluateToken(string p2a, int startIdx, int nextIdx)
+    {
+        string firstToken = p2a.Substring(startIdx, nextIdx - startIdx).Trim(AllDelimiters);
+        if (IsEnglishArticle(firstToken))
+        {
+            int secondIdx = p2a.IndexOfAny(AllDelimiters, nextIdx + 1);
+            if (secondIdx > nextIdx)
+            {
+                string extendedToken = p2a.Substring(startIdx, secondIdx - startIdx).Trim(AllDelimiters);
+                return extendedToken.Length > 2 ? extendedToken : p2a;
+            }
+            else
+            {
+                string extendedToken = p2a.Substring(startIdx).Trim(AllDelimiters);
+                return extendedToken.Length > 2 ? extendedToken : p2a;
+            }
+        }
+        else
+        {
+            return firstToken.Length > 2 ? firstToken : p2a;
+        }
     }
 
     public string GetGroupKey(FileEntry entry)

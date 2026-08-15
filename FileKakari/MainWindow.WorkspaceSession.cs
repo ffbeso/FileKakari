@@ -556,6 +556,7 @@ public partial class MainWindow
                     return;
                 }
 
+                SyncGroupCollapseTabState(listView, pane.ActiveTabState);
                 ApplyDisplayModeToPane(listView, pane);
                 ApplyColumnSettingsToWorkspacePane(listView, pane);
                 HookWorkspacePaneColumnWidthChanges(listView, pane);

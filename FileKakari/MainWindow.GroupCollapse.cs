@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -5,6 +6,22 @@ using System.Windows.Input;
 using System.Windows.Media;
 
 namespace FileKakari;
+
+public class GroupCollapseConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (values.Length >= 2 &&
+            values[0] is string groupKey &&
+            values[1] is WorkspaceTabState tabState)
+        {
+            return !tabState.CollapsedGroupKeys.Contains(groupKey);
+        }
+        return true;
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotImplementedException();
+}
 
 public partial class MainWindow
 {
@@ -18,40 +35,38 @@ public partial class MainWindow
     public static bool GetTrackCollapse(DependencyObject obj) => (bool)obj.GetValue(TrackCollapseProperty);
     public static void SetTrackCollapse(DependencyObject obj, bool value) => obj.SetValue(TrackCollapseProperty, value);
 
+    public static readonly DependencyProperty GroupCollapseTabStateProperty =
+        DependencyProperty.RegisterAttached(
+            "GroupCollapseTabState",
+            typeof(WorkspaceTabState),
+            typeof(MainWindow),
+            new PropertyMetadata(null));
+
+    public static WorkspaceTabState? GetGroupCollapseTabState(DependencyObject obj) => (WorkspaceTabState?)obj.GetValue(GroupCollapseTabStateProperty);
+    public static void SetGroupCollapseTabState(DependencyObject obj, WorkspaceTabState? value) => obj.SetValue(GroupCollapseTabStateProperty, value);
+
+    public static void SyncGroupCollapseTabState(ListView? listView, WorkspaceTabState? tabState)
+    {
+        if (listView == null) return;
+        if (!ReferenceEquals(GetGroupCollapseTabState(listView), tabState))
+        {
+            SetGroupCollapseTabState(listView, tabState);
+        }
+    }
+
     private static void OnTrackCollapseChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not Expander expander) return;
 
         if ((bool)e.NewValue)
         {
-            expander.DataContextChanged += Expander_DataContextChanged;
-            expander.Loaded += Expander_Loaded;
             expander.PreviewMouseLeftButtonDown += Expander_PreviewMouseLeftButtonDown;
             expander.PreviewKeyDown += Expander_PreviewKeyDown;
-            ApplyCollapseState(expander);
         }
         else
         {
-            expander.DataContextChanged -= Expander_DataContextChanged;
-            expander.Loaded -= Expander_Loaded;
             expander.PreviewMouseLeftButtonDown -= Expander_PreviewMouseLeftButtonDown;
             expander.PreviewKeyDown -= Expander_PreviewKeyDown;
-        }
-    }
-
-    private static void Expander_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (sender is Expander expander)
-        {
-            ApplyCollapseState(expander);
-        }
-    }
-
-    private static void Expander_Loaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is Expander expander)
-        {
-            ApplyCollapseState(expander);
         }
     }
 
@@ -79,8 +94,8 @@ public partial class MainWindow
     {
         if (expander.DataContext is not CollectionViewGroup group) return;
 
-        var pane = FindParentFolderPane(expander);
-        var tabState = pane?.ActiveTabState;
+        var listView = FindParentListView(expander);
+        var tabState = listView != null ? GetGroupCollapseTabState(listView) : FindParentFolderPane(expander)?.ActiveTabState;
         if (tabState == null) return;
 
         string groupKey = group.Name?.ToString() ?? "";
@@ -95,22 +110,21 @@ public partial class MainWindow
             tabState.CollapsedGroupKeys.Add(groupKey);
         }
 
-        ApplyCollapseState(expander);
+        tabState.NotifyGroupCollapseChanged();
     }
 
-    private static void ApplyCollapseState(Expander expander)
+    private static ListView? FindParentListView(DependencyObject child)
     {
-        if (expander.DataContext is not CollectionViewGroup group) return;
-
-        var pane = FindParentFolderPane(expander);
-        var tabState = pane?.ActiveTabState;
-        if (tabState == null) return;
-
-        string groupKey = group.Name?.ToString() ?? "";
-        if (string.IsNullOrEmpty(groupKey)) return;
-
-        bool shouldBeCollapsed = tabState.CollapsedGroupKeys.Contains(groupKey);
-        expander.IsExpanded = !shouldBeCollapsed;
+        var curr = child;
+        while (curr != null)
+        {
+            if (curr is ListView listView)
+            {
+                return listView;
+            }
+            curr = VisualTreeHelper.GetParent(curr);
+        }
+        return null;
     }
 
     private static FolderPane? FindParentFolderPane(DependencyObject child)
@@ -130,20 +144,17 @@ public partial class MainWindow
     private void GroupHeader_ExpandAll_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not DependencyObject dep) return;
-        var (pane, rootElement) = GetParentFolderPaneInfoFromElement(dep);
+        var pane = GetParentFolderPaneFromElement(dep);
         if (pane?.ActiveTabState == null) return;
 
         pane.ActiveTabState.CollapsedGroupKeys.Clear();
-        if (rootElement != null)
-        {
-            UpdateGroupExpandersInElement(rootElement);
-        }
+        pane.ActiveTabState.NotifyGroupCollapseChanged();
     }
 
     private void GroupHeader_CollapseAll_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not DependencyObject dep) return;
-        var (pane, rootElement) = GetParentFolderPaneInfoFromElement(dep);
+        var pane = GetParentFolderPaneFromElement(dep);
         if (pane?.ActiveTabState == null) return;
 
         var tabState = pane.ActiveTabState;
@@ -164,13 +175,10 @@ public partial class MainWindow
             }
         }
 
-        if (rootElement != null)
-        {
-            UpdateGroupExpandersInElement(rootElement);
-        }
+        tabState.NotifyGroupCollapseChanged();
     }
 
-    private static (FolderPane? Pane, FrameworkElement? Element) GetParentFolderPaneInfoFromElement(DependencyObject element)
+    private static FolderPane? GetParentFolderPaneFromElement(DependencyObject element)
     {
         DependencyObject? target = element;
         if (element is MenuItem menuItem)
@@ -183,25 +191,7 @@ public partial class MainWindow
             }
         }
 
-        var curr = target ?? element;
-        while (curr != null)
-        {
-            if (curr is FrameworkElement fe && fe.DataContext is FolderPane pane)
-            {
-                return (pane, fe);
-            }
-            curr = VisualTreeHelper.GetParent(curr);
-        }
-        return (null, null);
-    }
-
-    private static void UpdateGroupExpandersInElement(FrameworkElement rootElement)
-    {
-        var expanders = FindVisualChildren<Expander>(rootElement);
-        foreach (var expander in expanders)
-        {
-            ApplyCollapseState(expander);
-        }
+        return FindParentFolderPane(target ?? element);
     }
 
     public static bool IsInsideGroupHeader(DependencyObject? source)

@@ -48,10 +48,7 @@ public partial class MainWindow
 
     private void SyncNormalPaneStatusFromView(FolderPane pane)
     {
-        // Drawing compatibility: StatusText is still the rendered normal-mode status bar.
-        // Keep the normal FolderPane state current so later status rendering can read it.
-        // Next integration point: Workspace panes still write pane.FileList.StatusText directly;
-        // share message/summary calculation once normal rendering also reads FolderPane status.
+        SyncGroupCollapseTabState(ItemsList, pane.ActiveTabState);
         pane.FileList.StatusText = StatusText.Text;
     }
 

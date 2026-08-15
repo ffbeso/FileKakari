@@ -4877,6 +4877,7 @@ public partial class MainWindow : Window
             .ToList();
         pane.SelectedPaths = selectedPaths;
         SyncNormalPaneStatusFromView(pane);
+        SyncGroupCollapseTabState(ItemsList, pane.ActiveTabState);
         if (pane.ActiveTabState is { } state)
         {
             state.SelectedPaths = selectedPaths;

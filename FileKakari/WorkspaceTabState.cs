@@ -1,7 +1,36 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
 namespace FileKakari;
 
-public sealed class WorkspaceTabState
+public sealed class WorkspaceTabState : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+
+    private int _groupCollapseRevision;
+    public int GroupCollapseRevision
+    {
+        get => _groupCollapseRevision;
+        private set
+        {
+            if (_groupCollapseRevision != value)
+            {
+                _groupCollapseRevision = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public void NotifyGroupCollapseChanged()
+    {
+        GroupCollapseRevision++;
+    }
+
     private const int MaxNavigationViewStates = 64;
     private readonly Dictionary<string, NavigationViewState> _navigationViewStates = new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,6 +63,7 @@ public sealed class WorkspaceTabState
             {
                 _currentPath = value;
                 CollapsedGroupKeys.Clear();
+                NotifyGroupCollapseChanged();
             }
         }
     }
@@ -53,6 +83,7 @@ public sealed class WorkspaceTabState
             {
                 _groupMode = value;
                 CollapsedGroupKeys.Clear();
+                NotifyGroupCollapseChanged();
             }
         }
     }

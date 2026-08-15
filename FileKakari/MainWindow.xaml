@@ -35,13 +35,14 @@
                                           Focusable="False">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="{x:Type ToggleButton}">
-                                        <Border Background="{TemplateBinding Background}" Padding="4,2">
+                                        <Border Tag="GroupHeader" ContextMenu="{StaticResource GroupHeaderContextMenu}" Background="{TemplateBinding Background}" Padding="4,2">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
                                                 <Path x:Name="Arrow"
+                                                      Tag="GroupHeaderArrow"
                                                       Grid.Column="0"
                                                       Width="8"
                                                       Height="8"

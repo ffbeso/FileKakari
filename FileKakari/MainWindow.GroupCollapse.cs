@@ -103,8 +103,12 @@ public partial class MainWindow
         var source = e.OriginalSource as DependencyObject;
         if (!IsInsideGroupHeader(source)) return;
 
-        ToggleGroupStateByUser(expander);
-        e.Handled = true;
+        bool isArrowClick = IsInsideGroupArrow(source);
+        if (isArrowClick || e.ClickCount == 2)
+        {
+            ToggleGroupStateByUser(expander);
+            e.Handled = true;
+        }
     }
 
     private static void Expander_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -258,6 +262,26 @@ public partial class MainWindow
             }
 
             if (curr is FrameworkElement fe && Equals(fe.Tag, "GroupHeader"))
+            {
+                return true;
+            }
+
+            curr = VisualTreeHelper.GetParent(curr);
+        }
+        return false;
+    }
+
+    public static bool IsInsideGroupArrow(DependencyObject? source)
+    {
+        var curr = source;
+        while (curr != null && curr is not ListView)
+        {
+            if (curr is ItemsPresenter)
+            {
+                return false;
+            }
+
+            if (curr is FrameworkElement fe && Equals(fe.Tag, "GroupHeaderArrow"))
             {
                 return true;
             }

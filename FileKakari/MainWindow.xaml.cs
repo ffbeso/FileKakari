@@ -4866,6 +4866,14 @@ public partial class MainWindow : Window
         return session.ActiveFolderPane ?? _primaryPaneGroup;
     }
 
+    private void SyncActiveNormalPaneGroupCollapseState()
+    {
+        if (GetNormalFolderPane() is { } pane)
+        {
+            SyncGroupCollapseTabState(ItemsList, pane.ActiveTabState);
+        }
+    }
+
     private void SyncNormalPaneDisplayStateFromView(FolderPane pane)
     {
         // Drawing compatibility: normal mode still renders through ItemsList, so this is the

@@ -11,7 +11,7 @@ public class GroupCollapseConverter : IMultiValueConverter
 {
     public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
     {
-        if (values.Length >= 2 &&
+        if (values != null && values.Length >= 2 &&
             values[0] is string groupKey &&
             values[1] is WorkspaceTabState tabState)
         {
@@ -147,6 +147,11 @@ public partial class MainWindow
         var pane = GetParentFolderPaneFromElement(dep);
         if (pane?.ActiveTabState == null) return;
 
+        if (GetParentListViewFromElement(dep) is { } listView)
+        {
+            SyncGroupCollapseTabState(listView, pane.ActiveTabState);
+        }
+
         pane.ActiveTabState.CollapsedGroupKeys.Clear();
         pane.ActiveTabState.NotifyGroupCollapseChanged();
     }
@@ -156,6 +161,11 @@ public partial class MainWindow
         if (sender is not DependencyObject dep) return;
         var pane = GetParentFolderPaneFromElement(dep);
         if (pane?.ActiveTabState == null) return;
+
+        if (GetParentListViewFromElement(dep) is { } listView)
+        {
+            SyncGroupCollapseTabState(listView, pane.ActiveTabState);
+        }
 
         var tabState = pane.ActiveTabState;
         var groups = pane.ItemsView?.Groups;
@@ -176,6 +186,22 @@ public partial class MainWindow
         }
 
         tabState.NotifyGroupCollapseChanged();
+    }
+
+    private static ListView? GetParentListViewFromElement(DependencyObject element)
+    {
+        DependencyObject? target = element;
+        if (element is MenuItem menuItem)
+        {
+            var cm = menuItem.Parent as ContextMenu
+                     ?? ItemsControl.ItemsControlFromItemContainer(menuItem) as ContextMenu;
+            if (cm?.PlacementTarget != null)
+            {
+                target = cm.PlacementTarget;
+            }
+        }
+
+        return FindParentListView(target ?? element);
     }
 
     private static FolderPane? GetParentFolderPaneFromElement(DependencyObject element)

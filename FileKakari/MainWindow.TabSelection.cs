@@ -163,6 +163,7 @@ public partial class MainWindow
             $"activeId={_activeWorkspaceSession?.Id ?? "null"} " +
             $"displayedCount={_displayedWorkspaceSessionIds.Count} " +
             $"primaryId={primaryId} secondaryId={secondaryId}");
+        SyncActiveNormalPaneGroupCollapseState();
     }
 
     private async Task ReconcileWorkspaceSessionsAfterMutationAsync(

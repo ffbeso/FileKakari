@@ -114,7 +114,11 @@ public sealed class SimilarNameGroupIndex
             char delim = p2a[nextIdx];
             if (Array.IndexOf(StrongDelimiters, delim) >= 0)
             {
-                return EvaluateToken(p2a, startIdx, nextIdx);
+                if (TryEvaluateToken(p2a, startIdx, nextIdx, out string candidate))
+                {
+                    return candidate;
+                }
+                curr = nextIdx + 1;
             }
             else if (Array.IndexOf(ConditionalDelimiters, delim) >= 0)
             {
@@ -122,12 +126,12 @@ public sealed class SimilarNameGroupIndex
                 string compareKey = FileNameNormalizer.BuildCompareKey(prefixRaw).Trim();
                 if (compareKey.Length >= 7)
                 {
-                    return EvaluateToken(p2a, startIdx, nextIdx);
+                    if (TryEvaluateToken(p2a, startIdx, nextIdx, out string candidate))
+                    {
+                        return candidate;
+                    }
                 }
-                else
-                {
-                    curr = nextIdx + 1;
-                }
+                curr = nextIdx + 1;
             }
             else
             {
@@ -144,8 +148,9 @@ public sealed class SimilarNameGroupIndex
         return p2a;
     }
 
-    private static string EvaluateToken(string p2a, int startIdx, int nextIdx)
+    private static bool TryEvaluateToken(string p2a, int startIdx, int nextIdx, out string candidate)
     {
+        candidate = p2a;
         string firstToken = p2a.Substring(startIdx, nextIdx - startIdx).Trim(AllDelimiters);
         if (IsEnglishArticle(firstToken))
         {
@@ -153,17 +158,31 @@ public sealed class SimilarNameGroupIndex
             if (secondIdx > nextIdx)
             {
                 string extendedToken = p2a.Substring(startIdx, secondIdx - startIdx).Trim(AllDelimiters);
-                return extendedToken.Length > 2 ? extendedToken : p2a;
+                if (extendedToken.Length > 2)
+                {
+                    candidate = extendedToken;
+                    return true;
+                }
             }
             else
             {
                 string extendedToken = p2a.Substring(startIdx).Trim(AllDelimiters);
-                return extendedToken.Length > 2 ? extendedToken : p2a;
+                if (extendedToken.Length > 2)
+                {
+                    candidate = extendedToken;
+                    return true;
+                }
             }
+            return false;
         }
         else
         {
-            return firstToken.Length > 2 ? firstToken : p2a;
+            if (firstToken.Length > 2)
+            {
+                candidate = firstToken;
+                return true;
+            }
+            return false;
         }
     }
 

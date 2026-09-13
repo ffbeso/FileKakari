@@ -32,6 +32,20 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public SimilarNameGroupIndex? SimilarNameIndex { get; private set; }
     public AnchorScrollState? PendingAnchorScrollState { get; set; }
+    public DeleteScrollRestoreState? PendingDeleteScrollRestoreState { get; private set; }
+
+    public void BeginDeleteScrollRestore(DeleteScrollRestoreState restoreState)
+    {
+        PendingDeleteScrollRestoreState = restoreState;
+    }
+
+    public void CompleteDeleteScrollRestore(long flowId)
+    {
+        if (PendingDeleteScrollRestoreState?.FlowId == flowId)
+        {
+            PendingDeleteScrollRestoreState = null;
+        }
+    }
 
     public FileListState()
     {
@@ -268,6 +282,17 @@ public sealed class FileListState : INotifyPropertyChanged
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
         LoadedPath = path;
         LoadedStateId = loadedStateId;
+    }
+
+    public bool RemoveItem(FileEntry item)
+    {
+        if (!Items.Remove(item))
+        {
+            return false;
+        }
+
+        InvalidateSimilarNameIndex();
+        return true;
     }
 
     public void MarkExternalChange(DateTimeOffset? changedAt = null)

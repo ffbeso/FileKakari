@@ -16,6 +16,12 @@ public partial class MainWindow
 
     private void FolderWatchService_ChangeObserved(string changedPath)
     {
+        if (GetDeleteFlowIdForChangedPath(changedPath) is var deleteFlowId and > 0)
+        {
+            _performanceLogger.Write($"folder-watch-self-delete-consumed flowId={deleteFlowId} stage=change-observed changedPath=\"{changedPath}\"");
+            return;
+        }
+
         _ = Dispatcher.InvokeAsync(
             () =>
             {
@@ -46,6 +52,12 @@ public partial class MainWindow
 
     private async Task RequestFolderWatchRefreshAsync(string changedPath)
     {
+        if (GetDeleteFlowIdForChangedPath(changedPath) is var deleteFlowId and > 0)
+        {
+            _performanceLogger.Write($"folder-watch-self-delete-consumed flowId={deleteFlowId} stage=refresh-request changedPath=\"{changedPath}\"");
+            return;
+        }
+
         if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
         {
             await RequestWorkspacePaneWatchRefreshAsync(changedPath);
@@ -810,6 +822,7 @@ public partial class MainWindow
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
                 await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
                 WriteDeleteFlowSnapshot(deleteFlowId, "watcher-load-and-restore-complete", pane, pending.ChangedPath);
+                CompleteDeleteScrollRestoreState(pane, deleteFlowId);
                 pane.ActiveTabState?.ClearPendingExternalChange();
                 _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
                 success = true;

@@ -19,14 +19,70 @@ public partial class MainWindow
         _lastDeleteFlowStartedAt = DateTimeOffset.UtcNow;
         _lastDeletePaneId = pane.Id;
         _lastDeleteTargetPaths = targetPaths.ToList();
+        FreezeDeleteScrollRestoreState(flowId, pane);
         WriteDeleteFlowSnapshot(flowId, "delete-start", pane);
         return flowId;
     }
 
+    private void FreezeDeleteScrollRestoreState(long flowId, FolderPane pane)
+    {
+        var targetState = pane.ActiveTabState;
+        var listView = GetFolderPaneListView(pane);
+        if (targetState is not { GroupMode: not GroupMode.None }
+            || listView is null)
+        {
+            return;
+        }
+
+        var scrollViewer = FindVisualChild<ScrollViewer>(listView);
+        var verticalOffset = scrollViewer?.VerticalOffset ?? targetState.VerticalOffset;
+        var anchorState = AnchorScrollService.CaptureAnchorState(listView, targetState.GroupMode, verticalOffset);
+        if (anchorState is null)
+        {
+            return;
+        }
+
+        pane.FileList.BeginDeleteScrollRestore(new DeleteScrollRestoreState(
+            flowId,
+            pane.Id,
+            targetState.Id,
+            targetState.CurrentPath,
+            anchorState,
+            DateTimeOffset.UtcNow));
+    }
+
+    private DeleteScrollRestoreState? GetDeleteScrollRestoreStateForPane(FolderPane pane)
+    {
+        var restoreState = pane.FileList.PendingDeleteScrollRestoreState;
+        var activeState = pane.ActiveTabState;
+        if (restoreState is null || activeState is null)
+        {
+            return null;
+        }
+
+        var isCurrent = DateTimeOffset.UtcNow - restoreState.CapturedAt < TimeSpan.FromSeconds(30)
+            && string.Equals(restoreState.PaneId, pane.Id, StringComparison.Ordinal)
+            && string.Equals(restoreState.StateId, activeState.Id, StringComparison.Ordinal)
+            && string.Equals(restoreState.Path, activeState.CurrentPath, StringComparison.OrdinalIgnoreCase);
+        if (isCurrent)
+        {
+            return restoreState;
+        }
+
+        pane.FileList.CompleteDeleteScrollRestore(restoreState.FlowId);
+        return null;
+    }
+
+    private void CompleteDeleteScrollRestoreState(FolderPane pane, long flowId)
+    {
+        pane.FileList.CompleteDeleteScrollRestore(flowId);
+    }
+
     private long GetDeleteFlowIdForChangedPath(string changedPath)
     {
-        return _lastDeleteTargetPaths.Any(path =>
-            string.Equals(path, changedPath, StringComparison.OrdinalIgnoreCase))
+        return DateTimeOffset.UtcNow - _lastDeleteFlowStartedAt < TimeSpan.FromSeconds(10)
+            && _lastDeleteTargetPaths.Any(path =>
+                string.Equals(path, changedPath, StringComparison.OrdinalIgnoreCase))
             ? _lastDeleteFlowId
             : 0;
     }
@@ -56,7 +112,10 @@ public partial class MainWindow
         var realizedContainers = listView?.Items.OfType<FileEntry>()
             .Count(item => listView.ItemContainerGenerator.ContainerFromItem(item) is ListViewItem) ?? 0;
         var collectionView = view as ListCollectionView;
-        var anchorState = pane.FileList.PendingAnchorScrollState ?? pane.ActiveTabState?.AnchorState;
+        var deleteRestoreState = pane.FileList.PendingDeleteScrollRestoreState;
+        var anchorState = deleteRestoreState?.AnchorState
+            ?? pane.FileList.PendingAnchorScrollState
+            ?? pane.ActiveTabState?.AnchorState;
 
         _performanceLogger.Write(
             $"delete-flow flowId={flowId} stage={stage} paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? ""} " +
@@ -67,7 +126,9 @@ public partial class MainWindow
             $"currentPosition={view.CurrentPosition} currentPath=\"{EscapeDeleteDiagnosticValue(currentPath)}\" " +
             $"selected={selectedPaths.Count} selectedFirst=\"{EscapeDeleteDiagnosticValue(selectedPaths.FirstOrDefault() ?? "")}\" " +
             $"savedSelected={pane.ActiveTabState?.SelectedPaths.Count ?? 0} savedOffset={pane.ActiveTabState?.VerticalOffset ?? -1:N1} " +
-            $"anchor=\"{EscapeDeleteDiagnosticValue(anchorState?.AnchorPath ?? "")}\" pendingAnchor={pane.FileList.PendingAnchorScrollState is not null} " +
+            $"anchor=\"{EscapeDeleteDiagnosticValue(anchorState?.AnchorPath ?? "")}\" anchorRelativeY={anchorState?.RelativeOffset ?? double.NaN:N1} " +
+            $"anchorPrevious=\"{EscapeDeleteDiagnosticValue(anchorState?.PreviousPath ?? "")}\" anchorNext=\"{EscapeDeleteDiagnosticValue(anchorState?.NextPath ?? "")}\" " +
+            $"pendingAnchor={pane.FileList.PendingAnchorScrollState is not null} deleteRestoreLocked={deleteRestoreState is not null} " +
             $"offset={scrollViewer?.VerticalOffset ?? -1:N1} scrollableHeight={scrollViewer?.ScrollableHeight ?? -1:N1} viewportHeight={scrollViewer?.ViewportHeight ?? -1:N1} " +
             $"generatorStatus={listView?.ItemContainerGenerator.Status.ToString() ?? "none"} realized={realizedContainers} " +
             $"virtualization={GetDeleteDiagnosticVirtualizationMode(listView)} virtualizingWhenGrouping={GetDeleteDiagnosticVirtualizingWhenGrouping(listView)}");

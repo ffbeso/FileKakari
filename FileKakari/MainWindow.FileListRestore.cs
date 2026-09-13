@@ -280,7 +280,21 @@ public partial class MainWindow
             return;
         }
 
-        if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
+        var deleteRestoreState = GetDeleteScrollRestoreStateForPane(pane);
+        if (deleteRestoreState is not null
+            && pane.ActiveTabState is { GroupMode: var deleteGroupMode and not GroupMode.None })
+        {
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(
+                GetFolderPaneListView(pane),
+                deleteRestoreState.AnchorState,
+                deleteGroupMode,
+                Dispatcher,
+                deleteRestoreState.FlowId))
+            {
+                return;
+            }
+        }
+        else if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
         {
             pane.FileList.PendingAnchorScrollState = null;
             if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher))
@@ -288,8 +302,7 @@ public partial class MainWindow
                 return;
             }
         }
-
-        if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
+        else if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
         {
             if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher))
             {
@@ -724,8 +737,12 @@ public partial class MainWindow
             }
         }
 
-        // Wait for container layout generation before restoring scroll offset.
-        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        // 通常復元は従来どおりBackgroundまで待つ。削除専用Anchorは、その待ち中に
+        // 未確定位置が描画されないよう、専用のExtent安定待ちへ直接進む。
+        if (GetDeleteScrollRestoreStateForPane(pane) is null)
+        {
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
         WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), "viewstate-before-scroll-restore", pane);
         if (workspaceSwitchId > 0
             && session is not null

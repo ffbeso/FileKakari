@@ -211,7 +211,8 @@ sealed class FolderPaneController
             }
 
             AnchorScrollState? capturedAnchor = null;
-            if (targetState.GroupMode != GroupMode.None)
+            if (targetState.GroupMode != GroupMode.None
+                && pane.FileList.PendingDeleteScrollRestoreState is null)
             {
                 capturedAnchor = AnchorScrollService.CaptureAnchorState(_getListView?.Invoke(pane), targetState.GroupMode, targetState.VerticalOffset);
             }
@@ -220,7 +221,10 @@ sealed class FolderPaneController
             targetState.ClearPendingExternalChange();
             pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
             ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
-            pane.FileList.PendingAnchorScrollState = capturedAnchor;
+            if (pane.FileList.PendingDeleteScrollRestoreState is null)
+            {
+                pane.FileList.PendingAnchorScrollState = capturedAnchor;
+            }
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             stopwatch.Stop();
             targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;

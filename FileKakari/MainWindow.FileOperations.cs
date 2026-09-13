@@ -373,6 +373,7 @@ public partial class MainWindow
         }
 
         var deleteTargetPaths = selectedEntries.Select(entry => entry.FullPath).ToList();
+        var deleteFlowId = BeginDeleteFlowDiagnostics(context.Pane, deleteTargetPaths);
         _isFileOperationInProgress = true;
         try
         {
@@ -405,11 +406,14 @@ public partial class MainWindow
                 paneItems.Remove(entry);
             }
 
+            WriteDeleteFlowSnapshot(deleteFlowId, "file-operation-complete-local-remove-complete", context.Pane);
+
             _undoService.Clear();
 
             if (context.IsWorkspace)
             {
                 context.Pane.FileList.ItemsView.Refresh();
+                WriteDeleteFlowSnapshot(deleteFlowId, "explicit-collection-view-refresh-complete", context.Pane);
                 context.Pane.SelectedPaths = [];
                 if (context.Pane.ActiveTabState is { } state)
                 {
@@ -418,11 +422,14 @@ public partial class MainWindow
 
                 GetFolderPaneListView(context.Pane)?.SelectedItems.Clear();
                 context.Pane.FileList.StatusMessagePrefix = _text.Format("DeletedMultiple", deletedCount);
+                WriteDeleteFlowSnapshot(deleteFlowId, "explicit-reload-start", context.Pane);
                 await ReloadFolderPanesShowingPathAsync(context.CurrentPath, context.Pane);
+                WriteDeleteFlowSnapshot(deleteFlowId, "explicit-reload-complete", context.Pane);
             }
             else
             {
                 RefreshItemsView("undo-clear");
+                WriteDeleteFlowSnapshot(deleteFlowId, "explicit-collection-view-refresh-complete", context.Pane);
                 _statusSummaryCoordinator.StatusMessagePrefix = _text.Format("DeletedMultiple", deletedCount);
                 RefreshCurrentFolderSummary();
                 UpdateSelectedItemStatus();
@@ -434,7 +441,9 @@ public partial class MainWindow
         }
         finally
         {
+            WriteDeleteFlowSnapshot(deleteFlowId, "self-operation-finalize-start", context.Pane);
             await FinalizeSelfFileOperationAsync("delete");
+            WriteDeleteFlowSnapshot(deleteFlowId, "self-operation-finalize-complete", context.Pane);
         }
     }
 

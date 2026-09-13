@@ -620,9 +620,17 @@ public partial class MainWindow
             SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
                 ? pane.FileList.EnsureSimilarNameIndex()
                 : null;
-            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+            if (listView is not null)
+            {
+                FileGroupHelper.ApplyGroupMode(listView, targetState.GroupMode, groupIndex);
+            }
+            else
+            {
+                FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+            }
             pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, targetState.GroupMode);
             _folderPaneController.ApplyFilter(pane, targetState.FilterText);
+            WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), $"viewstate-collection-view-ready-{trigger}", pane);
 
             if (policy == FileListRestorePolicy.ExactRestore)
             {
@@ -718,6 +726,7 @@ public partial class MainWindow
 
         // Wait for container layout generation before restoring scroll offset.
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), "viewstate-before-scroll-restore", pane);
         if (workspaceSwitchId > 0
             && session is not null
             && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -727,6 +736,7 @@ public partial class MainWindow
         }
 
         await RestoreWorkspacePaneScrollOffsetAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session);
+        WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), "viewstate-scroll-restore-complete", pane);
     }
 
     private async Task RestoreWorkspacePaneScrollOnlyStateAsync(

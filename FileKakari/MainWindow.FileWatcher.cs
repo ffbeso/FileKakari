@@ -480,8 +480,17 @@ public partial class MainWindow
             try
             {
                 var beforeCount = _items.Count;
+                var deleteFlowId = GetDeleteFlowIdForChangedPath(pending.ChangedPath);
                 _performanceLogger.Write($"folder-watch-refresh-start path=\"{pending.Path}\" refreshType=full itemsBefore={beforeCount}");
+                if (GetNormalFolderPane() is { } normalPane)
+                {
+                    WriteDeleteFlowSnapshot(deleteFlowId, "watcher-full-refresh-start", normalPane, pending.ChangedPath);
+                }
                 await NavigateToFolderAsync(pending.Path, NavigationKind.Refresh);
+                if (GetNormalFolderPane() is { } refreshedNormalPane)
+                {
+                    WriteDeleteFlowSnapshot(deleteFlowId, "watcher-load-and-restore-complete", refreshedNormalPane, pending.ChangedPath);
+                }
                 _performanceLogger.Write($"folder-watch-refresh-complete path=\"{pending.Path}\" refreshType=full itemsBefore={beforeCount} itemsAfter={_items.Count} uiApply=true");
                 success = true;
             }
@@ -793,11 +802,14 @@ public partial class MainWindow
             try
             {
                 var beforeCount = pane.FileList.Items.Count;
+                var deleteFlowId = GetDeleteFlowIdForChangedPath(pending.ChangedPath);
                 _performanceLogger.Write($"folder-pane-watch-refresh-start paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount}");
+                WriteDeleteFlowSnapshot(deleteFlowId, "watcher-full-refresh-start", pane, pending.ChangedPath);
                 var preservedState = CaptureWorkspacePanePreservedState(pane);
+                WriteDeleteFlowSnapshot(deleteFlowId, "watcher-viewstate-captured", pane, pending.ChangedPath);
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
                 await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
-                RefreshPaneItemsPreservingFilter(pane, "watcher-full");
+                WriteDeleteFlowSnapshot(deleteFlowId, "watcher-load-and-restore-complete", pane, pending.ChangedPath);
                 pane.ActiveTabState?.ClearPendingExternalChange();
                 _performanceLogger.Write($"folder-pane-watch-refresh-complete paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount} itemsAfter={pane.FileList.Items.Count} uiApply=true");
                 success = true;

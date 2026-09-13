@@ -556,6 +556,9 @@ public partial class MainWindow
                     return;
                 }
 
+                FileGroupHelper.ApplyVirtualizationForGroupMode(
+                    listView,
+                    pane.ActiveTabState?.GroupMode ?? GroupMode.None);
                 SyncGroupCollapseTabState(listView, pane.ActiveTabState);
                 ApplyDisplayModeToPane(listView, pane);
                 ApplyColumnSettingsToWorkspacePane(listView, pane);

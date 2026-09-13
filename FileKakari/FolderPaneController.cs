@@ -531,7 +531,15 @@ sealed class FolderPaneController
             ? pane.FileList.EnsureSimilarNameIndex()
             : null;
 
-        FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+        var listView = _getListView?.Invoke(pane);
+        if (listView is not null)
+        {
+            FileGroupHelper.ApplyGroupMode(listView, targetState.GroupMode, groupIndex);
+        }
+        else
+        {
+            FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+        }
         pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null, targetState.GroupMode);
         ApplyFilter(pane, targetState.FilterText);
     }

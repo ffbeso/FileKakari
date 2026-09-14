@@ -302,4 +302,28 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="GroupModeExtension" xml:space="preserve"><value>拡張子</value></data>
   <data name="GroupModeDate" xml:space="preserve"><value>更新日時</value></data>
   <data name="GroupModeSimilarName" xml:space="preserve"><value>名前（類似）</value></data>
+  <data name="NamedSessionSaveMenu" xml:space="preserve"><value>セッションを名前を付けて保存...</value></data>
+  <data name="NamedSessionOpenMenu" xml:space="preserve"><value>保存したセッションを開く...</value></data>
+  <data name="NamedSessionSaveTitle" xml:space="preserve"><value>名前付きSessionの保存</value></data>
+  <data name="NamedSessionOpenTitle" xml:space="preserve"><value>保存したSessionを開く</value></data>
+  <data name="NamedSessionName" xml:space="preserve"><value>Session名</value></data>
+  <data name="NamedSessionNameEmpty" xml:space="preserve"><value>Session名を入力してください。</value></data>
+  <data name="NamedSessionNameInvalid" xml:space="preserve"><value>Session名にファイル名として使用できない文字が含まれています。</value></data>
+  <data name="NamedSessionNameReserved" xml:space="preserve"><value>Windowsで予約されている名前です。別の名前を指定してください。</value></data>
+  <data name="NamedSessionNameTooLong" xml:space="preserve"><value>Session名が長すぎます。</value></data>
+  <data name="NamedSessionOverwriteConfirm" xml:space="preserve"><value>「{0}」は既に存在します。上書きしますか？</value></data>
+  <data name="NamedSessionOpenInstruction" xml:space="preserve"><value>開くSessionを選択してください。</value></data>
+  <data name="NamedSessionEmpty" xml:space="preserve"><value>保存済みSessionはありません。</value></data>
+  <data name="NamedSessionOpenConfirm" xml:space="preserve"><value>現在のセッションを閉じて、「{0}」を開きますか？</value></data>
+  <data name="NamedSessionSavedStatus" xml:space="preserve"><value>Session「{0}」を保存しました。</value></data>
+  <data name="NamedSessionOpenedStatus" xml:space="preserve"><value>Session「{0}」を開きました。</value></data>
+  <data name="NamedSessionSaveFailed" xml:space="preserve"><value>Sessionの保存に失敗しました。詳細: {0}</value></data>
+  <data name="NamedSessionListFailed" xml:space="preserve"><value>保存済みSession一覧の取得に失敗しました。詳細: {0}</value></data>
+  <data name="NamedSessionLoadFailed" xml:space="preserve"><value>Sessionの読み込みに失敗しました。詳細: {0}</value></data>
+  <data name="NamedSessionApplyFailed" xml:space="preserve"><value>Session「{0}」を適用できませんでした。現在のSessionは維持されています。</value></data>
+  <data name="NamedSessionLoadFileNotFound" xml:space="preserve"><value>Sessionファイルが存在しません。</value></data>
+  <data name="NamedSessionLoadInvalidJson" xml:space="preserve"><value>Session JSONが不正です。</value></data>
+  <data name="NamedSessionLoadIoError" xml:space="preserve"><value>Sessionファイルを読み込めませんでした。</value></data>
+  <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>不明な読み込みエラーが発生しました。</value></data>
+  <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Sessionエラー</value></data>
 </root>

@@ -16,6 +16,8 @@ public static class AppPaths
 
     public static string SessionPath => Path.Combine(LocalDirectory, "session.json");
 
+    public static string SessionsDirectory => Path.Combine(LocalDirectory, "Sessions");
+
     public static string CommandsPath => Path.Combine(LocalDirectory, "commands.json");
 
     public static string CommandsDirectory => Path.Combine(LocalDirectory, "Commands");
@@ -36,5 +38,6 @@ public static class AppPaths
         Directory.CreateDirectory(CacheDirectory);
         Directory.CreateDirectory(ThemesDirectory);
         Directory.CreateDirectory(CommandsDirectory);
+        Directory.CreateDirectory(SessionsDirectory);
     }
 }

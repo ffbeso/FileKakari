@@ -8,6 +8,8 @@ public partial class MainWindow : Window
     private void ApplyLocalizedText()
     {
         SetToolbarButtonToolTip(InternalPageMenuButton, _text.Get("InternalPageMenuButton"));
+        SaveNamedSessionMenuItem.Header = _text.Get("NamedSessionSaveMenu");
+        OpenNamedSessionMenuItem.Header = _text.Get("NamedSessionOpenMenu");
         InternalPageSettingsMenuItem.Header = _text.Get("SettingsTitle");
         InternalPageLogViewerMenuItem.Header = _text.Get("LogViewerTitle");
         InternalPageUserCommandEditorMenuItem.Header = _text.Get("UserCommandEditorTitle");

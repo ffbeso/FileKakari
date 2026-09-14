@@ -1,0 +1,53 @@
+<Window x:Class="FileKakari.NamedSessionOpenDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Height="360"
+        Width="520"
+        MinHeight="260"
+        MinWidth="420"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppBackgroundBrush}">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="InstructionText"
+                   Foreground="{DynamicResource TextBrush}"
+                   Margin="0,0,0,8" />
+
+        <Grid Grid.Row="1">
+            <ListBox x:Name="SessionsList"
+                     DisplayMemberPath="Name"
+                     SelectionChanged="SessionsList_SelectionChanged"
+                     MouseDoubleClick="SessionsList_MouseDoubleClick"
+                     Background="{DynamicResource ControlBackgroundBrush}"
+                     Foreground="{DynamicResource TextBrush}"
+                     BorderBrush="{DynamicResource BorderBrush}" />
+            <TextBlock x:Name="EmptyText"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SubtleTextBrush}"
+                       IsHitTestVisible="False" />
+        </Grid>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,12,0,0">
+            <Button x:Name="OpenButton"
+                    Width="80"
+                    Margin="0,0,8,0"
+                    IsDefault="True"
+                    IsEnabled="False"
+                    Click="Open_Click"
+                    Style="{StaticResource FileKakariButtonStyle}" />
+            <Button x:Name="CancelButton"
+                    Width="80"
+                    IsCancel="True"
+                    Style="{StaticResource FileKakariButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

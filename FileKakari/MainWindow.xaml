@@ -392,6 +392,11 @@
                             Click="InternalPageMenuButton_Click">
                         <Button.ContextMenu>
                             <ContextMenu x:Name="InternalPageContextMenu">
+                                <MenuItem x:Name="SaveNamedSessionMenuItem"
+                                          Click="SaveNamedSessionMenuItem_Click" />
+                                <MenuItem x:Name="OpenNamedSessionMenuItem"
+                                          Click="OpenNamedSessionMenuItem_Click" />
+                                <Separator />
                                 <MenuItem x:Name="InternalPageSettingsMenuItem"
                                           Click="InternalPageSettingsMenuItem_Click">
                                     <MenuItem.Icon>

@@ -302,4 +302,28 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="GroupModeExtension" xml:space="preserve"><value>Type / Extension</value></data>
   <data name="GroupModeDate" xml:space="preserve"><value>Date modified</value></data>
   <data name="GroupModeSimilarName" xml:space="preserve"><value>Similar name</value></data>
+  <data name="NamedSessionSaveMenu" xml:space="preserve"><value>Save Session As...</value></data>
+  <data name="NamedSessionOpenMenu" xml:space="preserve"><value>Open Saved Session...</value></data>
+  <data name="NamedSessionSaveTitle" xml:space="preserve"><value>Save Named Session</value></data>
+  <data name="NamedSessionOpenTitle" xml:space="preserve"><value>Open Saved Session</value></data>
+  <data name="NamedSessionName" xml:space="preserve"><value>Session name</value></data>
+  <data name="NamedSessionNameEmpty" xml:space="preserve"><value>Enter a session name.</value></data>
+  <data name="NamedSessionNameInvalid" xml:space="preserve"><value>The session name contains characters that cannot be used in a file name.</value></data>
+  <data name="NamedSessionNameReserved" xml:space="preserve"><value>This name is reserved by Windows. Choose another name.</value></data>
+  <data name="NamedSessionNameTooLong" xml:space="preserve"><value>The session name is too long.</value></data>
+  <data name="NamedSessionOverwriteConfirm" xml:space="preserve"><value>A session named '{0}' already exists. Overwrite it?</value></data>
+  <data name="NamedSessionOpenInstruction" xml:space="preserve"><value>Select the session to open.</value></data>
+  <data name="NamedSessionEmpty" xml:space="preserve"><value>No saved sessions.</value></data>
+  <data name="NamedSessionOpenConfirm" xml:space="preserve"><value>Close the current session and open '{0}'?</value></data>
+  <data name="NamedSessionSavedStatus" xml:space="preserve"><value>Saved session '{0}'.</value></data>
+  <data name="NamedSessionOpenedStatus" xml:space="preserve"><value>Opened session '{0}'.</value></data>
+  <data name="NamedSessionSaveFailed" xml:space="preserve"><value>Failed to save the session. Details: {0}</value></data>
+  <data name="NamedSessionListFailed" xml:space="preserve"><value>Failed to read the saved session list. Details: {0}</value></data>
+  <data name="NamedSessionLoadFailed" xml:space="preserve"><value>Failed to load the session. Details: {0}</value></data>
+  <data name="NamedSessionApplyFailed" xml:space="preserve"><value>Could not apply session '{0}'. The current session was kept.</value></data>
+  <data name="NamedSessionLoadFileNotFound" xml:space="preserve"><value>The session file does not exist.</value></data>
+  <data name="NamedSessionLoadInvalidJson" xml:space="preserve"><value>The session JSON is invalid.</value></data>
+  <data name="NamedSessionLoadIoError" xml:space="preserve"><value>The session file could not be read.</value></data>
+  <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>An unknown load error occurred.</value></data>
+  <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Session Error</value></data>
 </root>

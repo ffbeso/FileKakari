@@ -106,7 +106,9 @@ public partial class MainWindow
             SortColumn = NormalizeSortColumn(tabState.SortColumn),
             SortAscending = tabState.SortAscending,
             GroupMode = tabState.GroupMode,
-            FilterText = tabState.FilterText
+            FilterText = tabState.FilterText,
+            SelectedPaths = tabState.SelectedPaths?.ToList() ?? [],
+            VerticalOffset = tabState.ScrollOffset
         };
         var tab = new FolderTab(tabState.Path, state: state);
         var session = CreateSinglePaneSession(tab);
@@ -240,6 +242,8 @@ public partial class MainWindow
             ViewMode = AppSettings.NormalizeDisplayMode(tab.State.ViewMode),
             IsFolderLocked = session.IsLocked,
             FilterText = tab.State.FilterText,
+            SelectedPaths = tab.State.SelectedPaths.ToList(),
+            ScrollOffset = tab.State.VerticalOffset,
             Name = session.Name
         };
     }

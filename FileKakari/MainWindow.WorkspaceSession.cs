@@ -1611,6 +1611,9 @@ public partial class MainWindow
         string restoreTrigger = "pane-load-complete",
         int workspaceSwitchId = 0)
     {
+        PerfLog.WriteVerbose(
+            $"folder-pane-load-request paneId={pane.Id} stateId={pane.ActiveTabState?.Id ?? "null"} " +
+            $"trigger={restoreTrigger} policy={policy} workspaceSwitchId={workspaceSwitchId}");
         using var previewSuppression = SuppressPreviewForProgrammaticSelection(restoreTrigger);
         if (restoreTrigger is "workspace-switch" or "subtab-selection-changed" or "active-pane-change" or "viewstate-restore"
             && FindSessionContainingPane(pane) is { } previewSession
@@ -2651,6 +2654,14 @@ public partial class MainWindow
             if (!IsPaneOwnedByActiveWorkspaceSession(pane))
             {
                 PerfLog.WriteVerbose($"workspace-subtab-selection-skip reason=inactive-session-pane paneId={pane.Id} activeSessionId={_activeWorkspaceSession?.Id ?? "null"} selectedSessionId={GetSelectedWorkspaceSession()?.Id ?? "null"}");
+                return;
+            }
+
+            if ((!IsLoaded || !listBox.IsLoaded) && IsWorkspaceSwitchRestoreInProgress)
+            {
+                PerfLog.WriteVerbose(
+                    $"workspace-subtab-selection-skip reason=view-not-loaded-during-workspace-restore paneId={pane.Id} " +
+                    $"windowLoaded={IsLoaded} listBoxLoaded={listBox.IsLoaded} restoreDepth={_workspaceSwitchRestoreDepth}");
                 return;
             }
 

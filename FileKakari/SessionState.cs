@@ -49,6 +49,10 @@ public sealed class SessionTabState
 
     public string FilterText { get; set; } = "";
 
+    public List<string> SelectedPaths { get; set; } = [];
+
+    public double ScrollOffset { get; set; }
+
     public WorkspaceService.WorkspaceLocalStateDocument? LocalState { get; set; }
 
     public bool IsUnsavedWorkspace { get; set; }

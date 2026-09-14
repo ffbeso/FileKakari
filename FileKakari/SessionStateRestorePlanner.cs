@@ -96,6 +96,8 @@ public static class SessionStateRestorePlanner
             ViewMode = AppSettings.NormalizeDisplayMode(source.ViewMode),
             IsFolderLocked = source.IsFolderLocked,
             FilterText = source.FilterText ?? "",
+            SelectedPaths = source.SelectedPaths?.ToList() ?? [],
+            ScrollOffset = source.ScrollOffset,
             LocalState = source.LocalState,
             IsUnsavedWorkspace = source.IsUnsavedWorkspace,
             WorkspaceId = source.WorkspaceId,

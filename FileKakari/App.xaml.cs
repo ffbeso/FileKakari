@@ -35,83 +35,12 @@ public partial class App : Application
         else
         {
             var session = sessionStateService.Load();
-            var selectedValidIndex = 0;
-            for (var i = 0; i < session.Tabs.Count; i++)
-            {
-                var savedTab = session.Tabs[i];
-                var path = savedTab.Path;
-                if (savedTab.IsWorkspace)
-                {
-                    var isUnsaved = savedTab.IsUnsavedWorkspace || string.IsNullOrWhiteSpace(savedTab.WorkspacePath);
-                    if (isUnsaved)
-                    {
-                        var workspaceRoot = string.IsNullOrWhiteSpace(savedTab.RootPath) ? path : savedTab.RootPath;
-                        if (string.IsNullOrWhiteSpace(workspaceRoot))
-                        {
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        if (string.IsNullOrWhiteSpace(savedTab.WorkspacePath) && string.IsNullOrWhiteSpace(path))
-                        {
-                            continue;
-                        }
-                    }
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(path)
-                        || (!SpecialLocationService.IsSpecialUri(path) && !Directory.Exists(path)))
-                    {
-                        continue;
-                    }
-                }
-
-                if (i < session.SelectedTabIndex)
-                {
-                    selectedValidIndex++;
-                }
-
-                var resolvedTabId = savedTab.TabId;
-                if (string.IsNullOrWhiteSpace(resolvedTabId) || string.Equals(resolvedTabId, "root", StringComparison.OrdinalIgnoreCase))
-                {
-                    resolvedTabId = Guid.NewGuid().ToString("N");
-                }
-
-                startTabs.Add(new SessionTabState
-                {
-                    TabId = resolvedTabId,
-                    Path = path,
-                    IsWorkspace = savedTab.IsWorkspace,
-                    WorkspacePath = savedTab.WorkspacePath,
-                    RootPath = savedTab.RootPath,
-                    SortColumn = savedTab.SortColumn,
-                    SortAscending = savedTab.SortAscending,
-                    ViewMode = AppSettings.NormalizeDisplayMode(savedTab.ViewMode),
-                    IsFolderLocked = savedTab.IsFolderLocked,
-                    LocalState = savedTab.LocalState,
-                    IsUnsavedWorkspace = savedTab.IsUnsavedWorkspace,
-                    WorkspaceId = savedTab.WorkspaceId,
-                    Name = savedTab.Name,
-                    ActivePaneId = savedTab.ActivePaneId,
-                    Layout = savedTab.Layout
-                });
-            }
-
-            if (startTabs.Count > 0)
-            {
-                selectedTabIndex = Math.Clamp(selectedValidIndex, 0, startTabs.Count - 1);
-            }
-        }
-
-        if (startTabs.Count == 0)
-        {
-            startTabs.Add(new SessionTabState
-            {
-                Path = userProfile,
-                ViewMode = settingsService.Settings.DisplayMode
-            });
+            var restorePlan = SessionStateRestorePlanner.Prepare(
+                session,
+                userProfile,
+                settingsService.Settings.DisplayMode);
+            startTabs.AddRange(restorePlan.Tabs);
+            selectedTabIndex = restorePlan.SelectedTabIndex;
         }
 
         var window = new MainWindow(startTabs, selectedTabIndex, settingsService, sessionStateService);

@@ -15,6 +15,21 @@ public enum GroupMode
     SimilarName
 }
 
+public sealed class GroupModeToVirtualizationModeConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        return value is GroupMode mode && mode != GroupMode.None
+            ? VirtualizationMode.Standard
+            : VirtualizationMode.Recycling;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
 internal static class FileGroupHelper
 {
     public static string GetGroupKey(FileEntry entry, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)

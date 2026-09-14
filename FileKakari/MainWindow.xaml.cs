@@ -376,31 +376,7 @@ public partial class MainWindow : Window
         var loadedSession = _sessionStateService.Load();
         _sessionFolderColumnWidths = ColumnLayoutService.NormalizeFolderColumnWidths(loadedSession.FolderColumnWidths) ?? new(System.StringComparer.OrdinalIgnoreCase);
         _sessionColumnWidths = ColumnLayoutService.NormalizeColumnWidths(loadedSession.ColumnWidths) ?? new(System.StringComparer.OrdinalIgnoreCase);
-
-        if (loadedSession.WindowWidth.HasValue && loadedSession.WindowHeight.HasValue)
-        {
-            this.Left = loadedSession.WindowLeft ?? 100;
-            this.Top = loadedSession.WindowTop ?? 100;
-            this.Width = loadedSession.WindowWidth.Value;
-            this.Height = loadedSession.WindowHeight.Value;
-
-            // Screen boundary check to prevent loading off-screen
-            var virtualLeft = SystemParameters.VirtualScreenLeft;
-            var virtualTop = SystemParameters.VirtualScreenTop;
-            var virtualWidth = SystemParameters.VirtualScreenWidth;
-            var virtualHeight = SystemParameters.VirtualScreenHeight;
-
-            if (this.Left < virtualLeft || this.Left > virtualLeft + virtualWidth - 50 ||
-                this.Top < virtualTop || this.Top > virtualTop + virtualHeight - 50)
-            {
-                this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            }
-
-            if (System.Enum.TryParse<WindowState>(loadedSession.WindowState, out var stateVal))
-            {
-                this.WindowState = stateVal;
-            }
-        }
+        ApplySessionWindowState(loadedSession);
 
         _workspaceController = new WorkspaceController();
         _workspaceTabSync = new WorkspaceSessionFolderTabSync(_primaryPaneTabs);

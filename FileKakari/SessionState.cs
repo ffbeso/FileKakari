@@ -47,6 +47,8 @@ public sealed class SessionTabState
 
     public bool IsFolderLocked { get; set; }
 
+    public string FilterText { get; set; } = "";
+
     public WorkspaceService.WorkspaceLocalStateDocument? LocalState { get; set; }
 
     public bool IsUnsavedWorkspace { get; set; }

@@ -12,6 +12,7 @@
         <local:PaneCountToColumnsConverter x:Key="PaneCountToColumnsConverter" />
         <local:ObjectsEqualConverter x:Key="ObjectsEqualConverter" />
         <local:GroupCollapseConverter x:Key="GroupCollapseConverter" />
+        <local:GroupModeToVirtualizationModeConverter x:Key="GroupModeToVirtualizationModeConverter" />
 
         <ContextMenu x:Key="GroupHeaderContextMenu">
             <MenuItem Header="すべて展開" Click="GroupHeader_ExpandAll_Click"/>
@@ -2053,7 +2054,7 @@
                                               Unloaded="WorkspacePaneFileList_Unloaded"
                                               VirtualizingPanel.IsVirtualizing="True"
                                               VirtualizingPanel.IsVirtualizingWhenGrouping="True"
-                                              VirtualizingPanel.VirtualizationMode="Recycling"
+                                              VirtualizingPanel.VirtualizationMode="{Binding ActiveTabState.GroupMode, Converter={StaticResource GroupModeToVirtualizationModeConverter}, Mode=OneTime}"
                                               VirtualizingPanel.ScrollUnit="Pixel"
                                               VirtualizingPanel.CacheLength="1"
                                               VirtualizingPanel.CacheLengthUnit="Page"

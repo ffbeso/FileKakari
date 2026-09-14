@@ -104,7 +104,9 @@ public partial class MainWindow
             AppSettings.NormalizeDisplayMode(tabState.ViewMode))
         {
             SortColumn = NormalizeSortColumn(tabState.SortColumn),
-            SortAscending = tabState.SortAscending
+            SortAscending = tabState.SortAscending,
+            GroupMode = tabState.GroupMode,
+            FilterText = tabState.FilterText
         };
         var tab = new FolderTab(tabState.Path, state: state);
         var session = CreateSinglePaneSession(tab);
@@ -127,6 +129,11 @@ public partial class MainWindow
     }
 
     private void SaveSessionState()
+    {
+        _sessionStateService.Save(CaptureCurrentSessionState());
+    }
+
+    private SessionState CaptureCurrentSessionState()
     {
         if (GetSelectedWorkspaceSession() is not null)
         {
@@ -154,7 +161,7 @@ public partial class MainWindow
             selectedWorkspaceIndex = 0;
         }
 
-        var state = new SessionState
+        return new SessionState
         {
             SelectedTabIndex = Math.Clamp(selectedWorkspaceIndex, 0, Math.Max(0, _workspaceSessions.Count - 1)),
             Tabs = _workspaceSessions
@@ -166,10 +173,9 @@ public partial class MainWindow
             WindowWidth = width,
             WindowHeight = height,
             WindowState = WindowState.ToString(),
-            FolderColumnWidths = _sessionFolderColumnWidths,
-            ColumnWidths = _sessionColumnWidths
+            FolderColumnWidths = CloneFolderColumnWidths(_sessionFolderColumnWidths),
+            ColumnWidths = new Dictionary<string, double>(_sessionColumnWidths, StringComparer.OrdinalIgnoreCase)
         };
-        _sessionStateService.Save(state);
     }
 
     private SessionTabState? BuildSessionTabState(WorkspaceSession session)
@@ -209,7 +215,7 @@ public partial class MainWindow
                 GroupMode = representativeTab.State.GroupMode,
                 ViewMode = AppSettings.NormalizeDisplayMode(representativeTab.State.ViewMode),
                 IsFolderLocked = session.IsLocked,
-                LocalState = _workspaceService.BuildLocalState(session),
+                LocalState = CloneWorkspaceLocalState(_workspaceService.BuildLocalState(session)),
                 IsUnsavedWorkspace = isUnsavedWorkspacePromotion,
                 WorkspaceId = session.Workspace?.WorkspaceId ?? session.Id,
                 Name = session.Name,
@@ -233,7 +239,225 @@ public partial class MainWindow
             GroupMode = tab.State.GroupMode,
             ViewMode = AppSettings.NormalizeDisplayMode(tab.State.ViewMode),
             IsFolderLocked = session.IsLocked,
+            FilterText = tab.State.FilterText,
             Name = session.Name
+        };
+    }
+
+    private void ApplySessionWindowState(SessionState state)
+    {
+        if (!state.WindowWidth.HasValue || !state.WindowHeight.HasValue)
+        {
+            return;
+        }
+
+        Left = state.WindowLeft ?? 100;
+        Top = state.WindowTop ?? 100;
+        Width = state.WindowWidth.Value;
+        Height = state.WindowHeight.Value;
+
+        var virtualLeft = SystemParameters.VirtualScreenLeft;
+        var virtualTop = SystemParameters.VirtualScreenTop;
+        var virtualWidth = SystemParameters.VirtualScreenWidth;
+        var virtualHeight = SystemParameters.VirtualScreenHeight;
+        if (Left < virtualLeft || Left > virtualLeft + virtualWidth - 50
+            || Top < virtualTop || Top > virtualTop + virtualHeight - 50)
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        if (Enum.TryParse<WindowState>(state.WindowState, out var windowState))
+        {
+            WindowState = windowState;
+        }
+    }
+
+    internal async Task<bool> ApplySessionStateAsync(SessionState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        var fallbackPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var restorePlan = SessionStateRestorePlanner.Prepare(
+            state,
+            fallbackPath,
+            _settingsService.Settings.DisplayMode);
+        var sessions = new List<WorkspaceSession>();
+        var selectedSessionIndex = 0;
+        for (var index = 0; index < restorePlan.Tabs.Count; index++)
+        {
+            if (CreateInitialSession(restorePlan.Tabs[index]) is not { } session)
+            {
+                continue;
+            }
+
+            if (index < restorePlan.SelectedTabIndex)
+            {
+                selectedSessionIndex++;
+            }
+            sessions.Add(session);
+        }
+
+        if (sessions.Count == 0)
+        {
+            var fallbackTab = new FolderTab(
+                fallbackPath,
+                viewMode: _settingsService.Settings.DisplayMode);
+            sessions.Add(CreateSinglePaneSession(fallbackTab));
+            selectedSessionIndex = 0;
+        }
+
+        selectedSessionIndex = Math.Clamp(selectedSessionIndex, 0, sessions.Count - 1);
+        var targetSession = sessions[selectedSessionIndex];
+        var previousState = CaptureCurrentSessionState();
+        var previousSessions = _workspaceSessions.ToList();
+        var previousActiveSession = _activeWorkspaceSession;
+
+        try
+        {
+            ApplyPreparedSessionState(state, sessions, targetSession, "session-state-apply");
+            await RestoreWorkspaceTabAsync(targetSession);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _performanceLogger.Write($"session-state-apply-failed type={ex.GetType().FullName} message=\"{ex.Message}\"");
+            if (previousActiveSession is not null && previousSessions.Count > 0)
+            {
+                try
+                {
+                    ApplyPreparedSessionState(
+                        previousState,
+                        previousSessions,
+                        previousActiveSession,
+                        "session-state-apply-rollback");
+                    await RestoreWorkspaceTabAsync(previousActiveSession);
+                }
+                catch (Exception rollbackException)
+                {
+                    _performanceLogger.Write(
+                        $"session-state-apply-rollback-failed type={rollbackException.GetType().FullName} " +
+                        $"message=\"{rollbackException.Message}\"");
+                }
+            }
+            return false;
+        }
+    }
+
+    private void ApplyPreparedSessionState(
+        SessionState state,
+        IReadOnlyList<WorkspaceSession> sessions,
+        WorkspaceSession activeSession,
+        string reason)
+    {
+        _loadCancellation?.Cancel();
+        ClearLastClosedStates();
+
+        _isSwitchingTabs = true;
+        try
+        {
+            _workspaceSessions.Clear();
+            foreach (var session in sessions)
+            {
+                _workspaceSessions.Add(session);
+            }
+
+            ResetToSingleWorkspaceDisplay(activeSession, reason);
+            UpdateActiveWorkspaceSessionUi(activeSession);
+            _workspaceTabSync.ApplyToDisplay(activeSession);
+            SelectWorkspaceSession(activeSession);
+        }
+        finally
+        {
+            _isSwitchingTabs = false;
+        }
+
+        ReplaceDictionaryContents(
+            _sessionFolderColumnWidths,
+            ColumnLayoutService.NormalizeFolderColumnWidths(CloneFolderColumnWidths(state.FolderColumnWidths)));
+        ReplaceDictionaryContents(
+            _sessionColumnWidths,
+            ColumnLayoutService.NormalizeColumnWidths(state.ColumnWidths));
+        ApplySessionWindowState(state);
+        ApplyDisplayMode();
+        ApplyColumnSettings();
+    }
+
+    private static void ReplaceDictionaryContents<TKey, TValue>(
+        Dictionary<TKey, TValue> target,
+        Dictionary<TKey, TValue>? source)
+        where TKey : notnull
+    {
+        target.Clear();
+        if (source is null)
+        {
+            return;
+        }
+
+        foreach (var pair in source)
+        {
+            target[pair.Key] = pair.Value;
+        }
+    }
+
+    private static Dictionary<string, FolderColumnWidthsState> CloneFolderColumnWidths(
+        IReadOnlyDictionary<string, FolderColumnWidthsState>? source)
+    {
+        var clone = new Dictionary<string, FolderColumnWidthsState>(StringComparer.OrdinalIgnoreCase);
+        if (source is null)
+        {
+            return clone;
+        }
+
+        foreach (var pair in source)
+        {
+            clone[pair.Key] = new FolderColumnWidthsState
+            {
+                LastAccessUtc = pair.Value.LastAccessUtc,
+                Widths = new Dictionary<string, double>(pair.Value.Widths, StringComparer.OrdinalIgnoreCase)
+            };
+        }
+        return clone;
+    }
+
+    private static WorkspaceService.WorkspaceLocalStateDocument CloneWorkspaceLocalState(
+        WorkspaceService.WorkspaceLocalStateDocument source)
+    {
+        return new WorkspaceService.WorkspaceLocalStateDocument
+        {
+            IsWorkspaceLocked = source.IsWorkspaceLocked,
+            ActivePaneId = source.ActivePaneId,
+            PaneStates = source.PaneStates.Select(pane => new WorkspaceService.LocalPaneStateDocument
+            {
+                PaneId = pane.PaneId,
+                SelectedTabId = pane.SelectedTabId,
+                SubTabPlacement = pane.SubTabPlacement,
+                SubTabBarWidth = pane.SubTabBarWidth,
+                Tabs = pane.Tabs.Select(CloneWorkspaceLocalTabState).ToList()
+            }).ToList(),
+            TabStates = source.TabStates.Select(CloneWorkspaceLocalTabState).ToList(),
+            ColumnWidths = source.ColumnWidths is null
+                ? null
+                : new Dictionary<string, double>(source.ColumnWidths, StringComparer.OrdinalIgnoreCase)
+        };
+    }
+
+    private static WorkspaceService.WorkspaceLocalTabStateDocument CloneWorkspaceLocalTabState(
+        WorkspaceService.WorkspaceLocalTabStateDocument source)
+    {
+        return new WorkspaceService.WorkspaceLocalTabStateDocument
+        {
+            TabId = source.TabId,
+            PaneId = source.PaneId,
+            CurrentPath = source.CurrentPath,
+            Path = source.Path,
+            ViewMode = source.ViewMode,
+            SortColumn = source.SortColumn,
+            SortAscending = source.SortAscending,
+            GroupMode = source.GroupMode,
+            FilterText = source.FilterText,
+            SelectedPaths = source.SelectedPaths?.ToList(),
+            ScrollOffset = source.ScrollOffset,
+            IsFolderLocked = source.IsFolderLocked
         };
     }
 

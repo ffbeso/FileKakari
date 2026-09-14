@@ -436,6 +436,11 @@ public partial class MainWindow
 
                 GetFolderPaneListView(context.Pane)?.SelectedItems.Clear();
                 context.Pane.FileList.StatusMessagePrefix = _text.Format("DeletedMultiple", deletedCount);
+                await SynchronizeDeletedItemsToPeerWorkspacePanesAsync(
+                    context.Pane,
+                    context.CurrentPath,
+                    deleteTargetPaths,
+                    deleteFlowId);
                 await RestoreWorkspacePaneScrollOffsetAsync(
                     context.Pane,
                     context.Pane.ActiveTabState?.VerticalOffset ?? 0);
@@ -466,6 +471,102 @@ public partial class MainWindow
             WriteDeleteFlowSnapshot(deleteFlowId, "self-operation-finalize-complete", context.Pane);
         }
     }
+
+    private async Task SynchronizeDeletedItemsToPeerWorkspacePanesAsync(
+        FolderPane sourcePane,
+        string folderPath,
+        IReadOnlyList<string> deletedPaths,
+        long deleteFlowId)
+    {
+        var deletedPathSet = deletedPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var peerStates = GetDisplayedWorkspacePanes()
+            .Where(pane => !ReferenceEquals(pane, sourcePane)
+                && string.Equals(pane.CurrentPath, folderPath, StringComparison.OrdinalIgnoreCase))
+            .Distinct()
+            .Select(pane =>
+            {
+                var removedItems = pane.FileList.Items
+                    .Where(item => deletedPathSet.Contains(item.FullPath))
+                    .ToList();
+                if (removedItems.Count == 0)
+                {
+                    return null;
+                }
+
+                var listView = GetFolderPaneListView(pane);
+                var scrollViewer = listView is null ? null : FindVisualChild<ScrollViewer>(listView);
+                var verticalOffset = scrollViewer?.VerticalOffset
+                    ?? pane.ActiveTabState?.VerticalOffset
+                    ?? pane.FileList.ScrollOffset;
+                var groupMode = pane.ActiveTabState?.GroupMode ?? GroupMode.None;
+                var anchorState = groupMode == GroupMode.None
+                    ? null
+                    : AnchorScrollService.CaptureAnchorState(listView, groupMode, verticalOffset);
+                return new PeerPaneDeleteRestoreState(
+                    pane,
+                    listView,
+                    scrollViewer,
+                    removedItems,
+                    groupMode,
+                    anchorState,
+                    verticalOffset);
+            })
+            .Where(state => state is not null)
+            .Cast<PeerPaneDeleteRestoreState>()
+            .ToList();
+
+        foreach (var peerState in peerStates)
+        {
+            foreach (var item in peerState.RemovedItems)
+            {
+                peerState.ListView?.SelectedItems.Remove(item);
+                peerState.Pane.FileList.RemoveItem(item);
+            }
+
+            peerState.Pane.SelectedPaths = peerState.Pane.SelectedPaths
+                .Where(path => !deletedPathSet.Contains(path))
+                .ToList();
+            if (peerState.Pane.ActiveTabState is { } activeState)
+            {
+                activeState.SelectedPaths = activeState.SelectedPaths
+                    .Where(path => !deletedPathSet.Contains(path))
+                    .ToList();
+            }
+        }
+
+        foreach (var peerState in peerStates)
+        {
+            var restoredByAnchor = peerState.AnchorState is not null
+                && await AnchorScrollService.RestoreAnchorScrollAsync(
+                    peerState.ListView,
+                    peerState.AnchorState,
+                    peerState.GroupMode,
+                    Dispatcher,
+                    deleteFlowId);
+            if (!restoredByAnchor && peerState.ScrollViewer is not null)
+            {
+                await Dispatcher.InvokeAsync(
+                    () => peerState.ScrollViewer.ScrollToVerticalOffset(
+                        Math.Clamp(peerState.VerticalOffset, 0, peerState.ScrollViewer.ScrollableHeight)),
+                    DispatcherPriority.ContextIdle);
+            }
+
+            _performanceLogger.Write(
+                $"delete-peer-pane-sync flowId={deleteFlowId} sourcePaneId={sourcePane.Id} targetPaneId={peerState.Pane.Id} " +
+                $"path=\"{folderPath}\" removed={peerState.RemovedItems.Count} groupMode={peerState.GroupMode} " +
+                $"anchorCaptured={peerState.AnchorState is not null} anchorRestored={restoredByAnchor} " +
+                $"offsetBefore={peerState.VerticalOffset:F1} offsetAfter={peerState.ScrollViewer?.VerticalOffset ?? -1:F1}");
+        }
+    }
+
+    private sealed record PeerPaneDeleteRestoreState(
+        FolderPane Pane,
+        ListView? ListView,
+        ScrollViewer? ScrollViewer,
+        IReadOnlyList<FileEntry> RemovedItems,
+        GroupMode GroupMode,
+        AnchorScrollState? AnchorState,
+        double VerticalOffset);
 
     private FileOperationContext? GetActiveFileOperationContext(FolderPane? targetPane = null)
     {

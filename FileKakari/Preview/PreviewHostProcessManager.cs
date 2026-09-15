@@ -168,19 +168,24 @@ public sealed class PreviewHostProcessManager : IDisposable
     {
         if (_writer is null || !IsConnected)
         {
+            PreviewDiagnostics.Error("PreviewHost", $"SendMessageAsync skipped (not connected or writer null) msgType={typeof(T).Name} isConnected={IsConnected} hostPid={HostProcessId}");
             return;
         }
 
+        var reqId = message.RequestId;
         var json = JsonSerializer.Serialize(message);
+        PreviewDiagnostics.Info("PreviewHost", $"[IPC Send START] req=\"{reqId}\" msgType={message.Type} hostPid={HostProcessId} pipeConnected={_pipeClient?.IsConnected}");
+
         await _sendLock.WaitAsync().ConfigureAwait(false);
         try
         {
             await _writer.WriteLineAsync(json.AsMemory(), _cts.Token).ConfigureAwait(false);
             await _writer.FlushAsync(_cts.Token).ConfigureAwait(false);
+            PreviewDiagnostics.Info("PreviewHost", $"[IPC Send COMPLETE] req=\"{reqId}\" msgType={message.Type}");
         }
         catch (Exception ex)
         {
-            PreviewDiagnostics.Error("PreviewHost", $"SendMessageAsync failed: {ex.Message}");
+            PreviewDiagnostics.Error("PreviewHost", $"[IPC Send EXCEPTION] req=\"{reqId}\" msgType={message.Type} msg=\"{ex.Message}\"");
         }
         finally
         {
@@ -197,6 +202,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                 var line = await _reader.ReadLineAsync(_cts.Token).ConfigureAwait(false);
                 if (line is null)
                 {
+                    PreviewDiagnostics.Info("PreviewHost", "[IPC Receive EOF] Pipe stream reached EOF.");
                     break;
                 }
 
@@ -208,6 +214,7 @@ public sealed class PreviewHostProcessManager : IDisposable
 
                 using var doc = JsonDocument.Parse(line);
                 var type = doc.RootElement.GetProperty("type").GetString();
+                var reqId = doc.RootElement.TryGetProperty("requestId", out var reqProp) ? reqProp.GetString() ?? "" : "";
 
                 switch (type)
                 {
@@ -216,6 +223,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         if (attached is not null)
                         {
                             ChildHwnd = attached.ChildHwnd;
+                            PreviewDiagnostics.Info("PreviewHost", $"[IPC Recv Attached] req=\"{attached.RequestId}\" childHwnd=0x{attached.ChildHwnd:X} parentHwnd=0x{attached.ParentHwnd:X}");
                             OnAttached?.Invoke(attached);
                         }
                         break;
@@ -224,6 +232,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         var resized = JsonSerializer.Deserialize<ResizedEvent>(line);
                         if (resized is not null)
                         {
+                            PreviewDiagnostics.Info("PreviewHost", $"[IPC Recv Resized] req=\"{resized.RequestId}\" size={resized.WidthPx}x{resized.HeightPx}");
                             OnResized?.Invoke(resized);
                         }
                         break;
@@ -232,6 +241,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         var procErr = JsonSerializer.Deserialize<ProcessErrorEvent>(line);
                         if (procErr is not null)
                         {
+                            PreviewDiagnostics.Error("PreviewHost", $"[IPC Recv ProcessError] req=\"{procErr.RequestId}\" msg=\"{procErr.ErrorMessage}\"");
                             OnProcessError?.Invoke(procErr);
                         }
                         break;
@@ -240,6 +250,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         var loaded = JsonSerializer.Deserialize<PreviewLoadedEvent>(line);
                         if (loaded is not null)
                         {
+                            PreviewDiagnostics.Info("PreviewHost", $"[IPC Recv PreviewLoaded] req=\"{loaded.RequestId}\" elapsedMs={loaded.ElapsedMs} path='{loaded.FilePath}'");
                             OnPreviewLoaded?.Invoke(loaded);
                         }
                         break;
@@ -248,6 +259,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         var failed = JsonSerializer.Deserialize<PreviewFailedEvent>(line);
                         if (failed is not null)
                         {
+                            PreviewDiagnostics.Error("PreviewHost", $"[IPC Recv PreviewFailed] req=\"{failed.RequestId}\" stage={failed.Stage} code=0x{failed.ErrorCode:X8} msg=\"{failed.Message}\" elapsedMs={failed.ElapsedMs}");
                             OnPreviewFailed?.Invoke(failed);
                         }
                         break;
@@ -256,6 +268,7 @@ public sealed class PreviewHostProcessManager : IDisposable
                         var unloaded = JsonSerializer.Deserialize<PreviewUnloadedEvent>(line);
                         if (unloaded is not null)
                         {
+                            PreviewDiagnostics.Info("PreviewHost", $"[IPC Recv PreviewUnloaded] req=\"{unloaded.RequestId}\"");
                             OnPreviewUnloaded?.Invoke(unloaded);
                         }
                         break;

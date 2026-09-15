@@ -1476,26 +1476,72 @@ public partial class MainWindow
     }
 
     private async Task<PreviewHostProcessManager?> EnsurePreviewHostProcessManagerAsync()
-
     {
         if (_previewHostProcessManager is not null)
         {
-            return _previewHostProcessManager;
+            if (_previewHostProcessManager.IsConnected)
+            {
+                PreviewDiagnostics.Info(
+                    "PreviewHost",
+                    $"Manager reused. HostPID={_previewHostProcessManager.HostProcessId} IsConnected=True");
+                return _previewHostProcessManager;
+            }
+
+            PreviewDiagnostics.Info(
+                "PreviewHost",
+                $"[Manager Recovery] old manager unhealthy (HostPID={_previewHostProcessManager.HostProcessId} IsConnected=False). Starting recovery...");
+
+            // 1. event detach
+            PreviewDiagnostics.Info("PreviewHost", "[Manager Recovery] event detach");
+            _previewHostProcessManager.OnPreviewLoaded -= OnPreviewHostPreviewLoaded;
+            _previewHostProcessManager.OnPreviewFailed -= OnPreviewHostPreviewFailed;
+
+            // 2. control reset
+            PreviewDiagnostics.Info("PreviewHost", "[Manager Recovery] control reset");
+            if (_previewHostControl is not null)
+            {
+                _previewHostControl.ResetIsAttached("manager-unhealthy");
+                _previewHostControl = null;
+                PreviewShellHostContainer.Child = null;
+            }
+
+            // 3. old manager dispose
+            PreviewDiagnostics.Info("PreviewHost", "[Manager Recovery] old manager dispose");
+            try
+            {
+                _previewHostProcessManager.Dispose();
+            }
+            catch (Exception ex)
+            {
+                PreviewDiagnostics.Error("PreviewHost", $"[Manager Recovery] Exception during old manager dispose: {ex.Message}");
+            }
+            finally
+            {
+                _previewHostProcessManager = null;
+            }
         }
 
+        // 4. new manager create
+        PreviewDiagnostics.Info("PreviewHost", "[Manager Recovery] new manager create");
         var manager = new PreviewHostProcessManager();
         manager.OnPreviewLoaded += OnPreviewHostPreviewLoaded;
         manager.OnPreviewFailed += OnPreviewHostPreviewFailed;
 
+        // 5. new host connected
         var started = await manager.StartAsync().ConfigureAwait(true);
         if (!started)
         {
-            PreviewDiagnostics.Error("PreviewHost", "Failed to start PreviewHost process.");
-            manager.Dispose();
+            PreviewDiagnostics.Error("PreviewHost", "[Manager Recovery] Failed to start new PreviewHost process.");
+            manager.OnPreviewLoaded -= OnPreviewHostPreviewLoaded;
+            manager.OnPreviewFailed -= OnPreviewHostPreviewFailed;
+            try { manager.Dispose(); } catch { }
             return null;
         }
 
         _previewHostProcessManager = manager;
+        PreviewDiagnostics.Info(
+            "PreviewHost",
+            $"[Manager Recovery] new host connected. New HostPID={_previewHostProcessManager.HostProcessId}");
         return _previewHostProcessManager;
     }
 
@@ -1514,6 +1560,10 @@ public partial class MainWindow
             return false;
         }
 
+        PreviewDiagnostics.Info(
+            "PreviewHost",
+            $"ReplacePreviewWithPreviewHost START requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" generation={generation}");
+
         // 1. Clear only built-in preview content
         ClearBuiltInPreviewContent();
 
@@ -1525,6 +1575,7 @@ public partial class MainWindow
         if (manager is null)
         {
             ClearLoadingRequestId(requestId);
+            PreviewDiagnostics.Error("PreviewHost", $"ReplacePreviewWithPreviewHost FAILED requestId=\"{requestId}\" reason=\"ManagerStartFailed\"");
             if (fileInfo is not null)
             {
                 ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));
@@ -1542,14 +1593,22 @@ public partial class MainWindow
         ApplyShellPreviewHostBackground();
         PreviewShellHostContainer.Visibility = Visibility.Visible;
 
+        PreviewDiagnostics.Info(
+            "PreviewHost",
+            $"Request state BEFORE attach requestId=\"{requestId}\" HostPID={manager.HostProcessId} PipeIsConnected={manager.IsConnected} IsAttached={_previewHostControl.IsAttached} ChildHwnd=0x{_previewHostControl.ProcessManager.ChildHwnd:X}");
+
         // 5. Ensure Attached (reuse existing attach or explicit re-attach)
         var attachTimeout = TimeSpan.FromSeconds(3);
         var isAttached = await _previewHostControl.EnsureAttachedAsync(requestId, attachTimeout, cancellationToken).ConfigureAwait(true);
 
+        PreviewDiagnostics.Info(
+            "PreviewHost",
+            $"Request state AFTER attach requestId=\"{requestId}\" isAttached={isAttached} HostPID={manager.HostProcessId} PipeIsConnected={manager.IsConnected} IsAttached={_previewHostControl.IsAttached} ChildHwnd=0x{_previewHostControl.ProcessManager.ChildHwnd:X}");
+
         if (!isAttached)
         {
             ClearLoadingRequestId(requestId);
-            PreviewDiagnostics.Error("PreviewHost", $"ReplacePreviewWithPreviewHost failed requestId=\"{requestId}\" reason=\"AttachTimeout\"");
+            PreviewDiagnostics.Error("PreviewHost", $"ReplacePreviewWithPreviewHost FAILED requestId=\"{requestId}\" reason=\"AttachTimeout\"");
             if (fileInfo is not null && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
                 ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));
@@ -1593,14 +1652,17 @@ public partial class MainWindow
 
         try
         {
-            PreviewDiagnostics.Info("PreviewHost", $"Sending LoadPreviewAsync via PreviewHost. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx}");
+            PreviewDiagnostics.Info(
+                "PreviewHost",
+                $"LoadPreviewAsync SEND START. requestId=\"{requestId}\" path=\"{path}\" clsid=\"{clsid:B}\" size={wPx}x{hPx} HostPID={manager.HostProcessId} PipeIsConnected={manager.IsConnected}");
             await manager.LoadPreviewAsync(_activePreviewHostPaneId, path, clsid.ToString("B"), wPx, hPx, requestId).ConfigureAwait(true);
+            PreviewDiagnostics.Info("PreviewHost", $"LoadPreviewAsync SEND COMPLETE. requestId=\"{requestId}\"");
             return true;
         }
         catch (Exception ex)
         {
             ClearLoadingRequestId(requestId);
-            PreviewDiagnostics.Error("PreviewHost", $"LoadPreviewAsync exception requestId=\"{requestId}\" msg=\"{ex.Message}\"");
+            PreviewDiagnostics.Error("PreviewHost", $"LoadPreviewAsync EXCEPTION requestId=\"{requestId}\" msg=\"{ex.Message}\"");
             if (fileInfo is not null && string.Equals(requestId, _activePreviewRequestId, StringComparison.Ordinal))
             {
                 ReplacePreviewWithUnsupportedInfo(fileInfo, _text.Get("PreviewUnsupportedTitle"), _text.Get("PreviewUnsupportedHint"));

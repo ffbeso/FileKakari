@@ -59,12 +59,17 @@ public sealed class PreviewHostControl : HwndHost
 
     public void ResetIsAttached(string reason)
     {
-        if (IsAttached || _currentChildHwndValue != 0)
+        if (IsAttached || _currentChildHwndValue != 0 || _pendingAttachTask is not null)
         {
             PreviewDiagnostics.Info("PreviewHostControl", $"IsAttached reset reason=\"{reason}\" previousIsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X}");
         }
         IsAttached = false;
-        _attachTcs?.TrySetResult(false);
+        _pendingAttachTask = null;
+        if (_attachTcs is not null && !_attachTcs.Task.IsCompleted)
+        {
+            _attachTcs.TrySetResult(false);
+        }
+        _attachTcs = null;
     }
 
     private Task<bool>? _pendingAttachTask;
@@ -73,7 +78,7 @@ public sealed class PreviewHostControl : HwndHost
     {
         if (IsAttached && _currentChildHwndValue != 0)
         {
-            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] existing attach reused. hwnd=0x{_currentChildHwndValue:X}");
+            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] existing attach reused. hwnd=0x{_currentChildHwndValue:X} IsAttached={IsAttached} HostPID={_processManager.HostProcessId} IsConnected={_processManager.IsConnected}");
             return Task.FromResult(true);
         }
 
@@ -92,7 +97,7 @@ public sealed class PreviewHostControl : HwndHost
 
     private async Task<bool> ExecuteEnsureAttachedInternalAsync(string requestId, TimeSpan timeout, System.Threading.CancellationToken cancellationToken)
     {
-        PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] EnsureAttached start. IsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X}");
+        PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] EnsureAttached start. IsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X} HostPID={_processManager.HostProcessId} IsConnected={_processManager.IsConnected}");
 
         if (IsAttached && _currentChildHwndValue != 0)
         {
@@ -116,9 +121,10 @@ public sealed class PreviewHostControl : HwndHost
             var pixelWidth = Math.Max(1, (int)Math.Ceiling(ActualWidth * scaleX));
             var pixelHeight = Math.Max(1, (int)Math.Ceiling(ActualHeight * scaleY));
 
-            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] explicit attach sent. hwnd=0x{_currentChildHwndValue:X} size={pixelWidth}x{pixelHeight}");
+            PreviewDiagnostics.Info("PreviewHostControl", $"[req=\"{requestId}\"] explicit attach sent. hwnd=0x{_currentChildHwndValue:X} size={pixelWidth}x{pixelHeight} HostPID={_processManager.HostProcessId}");
             await _processManager.SendMessageAsync(new AttachCommand
             {
+                RequestId = requestId,
                 ParentHwnd = _currentChildHwndValue,
                 PaneId = "active-pane",
                 WidthPx = pixelWidth,

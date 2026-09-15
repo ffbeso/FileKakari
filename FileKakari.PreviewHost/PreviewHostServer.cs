@@ -277,16 +277,19 @@ public sealed class PreviewHostServer : IDisposable
 
                     _activeRequestId = requestId;
                     var captureReqId = requestId;
+                    HostPerfLog.Write($"[Server.ProcessCommand] LoadPreview command received req=\"{captureReqId}\" path='{filePath}' clsid='{clsid}'");
 
                     EnqueueStaAction(() =>
                     {
                         if (Volatile.Read(ref _shutdownState) != 0)
                         {
+                            HostPerfLog.Write($"[Server.StaAction] LoadPreview skipped (shutdown) req=\"{captureReqId}\"");
                             return;
                         }
 
                         if (_parentHwnd == IntPtr.Zero || _hostHwnd == IntPtr.Zero)
                         {
+                            HostPerfLog.Write($"[Server.StaAction] LoadPreview FAILED req=\"{captureReqId}\" stage=AttachNotReady");
                             _ = SendMessageAsync(new PreviewFailedEventMessage
                             {
                                 RequestId = captureReqId,
@@ -299,17 +302,19 @@ public sealed class PreviewHostServer : IDisposable
                             return;
                         }
 
-
                         var (clientWidthPx, clientHeightPx) = GetHostClientSize(loadWPx, loadHPx);
-                        var res = _previewSession.Load(filePath, clsid, _hostHwnd, clientWidthPx, clientHeightPx);
+                        HostPerfLog.Write($"[Server.StaAction] LoadPreview executing req=\"{captureReqId}\" threadId={Environment.CurrentManagedThreadId}");
+                        var res = _previewSession.Load(captureReqId, filePath, clsid, _hostHwnd, clientWidthPx, clientHeightPx);
 
                         if (_activeRequestId != captureReqId)
                         {
+                            HostPerfLog.Write($"[Server.StaAction] LoadPreview completed but inactive req=\"{captureReqId}\" activeReq=\"{_activeRequestId}\"");
                             return;
                         }
 
                         if (res.Success)
                         {
+                            HostPerfLog.Write($"[Server.SendMessage] PreviewLoaded req=\"{captureReqId}\" elapsedMs={res.ElapsedMs}");
                             _ = SendMessageAsync(new PreviewLoadedEventMessage
                             {
                                 RequestId = captureReqId,
@@ -321,6 +326,7 @@ public sealed class PreviewHostServer : IDisposable
                         }
                         else
                         {
+                            HostPerfLog.Write($"[Server.SendMessage] PreviewFailed req=\"{captureReqId}\" stage={res.Stage} code=0x{res.ErrorCode:X8} msg='{res.ErrorMessage}' elapsedMs={res.ElapsedMs}");
                             _ = SendMessageAsync(new PreviewFailedEventMessage
                             {
                                 RequestId = captureReqId,
@@ -336,6 +342,8 @@ public sealed class PreviewHostServer : IDisposable
 
                 case "UnloadPreview":
                     var unloadPaneId = root.GetProperty("paneId").GetString() ?? "";
+                    var unloadReqId = requestId;
+                    HostPerfLog.Write($"[Server.ProcessCommand] UnloadPreview command received req=\"{unloadReqId}\"");
                     EnqueueStaAction(() =>
                     {
                         if (Volatile.Read(ref _shutdownState) != 0)
@@ -343,10 +351,11 @@ public sealed class PreviewHostServer : IDisposable
                             return;
                         }
 
-                        _previewSession.Unload();
+                        _previewSession.Unload(unloadReqId);
+                        HostPerfLog.Write($"[Server.SendMessage] PreviewUnloaded req=\"{unloadReqId}\"");
                         _ = SendMessageAsync(new PreviewUnloadedEventMessage
                         {
-                            RequestId = requestId,
+                            RequestId = unloadReqId,
                             PaneId = unloadPaneId
                         });
                     });

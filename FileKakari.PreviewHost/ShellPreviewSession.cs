@@ -26,13 +26,18 @@ public sealed class ShellPreviewSession : IDisposable
         public long ElapsedMs;
     }
 
-    public LoadResult Load(string filePath, string clsidString, IntPtr hostHwnd, int widthPx, int heightPx)
+    public LoadResult Load(string requestId, string filePath, string clsidString, IntPtr hostHwnd, int widthPx, int heightPx)
     {
         var totalSw = Stopwatch.StartNew();
+        var threadId = Environment.CurrentManagedThreadId;
+        var win32ThreadId = NativeMethods.GetCurrentThreadId();
+
+        HostPerfLog.Write($"[Session.Load START] req=\"{requestId}\" threadId={threadId} win32ThreadId={win32ThreadId} path='{filePath}' clsid='{clsidString}'");
 
         // 1. Validate inputs
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
         {
+            HostPerfLog.Write($"[Session.Load FAILED] req=\"{requestId}\" stage=ValidateInput msg='File not found: {filePath}'");
             return new LoadResult
             {
                 Success = false,
@@ -45,6 +50,7 @@ public sealed class ShellPreviewSession : IDisposable
 
         if (!Guid.TryParse(clsidString, out var clsid))
         {
+            HostPerfLog.Write($"[Session.Load FAILED] req=\"{requestId}\" stage=ValidateInput msg='Invalid CLSID: {clsidString}'");
             return new LoadResult
             {
                 Success = false,
@@ -56,7 +62,7 @@ public sealed class ShellPreviewSession : IDisposable
         }
 
         // 2. Unload previous preview session
-        Unload();
+        Unload(requestId);
 
         _currentFilePath = filePath;
         _currentClsid = clsidString;
@@ -69,6 +75,7 @@ public sealed class ShellPreviewSession : IDisposable
         }
         catch (Exception ex)
         {
+            HostPerfLog.Write($"[Session.Load FAILED] req=\"{requestId}\" stage=ResolveClass HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
             return new LoadResult
             {
                 Success = false,
@@ -81,6 +88,7 @@ public sealed class ShellPreviewSession : IDisposable
 
         if (handlerType is null)
         {
+            HostPerfLog.Write($"[Session.Load FAILED] req=\"{requestId}\" stage=ResolveClass msg='GetTypeFromCLSID returned null'");
             return new LoadResult
             {
                 Success = false,
@@ -91,17 +99,20 @@ public sealed class ShellPreviewSession : IDisposable
             };
         }
 
-        // 4. CreateInstance
+        // 4. CreateInstance (START / END)
         var swStage = Stopwatch.StartNew();
+        HostPerfLog.Write($"[Session.CreateInstance START] req=\"{requestId}\" clsid='{clsidString}' threadId={threadId}");
         try
         {
             _comObject = Activator.CreateInstance(handlerType);
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] CreateInstance elapsed={swStage.ElapsedMilliseconds}ms");
+            HostPerfLog.Write($"[Session.CreateInstance END] req=\"{requestId}\" elapsedMs={swStage.ElapsedMilliseconds}");
         }
         catch (Exception ex)
         {
-            Unload();
+            swStage.Stop();
+            HostPerfLog.Write($"[Session.CreateInstance FAILED] req=\"{requestId}\" elapsedMs={swStage.ElapsedMilliseconds} HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
+            Unload(requestId);
             return new LoadResult
             {
                 Success = false,
@@ -114,7 +125,8 @@ public sealed class ShellPreviewSession : IDisposable
 
         if (_comObject is not NativeMethods.IPreviewHandler handler)
         {
-            Unload();
+            HostPerfLog.Write($"[Session.CreateInstance FAILED] req=\"{requestId}\" msg='COM object does not implement IPreviewHandler'");
+            Unload(requestId);
             return new LoadResult
             {
                 Success = false,
@@ -127,24 +139,29 @@ public sealed class ShellPreviewSession : IDisposable
 
         _currentHandler = handler;
 
-        // 5. Initialize Handler
+        // 5. Initialize Handler (START / END)
         swStage.Restart();
         var initSuccess = false;
         string initStage = "InitializeWithFile";
         int initHr = 0;
 
+        HostPerfLog.Write($"[Session.Initialize START] req=\"{requestId}\" threadId={threadId}");
+
         if (_comObject is NativeMethods.IInitializeWithFile fileInit)
         {
+            HostPerfLog.Write($"[Session.InitializeWithFile START] req=\"{requestId}\" path='{filePath}'");
             initHr = fileInit.Initialize(filePath, 0); // STGM_READ = 0
             if (initHr == 0)
             {
                 initSuccess = true;
             }
+            HostPerfLog.Write($"[Session.InitializeWithFile END] req=\"{requestId}\" hr=0x{initHr:X8} success={initSuccess}");
         }
 
         if (!initSuccess && _comObject is NativeMethods.IInitializeWithStream streamInit)
         {
             initStage = "InitializeWithStream";
+            HostPerfLog.Write($"[Session.InitializeWithStream START] req=\"{requestId}\" path='{filePath}'");
             IStream? stream = null;
             try
             {
@@ -160,7 +177,7 @@ public sealed class ShellPreviewSession : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[PreviewHost] CreateStream exception: {ex.Message}");
+                HostPerfLog.Write($"[Session.InitializeWithStream EXCEPTION] req=\"{requestId}\" msg='{ex.Message}'");
             }
             finally
             {
@@ -172,18 +189,19 @@ public sealed class ShellPreviewSession : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[PreviewHost] Stream release exception: {ex.Message}");
+                        HostPerfLog.Write($"[Session.StreamRelease EXCEPTION] req=\"{requestId}\" msg='{ex.Message}'");
                     }
                 }
             }
+            HostPerfLog.Write($"[Session.InitializeWithStream END] req=\"{requestId}\" hr=0x{initHr:X8} success={initSuccess}");
         }
 
         swStage.Stop();
-        Console.WriteLine($"[PreviewHost] Initialize ({initStage}) elapsed={swStage.ElapsedMilliseconds}ms hr=0x{initHr:X8} ManagedThreadId={Environment.CurrentManagedThreadId}");
+        HostPerfLog.Write($"[Session.Initialize END] req=\"{requestId}\" stage={initStage} elapsedMs={swStage.ElapsedMilliseconds} hr=0x{initHr:X8} success={initSuccess}");
 
         if (!initSuccess && initHr != 0)
         {
-            Unload();
+            Unload(requestId);
             return new LoadResult
             {
                 Success = false,
@@ -194,20 +212,21 @@ public sealed class ShellPreviewSession : IDisposable
             };
         }
 
-        // 6. SetWindow
+        // 6. SetWindow (START / END)
         var rect = new NativeMethods.RECT { Left = 0, Top = 0, Right = Math.Max(1, widthPx), Bottom = Math.Max(1, heightPx) };
         swStage.Restart();
+        HostPerfLog.Write($"[Session.SetWindow START] req=\"{requestId}\" hostHwnd=0x{hostHwnd.ToInt64():X} rect=(0,0,{rect.Right},{rect.Bottom}) threadId={threadId}");
         try
         {
-            Console.WriteLine($"[PreviewHost] SetWindow start hostHwnd=0x{hostHwnd.ToInt64():X} rect=(0,0,{rect.Right},{rect.Bottom}) ManagedThreadId={Environment.CurrentManagedThreadId}");
             _currentHandler.SetWindow(hostHwnd, ref rect);
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] SetWindow success elapsed={swStage.ElapsedMilliseconds}ms");
+            HostPerfLog.Write($"[Session.SetWindow END] req=\"{requestId}\" elapsedMs={swStage.ElapsedMilliseconds}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PreviewHost] SetWindow failed HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
-            Unload();
+            swStage.Stop();
+            HostPerfLog.Write($"[Session.SetWindow FAILED] req=\"{requestId}\" elapsedMs={swStage.ElapsedMilliseconds} HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
+            Unload(requestId);
             return new LoadResult
             {
                 Success = false,
@@ -218,21 +237,27 @@ public sealed class ShellPreviewSession : IDisposable
             };
         }
 
-        // 7. SetRect & DoPreview
+        // 7. SetRect & DoPreview (START / END SEPARATED)
         swStage.Restart();
+        HostPerfLog.Write($"[Session.SetRect START] req=\"{requestId}\" rect=(0,0,{rect.Right},{rect.Bottom})");
         try
         {
-            Console.WriteLine($"[PreviewHost] SetRect start rect=(0,0,{rect.Right},{rect.Bottom})");
             _currentHandler.SetRect(ref rect);
-            Console.WriteLine($"[PreviewHost] DoPreview start");
+            HostPerfLog.Write($"[Session.SetRect END] req=\"{requestId}\"");
+
+            HostPerfLog.Write($"[Session.DoPreview START] req=\"{requestId}\" threadId={threadId}");
+            var doPreviewSw = Stopwatch.StartNew();
             _currentHandler.DoPreview();
+            doPreviewSw.Stop();
+            HostPerfLog.Write($"[Session.DoPreview END] req=\"{requestId}\" elapsedMs={doPreviewSw.ElapsedMilliseconds} totalElapsedMs={totalSw.ElapsedMilliseconds}");
+
             swStage.Stop();
-            Console.WriteLine($"[PreviewHost] DoPreview success elapsed={swStage.ElapsedMilliseconds}ms total={totalSw.ElapsedMilliseconds}ms ManagedThreadId={Environment.CurrentManagedThreadId}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[PreviewHost] DoPreview/SetRect failed HRESULT=0x{ex.HResult:X8} msg='{ex.Message}'");
-            Unload();
+            swStage.Stop();
+            HostPerfLog.Write($"[Session.DoPreview FAILED] req=\"{requestId}\" HRESULT=0x{ex.HResult:X8} msg='{ex.Message}' elapsedMs={swStage.ElapsedMilliseconds}");
+            Unload(requestId);
             return new LoadResult
             {
                 Success = false,
@@ -242,6 +267,9 @@ public sealed class ShellPreviewSession : IDisposable
                 ElapsedMs = totalSw.ElapsedMilliseconds
             };
         }
+
+        totalSw.Stop();
+        HostPerfLog.Write($"[Session.Load COMPLETE] req=\"{requestId}\" totalElapsedMs={totalSw.ElapsedMilliseconds}");
 
         return new LoadResult
         {
@@ -257,67 +285,75 @@ public sealed class ShellPreviewSession : IDisposable
     {
         if (_currentHandler is null)
         {
-            Console.WriteLine($"[PreviewHost] Resize skipped: _currentHandler is null widthPx={widthPx} heightPx={heightPx}");
+            HostPerfLog.Write($"[Session.Resize SKIPPED] _currentHandler is null width={widthPx} height={heightPx}");
             return;
         }
 
         var rect = new NativeMethods.RECT { Left = 0, Top = 0, Right = Math.Max(1, widthPx), Bottom = Math.Max(1, heightPx) };
         var sw = Stopwatch.StartNew();
+        var threadId = Environment.CurrentManagedThreadId;
+        HostPerfLog.Write($"[Session.Resize START] rect=(0,0,{rect.Right},{rect.Bottom}) threadId={threadId}");
         try
         {
-            Console.WriteLine($"[PreviewHost] Resize SetRect start rect=(0,0,{rect.Right},{rect.Bottom}) ManagedThreadId={Environment.CurrentManagedThreadId}");
             _currentHandler.SetRect(ref rect);
             sw.Stop();
-            Console.WriteLine($"[PreviewHost] Resize SetRect success elapsed={sw.ElapsedMilliseconds}ms");
+            HostPerfLog.Write($"[Session.Resize END] elapsedMs={sw.ElapsedMilliseconds}");
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Console.WriteLine($"[PreviewHost] Resize SetRect exception HRESULT=0x{ex.HResult:X8} msg='{ex.Message}' elapsed={sw.ElapsedMilliseconds}ms");
+            HostPerfLog.Write($"[Session.Resize EXCEPTION] HRESULT=0x{ex.HResult:X8} msg='{ex.Message}' elapsedMs={sw.ElapsedMilliseconds}");
         }
     }
 
-    public void Unload()
+    public void Unload(string requestId = "")
     {
         var threadId = Environment.CurrentManagedThreadId;
         var win32ThreadId = NativeMethods.GetCurrentThreadId();
-        Console.WriteLine($"[PreviewHost] Unload start ManagedThreadId={threadId} Win32ThreadId={win32ThreadId} path='{_currentFilePath}'");
+        HostPerfLog.Write($"[Session.Unload START] req=\"{requestId}\" threadId={threadId} win32ThreadId={win32ThreadId} path='{_currentFilePath}'");
 
         try
         {
             if (_currentHandler is not null)
             {
+                HostPerfLog.Write($"[Session.HandlerUnload START] req=\"{requestId}\" path='{_currentFilePath}'");
                 var sw = Stopwatch.StartNew();
                 try
                 {
                     _currentHandler.Unload();
+                    sw.Stop();
+                    HostPerfLog.Write($"[Session.HandlerUnload END] req=\"{requestId}\" elapsedMs={sw.ElapsedMilliseconds}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[PreviewHost] Handler.Unload exception: {ex.Message}");
+                    sw.Stop();
+                    HostPerfLog.Write($"[Session.HandlerUnload EXCEPTION] req=\"{requestId}\" elapsedMs={sw.ElapsedMilliseconds} msg='{ex.Message}'");
                 }
                 finally
                 {
                     _currentHandler = null;
                 }
-                sw.Stop();
-                Console.WriteLine($"[PreviewHost] Unload elapsed={sw.ElapsedMilliseconds}ms");
             }
         }
         finally
         {
             if (_comObject is not null)
             {
+                var swRel = Stopwatch.StartNew();
+                HostPerfLog.Write($"[Session.FinalReleaseComObject START] req=\"{requestId}\"");
                 try
                 {
                     if (Marshal.IsComObject(_comObject))
                     {
                         Marshal.FinalReleaseComObject(_comObject);
                     }
+                    swRel.Stop();
+                    HostPerfLog.Write($"[Session.FinalReleaseComObject END] req=\"{requestId}\" elapsedMs={swRel.ElapsedMilliseconds}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[PreviewHost] FinalReleaseComObject exception: {ex.Message}");
+                    swRel.Stop();
+                    HostPerfLog.Write($"[Session.FinalReleaseComObject EXCEPTION] req=\"{requestId}\" elapsedMs={swRel.ElapsedMilliseconds} msg='{ex.Message}'");
                 }
                 finally
                 {
@@ -327,13 +363,13 @@ public sealed class ShellPreviewSession : IDisposable
 
             _currentFilePath = "";
             _currentClsid = "";
+            HostPerfLog.Write($"[Session.Unload COMPLETE] req=\"{requestId}\" threadId={threadId}");
         }
     }
 
-
     public void Dispose()
     {
-        Unload();
+        Unload("dispose");
     }
 
     [DllImport("shlwapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, PreserveSig = false)]

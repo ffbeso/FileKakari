@@ -326,4 +326,5 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="NamedSessionLoadIoError" xml:space="preserve"><value>The session file could not be read.</value></data>
   <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>An unknown load error occurred.</value></data>
   <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Session Error</value></data>
+  <data name="ContextOpenWith" xml:space="preserve"><value>Open with...</value></data>
 </root>

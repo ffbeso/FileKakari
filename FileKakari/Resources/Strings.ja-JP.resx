@@ -326,4 +326,5 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="NamedSessionLoadIoError" xml:space="preserve"><value>Sessionファイルを読み込めませんでした。</value></data>
   <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>不明な読み込みエラーが発生しました。</value></data>
   <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Sessionエラー</value></data>
+  <data name="ContextOpenWith" xml:space="preserve"><value>プログラムから開く...</value></data>
 </root>

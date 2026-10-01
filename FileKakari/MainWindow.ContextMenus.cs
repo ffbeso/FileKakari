@@ -300,16 +300,25 @@ public partial class MainWindow
         {
             var singleSelection = selectedEntries.Count == 1;
             var singleDirectory = singleSelection && selectedEntries[0].IsDirectory;
+            var singleFile = singleSelection && !selectedEntries[0].IsDirectory;
 
             if (pane is not null)
             {
                 menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !isDisconnected, () => OpenWorkspacePaneSelectionAsync(pane, selectedEntries[0])));
+                if (singleFile)
+                {
+                    menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenWith"), !isDisconnected, () => OpenWith(selectedEntries[0])));
+                }
                 AddUserCommandsSubMenu(menu, currentPath, selectedEntries, addLeadingSeparator: false);
                 menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !isDisconnected, () => CreateWorkspacePaneSubTabAsync(pane, selectedEntries[0].FullPath, pane.ActiveTab!)));
             }
             else
             {
                 menu.Items.Add(CreateMenuItem(_text.Get("ContextOpen"), singleSelection && !isDisconnected, () => OpenSelectedAsync()));
+                if (singleFile)
+                {
+                    menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenWith"), !isDisconnected, () => OpenWith(selectedEntries[0])));
+                }
                 AddUserCommandsSubMenu(menu, currentPath, selectedEntries, addLeadingSeparator: false);
                 menu.Items.Add(CreateMenuItem(_text.Get("ContextOpenInNewTab"), singleDirectory && !isDisconnected, () => OpenSelectedAsync(openDirectoryInNewTab: true)));
             }
@@ -672,5 +681,28 @@ public partial class MainWindow
 
     private bool ClipboardContainsExternalFileTransfer() =>
         ClipboardContainsFileDropList() || ShellVirtualFileClipboard.ContainsVirtualFiles();
+
+    private void OpenWith(FileEntry entry)
+    {
+        if (entry is null || entry.IsDirectory || !File.Exists(entry.FullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "rundll32.exe",
+                Arguments = $"shell32.dll,OpenAs_RunDLL \"{entry.FullPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = _text.Format("OpenFailedPrefix", ex.Message);
+            MessageBox.Show(this, ex.Message, _text.Get("OpenFileFailedTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
 }

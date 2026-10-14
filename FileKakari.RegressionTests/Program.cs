@@ -24,6 +24,33 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("pane-single-sort-matches-previous-pipeline", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "pane-sorting");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(Path.Combine(folder, "folder-z"));
+        Directory.CreateDirectory(Path.Combine(folder, "folder-a"));
+        foreach (var name in new[] { "b.txt", "a.txt", "c.bin", "日本語.txt", "plain" })
+            File.WriteAllText(Path.Combine(folder, name), name.Length % 2 == 0 ? "one" : "longer");
+        var enumerator = new FileSystemEnumerator();
+        foreach (var column in new[] { "Name", "Kind", "Size", "ModifiedAt", "CreatedAt", "AccessedAt", "Extension", "Attributes", "FullPath", "ParentPath", "BaseName" })
+        foreach (var ascending in new[] { true, false })
+        foreach (var foldersFirst in new[] { true, false })
+        {
+            var previous = new FileListState();
+            previous.ReplaceItems(folder, enumerator.Enumerate(folder, column, ascending, foldersFirst, true, CancellationToken.None).ToList());
+            previous.ApplySort(column, ascending, foldersFirst);
+            var current = new FileListState();
+            using (current.ItemsView.DeferRefresh())
+            {
+                current.ReplaceItems(folder, enumerator.Enumerate(folder, "__none", ascending, foldersFirst, true, CancellationToken.None).ToList());
+                current.ApplySort(column, ascending, foldersFirst);
+            }
+            Require(previous.ItemsView.Cast<FileEntry>().Select(entry => entry.FullPath).SequenceEqual(current.ItemsView.Cast<FileEntry>().Select(entry => entry.FullPath)),
+                $"Sort order changed: {column}, ascending={ascending}, foldersFirst={foldersFirst}");
+        }
+    }));
+
     await CheckAsync("wpf-deferred-replace-sort-filter-single-refresh", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "deferred-sort");

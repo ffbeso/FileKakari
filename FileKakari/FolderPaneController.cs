@@ -173,6 +173,10 @@ sealed class FolderPaneController
             var sortAscending = targetState.SortAscending;
             var sortFoldersFirst = _sortFoldersFirst();
             var extraColumnsEnabled = _shouldLoadExtraColumns(sortColumn);
+            // Snapshot loading publishes only after the view is configured. For an
+            // ungrouped pane, let the view sort once instead of sorting twice.
+            // Grouped panes retain enumeration order for representative tie-breaking.
+            var enumerationSortColumn = targetState.GroupMode == GroupMode.None ? "__none" : sortColumn;
             _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" sort={sortColumn}:{sortAscending} shellIcons={_devListPerfOptions.ShellIconsEnabled}");
 
             var items = await Task.Run(() =>
@@ -180,7 +184,7 @@ sealed class FolderPaneController
                 cancellationToken.ThrowIfCancellationRequested();
                 var entries = _fileService.Enumerate(
                     targetState.CurrentPath,
-                    sortColumn,
+                    enumerationSortColumn,
                     sortAscending,
                     sortFoldersFirst,
                     extraColumnsEnabled,

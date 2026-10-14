@@ -31,6 +31,7 @@ public sealed class FileSystemEnumerator : IFileEnumerator
         bool extraColumnsEnabled,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var totalStopwatch = Stopwatch.StartNew();
         var metrics = new EnumerationMetrics();
         var createCount = 0;
@@ -79,7 +80,7 @@ public sealed class FileSystemEnumerator : IFileEnumerator
                 yield break;
             }
 
-            var paths = EnumerateSortedPaths(path, options, sortColumn, sortAscending, sortFoldersFirst, extraColumnsEnabled, metrics);
+            var paths = EnumerateSortedPaths(path, options, sortColumn, sortAscending, sortFoldersFirst, extraColumnsEnabled, metrics, cancellationToken);
 
             foreach (var item in paths)
             {
@@ -216,6 +217,7 @@ public sealed class FileSystemEnumerator : IFileEnumerator
             }
         });
         metrics.SortStopwatch.Stop();
+        cancellationToken.ThrowIfCancellationRequested();
         return entries;
     }
 
@@ -231,20 +233,28 @@ public sealed class FileSystemEnumerator : IFileEnumerator
         bool sortAscending,
         bool sortFoldersFirst,
         bool extraColumnsEnabled,
-        EnumerationMetrics metrics)
+        EnumerationMetrics metrics,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var enumerable = new FileSystemEnumerable<FileSystemPath>(
             path,
             (ref FileSystemEntry entry) => TransformPathEntry(ref entry, extraColumnsEnabled, metrics),
             options);
-        var items = enumerable.ToList();
+        var items = new List<FileSystemPath>();
+        foreach (var item in enumerable)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            items.Add(item);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         var directories = items.Where(item => item.IsDirectory);
         var files = items.Where(item => !item.IsDirectory);
 
         return sortFoldersFirst
-            ? SortPaths(directories, sortColumn, sortAscending, metrics).Concat(SortPaths(files, sortColumn, sortAscending, metrics))
-            : SortPaths(items, sortColumn, sortAscending, metrics);
+            ? SortPaths(directories, sortColumn, sortAscending, metrics, cancellationToken).Concat(SortPaths(files, sortColumn, sortAscending, metrics, cancellationToken))
+            : SortPaths(items, sortColumn, sortAscending, metrics, cancellationToken);
     }
 
     private static FileSystemPath TransformPathEntry(ref FileSystemEntry entry, bool extraColumnsEnabled, EnumerationMetrics metrics)
@@ -269,8 +279,9 @@ public sealed class FileSystemEnumerator : IFileEnumerator
         }
     }
 
-    private static IEnumerable<FileSystemPath> SortPaths(IEnumerable<FileSystemPath> paths, string sortColumn, bool sortAscending, EnumerationMetrics metrics)
+    private static IEnumerable<FileSystemPath> SortPaths(IEnumerable<FileSystemPath> paths, string sortColumn, bool sortAscending, EnumerationMetrics metrics, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         metrics.SortStopwatch.Start();
         try
         {
@@ -278,9 +289,11 @@ public sealed class FileSystemEnumerator : IFileEnumerator
                 .OrderBy(path => GetPathSortText(path, sortColumn, metrics), StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(path => path.Name, StringComparer.CurrentCultureIgnoreCase);
 
-            return sortAscending
+            var result = sortAscending
                 ? sorted.ToList()
                 : sorted.Reverse().ToList();
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
         }
         finally
         {

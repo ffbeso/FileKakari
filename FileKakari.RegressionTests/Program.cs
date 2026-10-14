@@ -168,6 +168,21 @@ try
         }
         finally { Directory.Delete(link); } // Remove only the link, never recurse into its target.
     });
+    await CheckAsync("enumeration-cancelled-before-io", () =>
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        foreach (var column in new[] { "Name", "Kind", "ModifiedAt", "__none" })
+        {
+            try
+            {
+                new FileSystemEnumerator().Enumerate(Path.Combine(fixtures, "nonexistent"), column, true, true, true, cts.Token).ToList();
+                throw new InvalidOperationException("Cancelled enumeration completed.");
+            }
+            catch (OperationCanceledException) { }
+        }
+        return Task.CompletedTask;
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

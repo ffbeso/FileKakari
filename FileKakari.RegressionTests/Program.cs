@@ -110,6 +110,27 @@ try
             tab.ScrollOffset == 42 && tab.SelectedPaths.SequenceEqual(new[] { "a.txt" }), "Session state changed during roundtrip.");
         return Task.CompletedTask;
     });
+    await CheckAsync("undo-retry-after-partial-move", async () =>
+    {
+        var folder = Path.Combine(fixtures, "undo");
+        Directory.CreateDirectory(folder);
+        var a = Path.Combine(folder, "a.txt");
+        var b = Path.Combine(folder, "b.txt");
+        var movedA = Path.Combine(folder, "moved-a.txt");
+        var movedB = Path.Combine(folder, "moved-b.txt");
+        File.WriteAllText(movedA, "a");
+        File.WriteAllText(movedB, "b");
+        File.WriteAllText(b, "collision");
+        var undo = new UndoService(new FileOperationService());
+        undo.RecordFileOperation(UndoOperationKind.Move,
+            [new(a, movedA, false), new(b, movedB, false)]);
+        try { await undo.UndoLastAsync(); throw new InvalidOperationException("Expected a collision."); }
+        catch (IOException) { }
+        Require(File.ReadAllText(a) == "a" && undo.LastAction is FileOperationUndoAction { Items.Count: 1 }, "Completed undo item retained.");
+        File.Move(b, Path.Combine(folder, "collision.txt"));
+        await undo.UndoLastAsync();
+        Require(File.ReadAllText(b) == "b" && undo.LastAction is null, "Retry failed.");
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

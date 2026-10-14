@@ -6,7 +6,7 @@ Windows、.NET 10 SDK、PowerShell 7以降で実行します。
 pwsh -NoProfile -File ./run_regression_test.ps1
 ```
 
-本体を参照する専用コンソールをビルドし、実際のサービスを11項目検証します。
+本体を参照する専用コンソールをビルドし、実際のサービスを検証します。
 UTF-8／CP932／ASCII／Markdownのテキスト内容、サイズ制限、ファイル消失、キャンセル、
 PNGのデコード、フォルダ優先の昇降順列挙とメタデータ、セッションの往復保存、不正JSONが対象です。
 新しいテストは `FileKakari.RegressionTests/Program.cs` の `CheckAsync` 呼び出しとして追加します。

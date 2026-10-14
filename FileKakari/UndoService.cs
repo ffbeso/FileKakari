@@ -3,114 +3,85 @@ namespace FileKakari;
 public sealed class UndoService
 {
     private readonly FileOperationService _fileOperationService;
-
+    private int _undoInProgress;
     public UndoAction? LastAction { get; private set; }
 
-    public UndoService(FileOperationService fileOperationService)
-    {
-        _fileOperationService = fileOperationService;
-    }
-
-    public void Clear()
-    {
-        LastAction = null;
-    }
+    public UndoService(FileOperationService fileOperationService) => _fileOperationService = fileOperationService;
+    public void Clear() => LastAction = null;
 
     public void RecordRename(string originalPath, string currentPath, bool isDirectory)
     {
         if (LastAction is FileOperationUndoAction { Kind: UndoOperationKind.Create, Items.Count: 1 } createUndo
+            && !createUndo.Items[0].PrimaryUndoCompleted
             && string.Equals(createUndo.Items[0].CurrentPath, originalPath, StringComparison.OrdinalIgnoreCase))
         {
-            LastAction = createUndo with
-            {
-                Items = [createUndo.Items[0] with { CurrentPath = currentPath, IsDirectory = isDirectory }]
-            };
+            LastAction = createUndo with { Items = [createUndo.Items[0] with { CurrentPath = currentPath, IsDirectory = isDirectory }] };
             return;
         }
-
         LastAction = new RenameUndoAction(originalPath, currentPath, isDirectory);
     }
 
-    public void RecordFileOperation(UndoOperationKind kind, IReadOnlyList<UndoFileOperationItem> items)
-    {
-        LastAction = new FileOperationUndoAction(kind, items);
-    }
+    public void RecordFileOperation(UndoOperationKind kind, IReadOnlyList<UndoFileOperationItem> items) =>
+        LastAction = new FileOperationUndoAction(kind, items.ToArray());
 
     public async Task<IReadOnlyCollection<string>> UndoLastAsync()
     {
-        if (LastAction is null)
-        {
-            return [];
-        }
-
-        var undoAction = LastAction;
-        var pathsToSelect = await ExecuteUndoAsync(undoAction);
-        LastAction = null;
-        return pathsToSelect;
-    }
-
-    private async Task<IReadOnlyCollection<string>> ExecuteUndoAsync(UndoAction undoAction)
-    {
-        switch (undoAction)
-        {
-            case RenameUndoAction rename:
-                await _fileOperationService.MoveAsync(rename.CurrentPath, rename.OriginalPath, rename.IsDirectory);
-                return [rename.OriginalPath];
-            case FileOperationUndoAction { Kind: UndoOperationKind.Create } create:
-                foreach (var item in create.Items)
-                {
-                    await _fileOperationService.DeleteAsync(item.CurrentPath, item.IsDirectory);
-                    await RestoreReplacementAsync(item);
-                }
-                return [];
-            case FileOperationUndoAction { Kind: UndoOperationKind.Copy } copy:
-                foreach (var item in copy.Items)
-                {
-                    await _fileOperationService.DeleteAsync(item.CurrentPath, item.IsDirectory);
-                    await RestoreReplacementAsync(item);
-                }
-                return [];
-            case FileOperationUndoAction { Kind: UndoOperationKind.Move } move:
-                foreach (var item in move.Items)
-                {
-                    await _fileOperationService.MoveAsync(item.CurrentPath, item.OriginalPath, item.IsDirectory);
-                    await RestoreReplacementAsync(item);
-                }
-                return move.Items.Select(item => item.OriginalPath).ToList();
-            default:
-                throw new InvalidOperationException(AppStrings.Get("UndoUnsupported"));
-        }
-    }
-
-    private async Task RestoreReplacementAsync(UndoFileOperationItem item)
-    {
-        if (item.ReplacedPath is null)
-        {
-            return;
-        }
-
-        if (item.ReplacedIsDirectory)
-        {
-            if (!System.IO.Directory.Exists(item.ReplacedPath))
-            {
-                return;
-            }
-        }
-        else
-        {
-            if (!System.IO.File.Exists(item.ReplacedPath))
-            {
-                return;
-            }
-        }
-
+        if (Interlocked.CompareExchange(ref _undoInProgress, 1, 0) != 0) return [];
         try
         {
-            await _fileOperationService.MoveAsync(item.ReplacedPath, item.CurrentPath, item.ReplacedIsDirectory);
+            var action = LastAction;
+            if (action is null) return [];
+            if (action is RenameUndoAction rename)
+            {
+                await _fileOperationService.RenameAsync(rename.CurrentPath, rename.OriginalPath, rename.IsDirectory);
+                ReplacePending(action, null);
+                return [rename.OriginalPath];
+            }
+            if (action is not FileOperationUndoAction operation)
+                throw new InvalidOperationException(AppStrings.Get("UndoUnsupported"));
+
+            var remaining = operation.Items.ToList();
+            var restoredPaths = new List<string>();
+            while (remaining.Count > 0)
+            {
+                var item = remaining[0];
+                if (!item.PrimaryUndoCompleted)
+                {
+                    switch (operation.Kind)
+                    {
+                        case UndoOperationKind.Copy:
+                        case UndoOperationKind.Create:
+                            await _fileOperationService.DeleteAsync(item.CurrentPath, item.IsDirectory);
+                            break;
+                        case UndoOperationKind.Move:
+                            await _fileOperationService.MoveAsync(item.CurrentPath, item.OriginalPath, item.IsDirectory);
+                            break;
+                        default:
+                            throw new InvalidOperationException(AppStrings.Get("UndoUnsupported"));
+                    }
+                    remaining[0] = item = item with { PrimaryUndoCompleted = true };
+                    var checkpoint = operation with { Items = remaining.ToArray() };
+                    ReplacePending(action, checkpoint);
+                    action = checkpoint;
+                }
+
+                // Keep the checkpoint if restoration fails; a retry must not repeat the delete/move.
+                if (item.ReplacedPath is not null)
+                    await _fileOperationService.MoveAsync(item.ReplacedPath, item.CurrentPath, item.ReplacedIsDirectory);
+                if (operation.Kind == UndoOperationKind.Move) restoredPaths.Add(item.OriginalPath);
+                remaining.RemoveAt(0);
+                UndoAction? next = remaining.Count == 0 ? null : operation with { Items = remaining.ToArray() };
+                ReplacePending(action, next);
+                if (next is not null) action = next;
+            }
+            return restoredPaths;
         }
-        catch
-        {
-            // Ignore failure to restore so the rest of the undo actions can proceed
-        }
+        finally { Interlocked.Exchange(ref _undoInProgress, 0); }
+    }
+
+    private void ReplacePending(UndoAction expected, UndoAction? next)
+    {
+        // Do not erase an operation recorded while this asynchronous undo was running.
+        if (ReferenceEquals(LastAction, expected)) LastAction = next;
     }
 }

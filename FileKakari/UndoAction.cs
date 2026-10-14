@@ -11,7 +11,8 @@ public sealed record UndoFileOperationItem(
     string CurrentPath,
     bool IsDirectory,
     string? ReplacedPath = null,
-    bool ReplacedIsDirectory = false);
+    bool ReplacedIsDirectory = false,
+    bool PrimaryUndoCompleted = false);
 
 public enum UndoOperationKind
 {

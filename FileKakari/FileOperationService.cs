@@ -72,7 +72,7 @@ public sealed class FileOperationService
 
     public Task RenameAsync(string sourcePath, string targetPath, bool isDirectory)
     {
-        return MoveAsync(sourcePath, targetPath, isDirectory);
+        return FileSystemOperations.RenameAsync(sourcePath, targetPath, isDirectory);
     }
 
     public void OpenWithDefaultApp(string path)

@@ -241,6 +241,33 @@ try
         try { await failed; } catch (IOException) { }
         Require(await next == 42, "A failed operation blocked the save queue.");
     });
+    await CheckAsync("case-only-rename-and-undo", async () =>
+    {
+        var folder = Path.Combine(fixtures, "case-rename");
+        Directory.CreateDirectory(folder);
+        var service = new FileOperationService();
+        foreach (var isDirectory in new[] { false, true })
+        {
+            var name = isDirectory ? "folder" : "report.txt";
+            var renamed = isDirectory ? "Folder" : "Report.txt";
+            var source = Path.Combine(folder, name);
+            var target = Path.Combine(folder, renamed);
+            if (isDirectory) Directory.CreateDirectory(source);
+            else File.WriteAllText(source, "preserved");
+            await service.RenameAsync(source, target, isDirectory);
+            Require(Directory.EnumerateFileSystemEntries(folder).Select(Path.GetFileName).Contains(renamed, StringComparer.Ordinal), "Case-only rename was ignored.");
+            var undo = new UndoService(service);
+            undo.RecordRename(source, target, isDirectory);
+            await undo.UndoLastAsync();
+            Require(Directory.EnumerateFileSystemEntries(folder).Select(Path.GetFileName).Contains(name, StringComparer.Ordinal), "Case-only undo failed.");
+            if (!isDirectory) Require(File.ReadAllText(source) == "preserved", "Rename changed contents.");
+        }
+        var occupied = Path.Combine(folder, "occupied.txt");
+        File.WriteAllText(occupied, "existing");
+        try { await service.RenameAsync(Path.Combine(folder, "report.txt"), occupied, false); throw new InvalidOperationException("Rename overwrote destination."); }
+        catch (IOException) { }
+        Require(File.ReadAllText(occupied) == "existing", "Existing target was changed.");
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

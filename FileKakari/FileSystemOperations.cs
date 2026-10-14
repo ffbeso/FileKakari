@@ -126,6 +126,27 @@ public static class FileSystemOperations
         return Task.Run(() => Directory.CreateDirectory(path));
     }
 
+    public static Task RenameAsync(string sourcePath, string targetPath, bool isDirectory)
+    {
+        var source = Path.GetFullPath(sourcePath);
+        var target = Path.GetFullPath(targetPath);
+        if (!string.Equals(source, target, StringComparison.OrdinalIgnoreCase))
+            return MoveAsync(source, target, isDirectory);
+        if (string.Equals(source, target, StringComparison.Ordinal)) return Task.CompletedTask;
+
+        return Task.Run(() =>
+        {
+            // Directory.Move rejects case-only paths. Rename directly without a temporary name
+            // and without REPLACE_EXISTING, so a distinct destination can never be overwritten.
+            if (!MoveFileExW(source, target, 0))
+                throw new IOException(new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()).Message);
+        });
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveFileExW(string existingPath, string newPath, uint flags);
+
     public static Task CreateTextFileAsync(string path)
     {
         return Task.Run(() =>

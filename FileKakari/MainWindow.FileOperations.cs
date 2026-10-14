@@ -288,7 +288,7 @@ public partial class MainWindow
             return _text.Get("RenameFailedEmpty");
         }
 
-        if (string.Equals(entry.Name, newName, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(entry.Name, newName, StringComparison.Ordinal))
         {
             return "";
         }

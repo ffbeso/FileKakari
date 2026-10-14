@@ -274,10 +274,8 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null, string? loadedStateId = null)
     {
-        Items.Clear();
-        Items.AddRange(items);
         InvalidateSimilarNameIndex();
-        ItemsView.Refresh();
+        Items.ReplaceAll(items);
         CurrentPath = path;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
         LoadedPath = path;

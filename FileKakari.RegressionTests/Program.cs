@@ -24,6 +24,30 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("collection-replace-single-reset", () =>
+    {
+        var items = new BulkObservableCollection<int> { 1, 2, 3 };
+        var notifications = 0;
+        items.CollectionChanged += (_, args) =>
+        {
+            Require(args.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset, "Replacement must be one reset.");
+            notifications++;
+        };
+        items.ReplaceAll(items.Where(item => item != 2));
+        Require(items.SequenceEqual(new[] { 1, 3 }) && notifications == 1, "Aliased replacement lost data or emitted multiple resets.");
+        IEnumerable<int> FailingSource()
+        {
+            yield return 4;
+            throw new IOException("Enumeration failed.");
+        }
+        try { items.ReplaceAll(FailingSource()); }
+        catch (IOException) { }
+        Require(items.SequenceEqual(new[] { 1, 3 }) && notifications == 1, "Failed replacement changed the collection.");
+        items.ReplaceAll(Array.Empty<int>());
+        Require(items.Count == 0 && notifications == 2, "Empty replacement was not notified.");
+        return Task.CompletedTask;
+    });
+
     foreach (var sample in new[]
     {
         ("日本語 空白 & #.txt", "日本語のプレビュー\r\nsecond line", (Encoding)new UTF8Encoding(false), "utf-8"),

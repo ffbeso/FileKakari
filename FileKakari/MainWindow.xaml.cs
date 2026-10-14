@@ -5742,11 +5742,7 @@ public partial class MainWindow : Window
         _statusSummaryCoordinator.StatusMessagePrefix = null;
         UpdateWindowTitle();
 
-        MutateItemsForLoad(() =>
-        {
-            _items.Clear();
-            _items.AddRange(cachedItems);
-        });
+        MutateItemsForLoad(() => _items.ReplaceAll(cachedItems));
         _itemsOwnerStateId = targetState.Id;
         ApplyTabSort(targetState);
         RefreshCurrentFolderSummary();

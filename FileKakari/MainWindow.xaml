@@ -1442,29 +1442,10 @@
                                                                     </Style>
                                                                 </Grid.Style>
                                                                 <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="Auto" />
                                                                     <ColumnDefinition Width="*" MinWidth="0" />
                                                                     <ColumnDefinition Width="Auto" />
                                                                 </Grid.ColumnDefinitions>
                                                                 <TextBlock Grid.Column="0"
-                                                                           Text="&#xE72E;"
-                                                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                                                           Margin="0,0,3,0"
-                                                                           FontSize="11"
-                                                                           VerticalAlignment="Center"
-                                                                           Foreground="{DynamicResource SubtleTextBrush}">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsFolderLocked}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                                <TextBlock Grid.Column="1"
                                                                            Text="{Binding Header}"
                                                                            Foreground="{DynamicResource TextBrush}"
                                                                            Margin="0,0,3,0"
@@ -1482,27 +1463,35 @@
                                                                         </Style>
                                                                     </TextBlock.Style>
                                                                 </TextBlock>
-                                                                <Button Grid.Column="2"
-                                                                        Content="×"
+                                                                <Button Grid.Column="1"
                                                                         Width="18"
                                                                         Height="18"
                                                                         Padding="0"
                                                                         FontSize="10"
                                                                         Background="Transparent"
                                                                         BorderThickness="0"
-                                                                        Foreground="{DynamicResource SubtleTextBrush}"
-                                                                        ToolTip="タブを閉じる"
+                                                                        ToolTipService.ShowOnDisabled="True"
                                                                         PreviewMouseLeftButtonDown="WorkspacePaneSubTabClose_PreviewMouseLeftButtonDown"
                                                                         Click="WorkspacePaneSubTabClose_Click"
                                                                         VerticalAlignment="Center">
                                                                     <Button.Style>
                                                                         <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
+                                                                            <Setter Property="Content" Value="×" />
+                                                                            <Setter Property="ToolTip" Value="タブを閉じる" />
+                                                                            <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
                                                                             <Style.Triggers>
                                                                                 <Trigger Property="IsMouseOver" Value="True">
                                                                                     <Trigger.Setters>
                                                                                         <Setter Property="Foreground" Value="Red" />
                                                                                     </Trigger.Setters>
                                                                                 </Trigger>
+                                                                                <DataTrigger Binding="{Binding IsFolderLocked}" Value="True">
+                                                                                    <Setter Property="Content" Value="&#xE72E;" />
+                                                                                    <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                                                                                    <Setter Property="ToolTip" Value="ロック中" />
+                                                                                    <Setter Property="IsEnabled" Value="False" />
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                                                                </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
                                                                     </Button.Style>

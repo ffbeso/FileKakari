@@ -1938,7 +1938,12 @@ public partial class MainWindow
             ClearLastClosedStates();
             LoadWorkspacePaneGroup(paneGroup);
             PerfLog.WriteVerbose($"workspace-pane-switch paneId=\"{paneGroup.Id}\" activePaneId=\"{_activeWorkspaceSession.ActivePaneId}\" tabs={paneGroup.Tabs.Count} selected={TabsControl.SelectedIndex}");
-            await LoadWorkspaceDisplayPanesAsync("active-pane-change");
+            // Activating an already displayed tab must not reapply sorting or restore
+            // scroll/selection in either pane. A transferred or stale tab still needs loading.
+            if (!paneGroup.IsActiveStateLoaded)
+            {
+                await LoadFolderPaneItemsAsync(paneGroup, restoreTrigger: "active-pane-change");
+            }
             UpdateFolderWatchForWorkspacePanes();
             ScheduleSessionSave("active-pane");
             UpdateWindowTitle();

@@ -24,6 +24,25 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("pane-activation-loaded-state-boundaries", () => RunOnStaAsync(() =>
+    {
+        var tab = new FolderTab(fixtures);
+        var otherTab = new FolderTab(fixtures);
+        var pane = new FolderPane("activation", new System.Collections.ObjectModel.ObservableCollection<FolderTab> { tab, otherTab });
+        Require(!pane.IsActiveStateLoaded, "An unloaded pane must load on activation.");
+        pane.FileList.ReplaceItems(fixtures, [], loadedStateId: tab.Id);
+        Require(pane.IsActiveStateLoaded, "An already displayed tab must preserve its live view.");
+        tab.State.MarkPendingExternalChange();
+        Require(!pane.IsActiveStateLoaded, "External changes must still trigger loading.");
+        tab.State.ClearPendingExternalChange();
+        pane.SelectedTabIndex = 1;
+        Require(!pane.IsActiveStateLoaded, "A different tab at the same path must restore its own state.");
+        pane.SelectedTabIndex = 0;
+        Require(pane.IsActiveStateLoaded, "Returning to the displayed tab must preserve its view.");
+        tab.State.CurrentPath = Path.Combine(fixtures, "different-path");
+        Require(!pane.IsActiveStateLoaded, "Navigation to a different path must still load.");
+    }));
+
     await CheckAsync("pane-single-sort-matches-previous-pipeline", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "pane-sorting");

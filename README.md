@@ -62,6 +62,7 @@ dotnet run --project FileKakari/FileKakari.csproj -- "C:\Users"
 * [Workspace JSON](docs/workspace-json.md)
 * [トラブルシューティング](docs/troubleshooting.md)
 * [アーキテクチャ](docs/architecture.md)
+* [回帰テストの実行方法](docs/regression-tests.md)
 
 ## 制限事項
 

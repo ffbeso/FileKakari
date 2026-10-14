@@ -24,6 +24,31 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("pane-selection-colors-follow-active-pane", () => RunOnStaAsync(() =>
+    {
+        using var themeStream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", "ThemeResources.xaml"));
+        var resources = (System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Load(themeStream);
+        foreach (var key in new object[] { typeof(System.Windows.Controls.ListViewItem), "ContentListViewItemStyle" })
+        {
+            var item = new System.Windows.Controls.ListViewItem { Style = (System.Windows.Style)resources[key], IsSelected = true };
+            item.Resources["SelectionBackgroundBrush"] = Brushes.Blue;
+            item.Resources["SelectionInactiveBackgroundBrush"] = Brushes.Gray;
+            var parent = new System.Windows.Controls.Border { Child = item };
+            item.ApplyTemplate();
+            var root = (System.Windows.Controls.Border)item.Template.FindName("Root", item);
+            Require(ReferenceEquals(root.Background, Brushes.Gray), "An ordinary unfocused list must keep its inactive selection color.");
+            PaneSelection.SetIsActive(parent, true);
+            Require(ReferenceEquals(root.Background, Brushes.Blue), "The active pane must use its active selection color without focusing the row.");
+            PaneSelection.SetIsActive(parent, false);
+            Require(ReferenceEquals(root.Background, Brushes.Gray), "A deactivated pane must use its inactive selection color.");
+            PaneSelection.SetIsActive(parent, true);
+            Require(ReferenceEquals(root.Background, Brushes.Blue) && item.IsSelected && !item.IsKeyboardFocusWithin,
+                "Reactivation must update the color without reselecting or moving focus.");
+            PaneSelection.SetIsActive(parent, null);
+            Require(ReferenceEquals(root.Background, Brushes.Gray), "Removing pane ownership must restore keyboard-focus coloring.");
+        }
+    }));
+
     await CheckAsync("workspace-live-view-reuse-boundaries", () => RunOnStaAsync(() =>
     {
         var path = Path.Combine(fixtures, "view-reuse.txt");

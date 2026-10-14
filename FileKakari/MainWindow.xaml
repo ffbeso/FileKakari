@@ -2048,6 +2048,7 @@
                                         </Grid>
                                     </Border>
                                      <ListView ItemsSource="{Binding FileList.ItemsView}"
+                                               local:PaneSelection.IsActive="{Binding IsActive}"
                                                Grid.Row="2"
                                               Grid.Column="1"
                                               SelectionMode="Extended"

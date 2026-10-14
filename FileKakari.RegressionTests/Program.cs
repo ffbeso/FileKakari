@@ -67,6 +67,15 @@ try
         catch (OperationCanceledException) { return; }
         throw new InvalidOperationException("Cancelled text read completed without cancellation.");
     });
+    await CheckAsync("image-fit-bounds", () =>
+    {
+        Require(ImagePreviewSizing.Fit(1000, 10000, 1000, 200) == (20, 200), "Portrait must fit height.");
+        Require(ImagePreviewSizing.Fit(10000, 1000, 200, 1000) == (200, 20), "Panorama must fit width.");
+        Require(ImagePreviewSizing.Fit(20, 10, 2000, 1000) == (20, 10), "Do not upscale original.");
+        var bounded = ImagePreviewSizing.Fit(30000, 30000, 30000, 30000);
+        Require((long)bounded.Width * bounded.Height <= ImagePreviewSizing.MaxDecodedPixels, "Decoded pixel budget exceeded.");
+        return Task.CompletedTask;
+    });
     await CheckAsync("image-decode", async () =>
     {
         var path = Path.Combine(fixtures, "image.png");

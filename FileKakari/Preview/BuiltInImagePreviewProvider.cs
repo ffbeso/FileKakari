@@ -45,7 +45,7 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
                 return new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.Image, SizeLimit: MaxImageBytes, FileInfo: fileInfoResult);
             }
 
-            var scaleFactor = 1.25;
+            var scaleFactor = 1.0;
             var targetWidthPx = request.TargetWidthDip > 0
                 ? (int)Math.Ceiling(request.TargetWidthDip * request.DpiScaleX * scaleFactor)
                 : 1920;
@@ -78,10 +78,18 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var bitmapImage = new BitmapImage();
+                var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+                var frame = decoder.Frames[0];
+                var fitted = ImagePreviewSizing.Fit(frame.PixelWidth, frame.PixelHeight, targetWidthPx, targetHeightPx);
+                stream.Position = 0;
                 bitmapImage.BeginInit();
                 bitmapImage.CacheOption = BitmapCacheOption.OnLoad;
                 bitmapImage.StreamSource = stream;
-                bitmapImage.DecodePixelWidth = targetWidthPx;
+                // Set only the limiting dimension so the codec preserves the aspect ratio.
+                if ((double)fitted.Width / frame.PixelWidth <= (double)fitted.Height / frame.PixelHeight)
+                    bitmapImage.DecodePixelWidth = fitted.Width;
+                else
+                    bitmapImage.DecodePixelHeight = fitted.Height;
 
                 cancellationToken.ThrowIfCancellationRequested();
 

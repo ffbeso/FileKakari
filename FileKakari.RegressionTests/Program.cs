@@ -183,6 +183,19 @@ try
         }
         return Task.CompletedTask;
     });
+    await CheckAsync("deferred-icon-notification", async () =>
+    {
+        var entry = FileEntry.FromFile(new FileInfo(Path.Combine(fixtures, "ascii.cmd")));
+        Require(entry.Icon is null, "Entry creation eagerly loaded an icon.");
+        var notified = false;
+        entry.PropertyChanged += (_, args) => notified |= args.PropertyName == nameof(FileEntry.Icon);
+        await entry.LoadIconAsync();
+        Require(entry.Icon is not null && notified, "Deferred icon did not notify the binding.");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try { await entry.LoadIconAsync(cancelled.Token); throw new InvalidOperationException("Cancelled icon request completed."); }
+        catch (OperationCanceledException) { }
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

@@ -225,17 +225,23 @@ public sealed class FileEntry : INotifyPropertyChanged
     // ImageSource for the shell icon. Loaded asynchronously and cached per-extension by ShellIconProvider.
     public System.Windows.Media.ImageSource? Icon { get; private set; }
 
-    // Resolve the shell icon before the entry is shown. ShellIconProvider caches by extension.
-    public async System.Threading.Tasks.Task LoadIconAsync()
+    // Called by realized rows; capture the UI context for the property notification.
+    public async System.Threading.Tasks.Task LoadIconAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var img = await ShellIconProvider.Instance.GetIconAsync(IsDirectory ? null : Extension, IsDirectory, FullPath).ConfigureAwait(false);
-            if (img is not null)
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Icon is not null) return;
+            var path = FullPath;
+            var img = await ShellIconProvider.Instance.GetIconAsync(IsDirectory ? null : Extension, IsDirectory, path, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (img is not null && string.Equals(path, FullPath, StringComparison.Ordinal))
             {
                 Icon = img;
+                OnPropertyChanged(nameof(Icon));
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch
         {
             // Ignore failures and leave Icon as null so UI falls back to glyphs.

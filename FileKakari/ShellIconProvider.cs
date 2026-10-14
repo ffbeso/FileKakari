@@ -15,11 +15,11 @@ namespace FileKakari
         public static readonly ShellIconProvider Instance = new ShellIconProvider();
 
         private readonly ConcurrentDictionary<string, ImageSource> _cache = new();
-        private readonly ConcurrentDictionary<string, Task<ImageSource?>> _loadTasks = new();
+        private readonly SemaphoreSlim _loadSlots = new(2, 2);
 
         private ShellIconProvider() { }
 
-        public Task<ImageSource?> GetIconAsync(string? extension, bool isDirectory, string? path = null)
+        public async Task<ImageSource?> GetIconAsync(string? extension, bool isDirectory, string? path = null, CancellationToken cancellationToken = default)
         {
             var useFilePath = !isDirectory
                 && ShouldUseFilePathIcon(extension)
@@ -29,20 +29,20 @@ namespace FileKakari
                 : isDirectory ? "<DIR>" : string.IsNullOrEmpty(extension) ? "<FILE>" : "." + extension.ToLowerInvariant();
             if (_cache.TryGetValue(key, out var img))
             {
-                return Task.FromResult<ImageSource?>(img);
+                return img;
             }
 
-            var task = _loadTasks.GetOrAdd(key, _ => Task.Run(() => LoadIconInternalAsync(extension, isDirectory, useFilePath ? path : null)));
-            return task.ContinueWith(t =>
+            await _loadSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                _loadTasks.TryRemove(key, out _);
-                if (t.IsCompletedSuccessfully && t.Result is not null)
-                {
-                    _cache[key] = t.Result;
-                }
-
-                return t.Result;
-            });
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_cache.TryGetValue(key, out img)) return img;
+                // Hold the slot until native IO actually finishes, even if the row is recycled.
+                img = await Task.Run(() => LoadIconInternalAsync(extension, isDirectory, useFilePath ? path : null)).ConfigureAwait(false);
+                if (img is not null) _cache[key] = img;
+                return img;
+            }
+            finally { _loadSlots.Release(); }
         }
 
         private static bool ShouldUseFilePathIcon(string? extension)

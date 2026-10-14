@@ -848,9 +848,6 @@ public partial class MainWindow : Window
         var sortFoldersFirst = _settingsService.Settings.SortFoldersFirst;
         var extraColumnsEnabled = ShouldLoadExtraColumns(sortColumn);
         var enumerateMilliseconds = 0L;
-        var iconLoadMilliseconds = 0L;
-        var iconLoadCount = 0;
-        var shellIconStarted = false;
         ClearItemsSort();
         _performanceLogger.Write($"load-start id={loadId} stateId={loadState.Id} paneId={loadState.PaneId} path=\"{path}\" viewMode={loadState.ViewMode} sort={sortColumn}:{sortAscending} sortEnabled={_devListPerfOptions.SortEnabled} shellIcons={_devListPerfOptions.ShellIconsEnabled} statusAggregation={_devListPerfOptions.StatusAggregationEnabled} extraColumns={extraColumnsEnabled} initialBatch={InitialBatchSize} subsequentBatch={SubsequentBatchSize}");
 
@@ -872,21 +869,6 @@ public partial class MainWindow : Window
                 {
                     token.ThrowIfCancellationRequested();
                     enumerateMilliseconds = enumerateStopwatch.ElapsedMilliseconds;
-                    if (_devListPerfOptions.ShellIconsEnabled)
-                    {
-                        if (!shellIconStarted)
-                        {
-                            shellIconStarted = true;
-                            _performanceLogger.Write($"shell-icons-start id={loadId} elapsedMs={stopwatch.ElapsedMilliseconds} path=\"{path}\"");
-                        }
-
-                        var iconStopwatch = Stopwatch.StartNew();
-                        await entry.LoadIconAsync();
-                        iconStopwatch.Stop();
-                        iconLoadMilliseconds += iconStopwatch.ElapsedMilliseconds;
-                        iconLoadCount++;
-                    }
-
                     batch.Add(entry);
 
                     if (batch.Count >= batchSize)
@@ -903,10 +885,6 @@ public partial class MainWindow : Window
                 }
 
                 enumerateMilliseconds = enumerateStopwatch.ElapsedMilliseconds;
-                if (shellIconStarted)
-                {
-                    _performanceLogger.Write($"shell-icons-complete id={loadId} count={iconLoadCount} iconTotalMs={iconLoadMilliseconds} elapsedMs={stopwatch.ElapsedMilliseconds} path=\"{path}\"");
-                }
             }, token);
 
             if (!IsLoadCurrentForState(loadId, loadState))
@@ -928,7 +906,7 @@ public partial class MainWindow : Window
                 RefreshCurrentFolderSummary();
                 UpdateSelectedItemStatus();
                 _performanceLogger.Write(
-                    $"load-complete id={loadId} stateId={loadState.Id} paneId={loadState.PaneId} count={_items.Count} totalMs={stopwatch.ElapsedMilliseconds} firstDisplayMs={_firstDisplayMilliseconds} afterFirstDisplayMs={Math.Max(0, stopwatch.ElapsedMilliseconds - _firstDisplayMilliseconds)} enumerateMs={enumerateMilliseconds} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} bindBatches={_bindBatchCount} bindTotalMs={_totalBindMilliseconds} bindMaxMs={_maxBindMilliseconds} viewMode={loadState.ViewMode} virtualization={GetVirtualizationStatus()} memory={GetProcessMemoryStatus()} sort={sortColumn}:{sortAscending} updates={GetUpdateDiagnosticsStatus()} status={GetStatusDiagnosticsStatus()}");
+                    $"load-complete id={loadId} stateId={loadState.Id} paneId={loadState.PaneId} count={_items.Count} totalMs={stopwatch.ElapsedMilliseconds} firstDisplayMs={_firstDisplayMilliseconds} afterFirstDisplayMs={Math.Max(0, stopwatch.ElapsedMilliseconds - _firstDisplayMilliseconds)} enumerateMs={enumerateMilliseconds} icons=deferred bindBatches={_bindBatchCount} bindTotalMs={_totalBindMilliseconds} bindMaxMs={_maxBindMilliseconds} viewMode={loadState.ViewMode} virtualization={GetVirtualizationStatus()} memory={GetProcessMemoryStatus()} sort={sortColumn}:{sortAscending} updates={GetUpdateDiagnosticsStatus()} status={GetStatusDiagnosticsStatus()}");
 
                 var restored = await RestoreListViewStateAsync(restoreState, loadTab, loadId, policy);
                 if (!restored && _items.Count > 0)

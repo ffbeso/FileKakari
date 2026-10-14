@@ -172,9 +172,7 @@ sealed class FolderPaneController
             var extraColumnsEnabled = _shouldLoadExtraColumns(sortColumn);
             _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" sort={sortColumn}:{sortAscending} shellIcons={_devListPerfOptions.ShellIconsEnabled}");
 
-            var iconLoadMilliseconds = 0L;
-            var iconLoadCount = 0;
-            var items = await Task.Run(async () =>
+            var items = await Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entries = _fileService.Enumerate(
@@ -185,19 +183,6 @@ sealed class FolderPaneController
                     extraColumnsEnabled,
                     cancellationToken).ToList();
                 enumerationCompleted = true;
-
-                if (_devListPerfOptions.ShellIconsEnabled)
-                {
-                    foreach (var entry in entries)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var iconStopwatch = Stopwatch.StartNew();
-                        await entry.LoadIconAsync();
-                        iconStopwatch.Stop();
-                        iconLoadMilliseconds += iconStopwatch.ElapsedMilliseconds;
-                        iconLoadCount++;
-                    }
-                }
 
                 return entries;
             }, cancellationToken);
@@ -231,7 +216,7 @@ sealed class FolderPaneController
             UpdateStatus(pane);
             pane.RefreshDisplay();
             long groupBuildMs = pane.FileList.SimilarNameIndex?.LastBuildElapsedMs ?? 0;
-            _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} groupBuildMs={groupBuildMs} iconCount={iconLoadCount} iconTotalMs={iconLoadMilliseconds} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
+            _performanceLogger.Write($"folder-pane-load-complete paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} groupBuildMs={groupBuildMs} icons=deferred lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\"");
         }
         catch (OperationCanceledException ex)
         {

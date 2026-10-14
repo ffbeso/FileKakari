@@ -2317,7 +2317,7 @@
                             </StackPanel>
                         </DockPanel>
                     </Border>
-                    <Grid Grid.Row="1">
+                    <Grid x:Name="PreviewContentViewport" Grid.Row="1">
                         <TextBlock x:Name="PreviewMessageText"
                                    Margin="16"
                                    HorizontalAlignment="Center"

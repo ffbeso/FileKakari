@@ -1240,6 +1240,9 @@ public partial class MainWindow
 
             PreviewLoadingBar.Visibility = Visibility.Visible;
 
+            await Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
+            cancellationToken.ThrowIfCancellationRequested();
+
             double scaleX = 1.0;
             double scaleY = 1.0;
             var source = PresentationSource.FromVisual(this);
@@ -1249,17 +1252,9 @@ public partial class MainWindow
                 scaleY = source.CompositionTarget.TransformToDevice.M22;
             }
 
-            var targetWidth = PreviewPane.ActualWidth;
-            var targetHeight = PreviewPane.ActualHeight;
-
-            if (targetWidth <= 0 || double.IsNaN(targetWidth))
-            {
-                targetWidth = 1920 / scaleX;
-            }
-            if (targetHeight <= 0 || double.IsNaN(targetHeight))
-            {
-                targetHeight = 1080 / scaleY;
-            }
+            // Content controls have an eight-DIP margin on each side.
+            var targetWidth = Math.Max(1, PreviewContentViewport.ActualWidth - 16);
+            var targetHeight = Math.Max(1, PreviewContentViewport.ActualHeight - 16);
 
             UpdateActivePreviewDisplayState(
                 requestId,

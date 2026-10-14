@@ -5,11 +5,14 @@ namespace FileKakari;
 
 public static class CollectionViewUpdate
 {
-    public static void SetFilterAndRefresh(ICollectionView view, Predicate<object>? filter)
+    public static void SetFilterAndRefresh(ICollectionView view, Predicate<object>? filter, bool refreshUnchanged = true)
     {
         // Assigning a different filter already refreshes the WPF view. A caller
         // reusing its predicate still needs to reflect changed item metadata.
-        if (ReferenceEquals(view.Filter, filter)) view.Refresh();
+        if (ReferenceEquals(view.Filter, filter))
+        {
+            if (refreshUnchanged) view.Refresh();
+        }
         else view.Filter = filter;
     }
 

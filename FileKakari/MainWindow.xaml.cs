@@ -924,10 +924,10 @@ public partial class MainWindow : Window
 
             if (loadId == _loadGeneration)
             {
-                ApplyTabSort(loadState);
+                ApplyTabSort(loadState, applyFilter: true);
                 if (GetNormalFolderPane() is { } normalPane)
                 {
-                    RefreshPaneItemsPreservingFilter(normalPane, "normal-load-complete");
+                    RefreshPaneItemsPreservingFilter(normalPane, "normal-load-complete", viewAlreadyUpdated: _devListPerfOptions.SortEnabled);
                 }
                 stopwatch.Stop();
                 _statusSummaryCoordinator.StatusMessagePrefix = _text.Format("ItemsLoaded", _items.Count, stopwatch.ElapsedMilliseconds);

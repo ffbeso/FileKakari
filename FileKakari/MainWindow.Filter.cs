@@ -376,7 +376,8 @@ public partial class MainWindow
         FolderPane pane,
         string source,
         bool preserveSelection = true,
-        bool preserveScroll = true)
+        bool preserveScroll = true,
+        bool viewAlreadyUpdated = false)
     {
         if (pane.ActiveTabState is not { } state)
         {
@@ -394,7 +395,7 @@ public partial class MainWindow
 
         if (IsWorkspaceDisplayPane(pane))
         {
-            _folderPaneController.ApplyFilter(pane, filter);
+            if (!viewAlreadyUpdated) _folderPaneController.ApplyFilter(pane, filter);
             _folderPaneController.UpdateStatus(pane);
         }
         else
@@ -417,7 +418,7 @@ public partial class MainWindow
                 }
             }
 
-            if (!UpdateItemsFilter(filter)) RefreshItemsView($"pane-filter-refresh-{source}");
+            if (!viewAlreadyUpdated && !UpdateItemsFilter(filter)) RefreshItemsView($"pane-filter-refresh-{source}");
             if (ReferenceEquals(pane, GetNormalFolderPane()))
             {
                 RefreshCurrentFolderSummary();

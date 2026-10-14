@@ -24,6 +24,41 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("wpf-deferred-replace-sort-filter-single-refresh", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "deferred-sort");
+        Directory.CreateDirectory(folder);
+        var entries = new List<FileEntry>();
+        foreach (var name in new[] { "b.txt", "c.bin", "a.txt" })
+        {
+            var path = Path.Combine(folder, name);
+            File.WriteAllText(path, name);
+            entries.Add(FileEntry.FromFileBasic(new FileInfo(path)));
+        }
+        var state = new FileListState();
+        var resets = 0;
+        state.ItemsView.CollectionChanged += (_, _) => resets++;
+        using (state.ItemsView.DeferRefresh())
+        {
+            state.ReplaceItems(folder, entries);
+            state.ApplySort("Name", true, true);
+            CollectionViewUpdate.SetFilterAndRefresh(state.ItemsView, item => ((FileEntry)item).Extension == "txt", false);
+        }
+        Require(resets == 1 && state.ItemsView.Cast<FileEntry>().Select(entry => entry.Name).SequenceEqual(new[] { "a.txt", "b.txt" }), "Deferred update refreshed multiple times or lost sorting/filtering.");
+        using (state.ItemsView.DeferRefresh())
+        {
+            state.ApplySort("Name", false, true);
+            CollectionViewUpdate.SetFilterAndRefresh(state.ItemsView, null, false);
+        }
+        Require(resets == 2 && CollectionViewUpdate.Count(state.ItemsView) == 3, "Deferred filter removal did not restore all rows.");
+        using (state.ItemsView.DeferRefresh())
+        {
+            state.ApplySort("Name", true, true);
+            CollectionViewUpdate.SetFilterAndRefresh(state.ItemsView, null, false);
+        }
+        Require(resets == 3 && state.ItemsView.Cast<FileEntry>().First().Name == "a.txt", "Unchanged null filter refreshed during deferral.");
+    }));
+
     await CheckAsync("group-representative-order-and-ties", () =>
     {
         var folder = Path.Combine(fixtures, "representatives");

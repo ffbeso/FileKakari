@@ -133,8 +133,11 @@ sealed class FolderPaneController
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
-            ApplyViewStateToPane(pane, targetState, cachedSortFoldersFirst);
+            using (pane.FileList.ItemsView.DeferRefresh())
+            {
+                pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id);
+                ApplyViewStateToPane(pane, targetState, cachedSortFoldersFirst);
+            }
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)
@@ -204,8 +207,11 @@ sealed class FolderPaneController
 
             targetState.StoreItems(targetState.CurrentPath, items);
             targetState.ClearPendingExternalChange();
-            pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
-            ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
+            using (pane.FileList.ItemsView.DeferRefresh())
+            {
+                pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
+                ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
+            }
             if (pane.FileList.PendingDeleteScrollRestoreState is null)
             {
                 pane.FileList.PendingAnchorScrollState = capturedAnchor;
@@ -279,18 +285,18 @@ sealed class FolderPaneController
             or PathTooLongException
             or IOException;
 
-    internal void ApplyFilter(FolderPane pane, string filter)
+    internal void ApplyFilter(FolderPane pane, string filter, bool refreshUnchanged = true)
     {
         pane.FileList.SetDisplayFilterText(filter);
         if (string.IsNullOrWhiteSpace(filter))
         {
-            CollectionViewUpdate.SetFilterAndRefresh(pane.FileList.ItemsView, null);
+            CollectionViewUpdate.SetFilterAndRefresh(pane.FileList.ItemsView, null, refreshUnchanged);
         }
         else
         {
             CollectionViewUpdate.SetFilterAndRefresh(pane.FileList.ItemsView, item =>
                 item is FileEntry entry
-                && entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase));
+                && entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase), refreshUnchanged);
         }
     }
 
@@ -514,6 +520,7 @@ sealed class FolderPaneController
 
     private void ApplyViewStateToPane(FolderPane pane, WorkspaceTabState targetState, bool sortFoldersFirst)
     {
+        using var refresh = pane.FileList.ItemsView.DeferRefresh();
         SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
             ? pane.FileList.EnsureSimilarNameIndex()
             : null;
@@ -528,6 +535,6 @@ sealed class FolderPaneController
             FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
         }
         pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, sortFoldersFirst, null, targetState.GroupMode);
-        ApplyFilter(pane, targetState.FilterText);
+        ApplyFilter(pane, targetState.FilterText, refreshUnchanged: false);
     }
 }

@@ -430,7 +430,7 @@ public partial class MainWindow
         return _primaryPaneGroup;
     }
 
-    private void ApplyTabSort(WorkspaceTabState targetState, Dictionary<string, int>? currentOrder = null)
+    private void ApplyTabSort(WorkspaceTabState targetState, Dictionary<string, int>? currentOrder = null, bool applyFilter = false)
     {
         using var previewSuppression = SuppressPreviewForProgrammaticSelection("reload");
         if (!_devListPerfOptions.SortEnabled)
@@ -443,17 +443,21 @@ public partial class MainWindow
         _sortApplyCount++;
         var pane = FindPaneForState(targetState);
         SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName ? pane?.FileList.EnsureSimilarNameIndex() : null;
-        if (ItemsView is ListCollectionView listView)
+        using (ItemsView.DeferRefresh())
         {
-            listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder, targetState.GroupMode, groupIndex);
-        }
-        else
-        {
-            ItemsView.SortDescriptions.Clear();
-            ItemsView.SortDescriptions.Add(new SortDescription(FileListSortHelper.GetSortPropertyName(targetState.SortColumn), targetState.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
-        }
+            if (ItemsView is ListCollectionView listView)
+            {
+                listView.CustomSort = new FileEntryComparer(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, currentOrder, targetState.GroupMode, groupIndex);
+            }
+            else
+            {
+                ItemsView.SortDescriptions.Clear();
+                ItemsView.SortDescriptions.Add(new SortDescription(FileListSortHelper.GetSortPropertyName(targetState.SortColumn), targetState.SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
+            }
 
-        FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode, groupIndex);
+            FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode, groupIndex);
+            if (applyFilter) UpdateItemsFilter(targetState.FilterText);
+        }
 
         UpdateNormalPaneColumnHeaders();
 

@@ -16,6 +16,11 @@ PAIRS = [
     ("Amber", "アンバー", 39, .80),
     ("Rose", "ローズ", 355, .66),
     ("Cyberpunk", "サイバーパンク", 285, .82),
+    ("Matrix", "マトリックス", 135, .85),
+    ("Synthwave", "シンセウェーブ", 320, .80),
+    ("DeepSpace", "ディープスペース", 230, .72),
+    ("Hologram", "ホログラム", 175, .65),
+    ("Steampunk", "スチームパンク", 35, .65),
 ]
 
 
@@ -24,7 +29,7 @@ def color(hue, saturation, lightness):
     return "#" + "".join(f"{round(c * 255):02X}" for c in rgb)
 
 
-def palette(hue, saturation, dark):
+def palette(hue, saturation, dark, name=""):
     def c(light, night, sat=None):
         return color(hue, saturation if sat is None else sat, night if dark else light)
 
@@ -66,6 +71,32 @@ def palette(hue, saturation, dark):
         "ActivePaneAccent": c(.380, .710),
         "InactivePaneAccent": c(.500, .570, .12),
     }
+    special = {
+        "Cyberpunk": (265, 185, 80),
+        "Matrix": (140, 135, 95),
+        "Synthwave": (275, 325, 30),
+        "DeepSpace": (235, 200, 45),
+        "Hologram": (185, 285, 165),
+        "Steampunk": (28, 35, 175),
+    }.get(name)
+    if special:
+        surface, accent, secondary = special
+        # Saturated surfaces and two distinct accents give special themes their identity.
+        p.update({
+            "AppBackground": color(surface, .48, .065 if dark else .95),
+            "PanelBackground": color(surface, .40, .105 if dark else .98),
+            "RowBackground": color(surface, .40, .105 if dark else .98),
+            "HeaderBackground": color(surface, .46, .15 if dark else .92),
+            "TabBackground": color(surface, .52, .065 if dark else .86),
+            "Border": color(accent, .48, .36 if dark else .65),
+            "ActivePaneAccent": color(accent, .95, .67 if dark else .29),
+            "ActivePaneBorder": color(accent, .80, .53 if dark else .40),
+            "FolderIcon": color(secondary, .85, .67 if dark else .30),
+            "FileIcon": color(accent, .90, .70 if dark else .32),
+            "SelectionBackground": color(surface, .65, .29 if dark else .86),
+            "ScrollBarThumb": color(accent, .55, .43 if dark else .51),
+            "ScrollBarThumbHover": color(accent, .80, .60 if dark else .38),
+        })
     return p
 
 
@@ -101,17 +132,12 @@ def main():
         samples = []
         for dark in (False, True):
             mode = "Dark" if dark else "Light"
-            p = palette(hue, saturation, dark)
+            p = palette(hue, saturation, dark, name)
             write_theme(f"{name}{mode}Theme.xaml", f"{label} / {mode}", p)
-            # Keep legacy bundled filenames compatible. Existing user copies are never overwritten.
-            legacy = {("Graphite", True): "Gray", ("Cappuccino", True): "Cappuccino",
-                      ("Forest", False): "Forest", ("Cyberpunk", True): "Cyberpunk"}.get((name, dark))
-            if legacy:
-                write_theme(f"{legacy}Theme.xaml", f"{label} / {mode} (legacy filename)", p)
             samples.append(sample(mode, p))
         sections.append(f'<section><h2>{label}</h2><div class="pair">{"".join(samples)}</div></section>')
     gallery = '''<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>FileKakari — 10組のテーマ</title><style>
+<title>FileKakari — 15組のテーマ</title><style>
 *{box-sizing:border-box}body{margin:0;padding:40px;background:#e8eaee;color:#202632;font:14px "Yu Gothic UI",sans-serif}
 main{max-width:1080px;margin:auto}h1{font-size:30px}h2{margin-top:36px;font-size:20px}h3{margin:0;padding:16px;color:var(--Text);font-size:16px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}article{background:var(--AppBackground);color:var(--Text);border:1px solid var(--Border);border-radius:10px;overflow:hidden}
@@ -123,7 +149,7 @@ main{max-width:1080px;margin:auto}h1{font-size:30px}h2{margin-top:36px;font-size
 .row.inactive{background:var(--SelectionInactiveBackground);color:var(--SelectionText)}.selected span,.inactive span{color:inherit}
 footer{padding:12px;background:var(--StatusBarBackground);color:var(--SubtleText);font-size:12px}em{float:right;font-style:normal}
 @media(max-width:700px){body{padding:20px}.pair{grid-template-columns:1fr}}
-</style><main><h1>FileKakari · 10組のテーマ</h1><p>同じ色相のライト／ダーク。配色見本です。実際のWPF画面のスクリーンショットではありません。</p>'''
+</style><main><h1>FileKakari · 15組のテーマ</h1><p>通常10組＋特殊5組。配色見本です。実際のWPF画面のスクリーンショットではありません。</p>'''
     (ROOT / "docs" / "theme-gallery.html").write_text(gallery + "".join(sections) + "</main></html>\n", encoding="utf-8")
 
 

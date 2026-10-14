@@ -1,7 +1,7 @@
 # 明暗で対になるテーマ
 
 設定のテーマ選択から切り替える。標準ブルーは既存の「ライト」「ダーク」、それ以外は名前にLight／Darkが付いたテーマを選ぶ。
-初回起動時に配布用Themesフォルダからユーザーのテーマフォルダへ追加される。既存のユーザーファイルは上書きしない。
+初回起動時に配布用Themesフォルダからユーザーのテーマフォルダへ追加される。編集済みのユーザーファイルは上書きしない。未編集の同梱テーマの更新条件は後述。
 
 | 色の組 | ライト | ダーク |
 | --- | --- | --- |
@@ -15,8 +15,14 @@
 | アンバー | AmberLightTheme.xaml | AmberDarkTheme.xaml |
 | ローズ | RoseLightTheme.xaml | RoseDarkTheme.xaml |
 | サイバーパンク | CyberpunkLightTheme.xaml | CyberpunkDarkTheme.xaml |
+| マトリックス（端末の緑） | MatrixLightTheme.xaml | MatrixDarkTheme.xaml |
+| シンセウェーブ（紫・ピンク・橙） | SynthwaveLightTheme.xaml | SynthwaveDarkTheme.xaml |
+| ディープスペース（紺・氷青） | DeepSpaceLightTheme.xaml | DeepSpaceDarkTheme.xaml |
+| ホログラム（青緑・紫） | HologramLightTheme.xaml | HologramDarkTheme.xaml |
+| スチームパンク（真鍮・青緑） | SteampunkLightTheme.xaml | SteampunkDarkTheme.xaml |
 
-旧名のGray／Cappuccino／Forest／Cyberpunkは互換用に同梱する。新規配布ファイルの配色は対応する新テーマと同じだが、ユーザーフォルダに既にある旧名のファイルは維持される。新しい配色を使う場合は明暗付きの名前を選ぶ。
+旧名のGray／Cappuccino／Forest／Cyberpunkは同梱と選択一覧から除外した。古い設定は対応するLight／Darkへ解決する。ユーザーフォルダにある旧ファイルは削除しない。独自編集した旧テーマを再び一覧に出す場合は別名にコピーする。
+サイバーパンクは紫の背景・シアンのアクセント・ライム色のアイコンへ変更した。前回の同梱内容とハッシュが一致するユーザーコピーだけを更新し、編集済みのコピーは維持する。
 
 ## 配色の方針
 
@@ -29,9 +35,9 @@
 
 ## 編集と確認
 
-同梱テーマの色は `tools/generate_themes.py` を編集し、`python tools/generate_themes.py` で再生成する。生成対象はこの表の20ファイル、旧名4ファイル、配色見本のみ。
+同梱テーマの色は `tools/generate_themes.py` を編集し、`python tools/generate_themes.py` で再生成する。生成対象はこの表の30ファイルと配色見本のみ。
 テーマは独立したXAMLファイルなので、ユーザー側では個別に編集できる。追加ライブラリは不要。
 
-回帰テストでは20ファイルのWPF読込、リソースキーの一致、主要背景に対する通常文字・補助文字・選択文字のコントラスト比4.5以上、アクティブペインの目印の比3以上を確認する。これは全UI状態のアクセシビリティ適合を保証するものではない。
+回帰テストでは30ファイルのWPF読込、リソースキーの一致、主要背景に対する通常文字・補助文字・選択文字のコントラスト比4.5以上、アクティブペインの目印の比3以上を確認する。これは全UI状態のアクセシビリティ適合を保証するものではない。
 
 手動確認では設定からテーマを切り替え、詳細表示／アイコン表示、選択／非アクティブ選択、サブタブの横／縦配置、メニュー、スクロールバーを確認する。テーマ切替後の再起動で選択したテーマが維持されることも確認する。

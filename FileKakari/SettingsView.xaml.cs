@@ -145,6 +145,7 @@ public partial class SettingsView : UserControl
         else if (mode == AppThemeMode.Black) { mode = AppThemeMode.Custom; customName = "GrayTheme.xaml"; }
         else if (mode == AppThemeMode.Gray) { mode = AppThemeMode.Custom; customName = "GrayTheme.xaml"; }
 
+        customName = ThemeManager.ResolveLegacyThemeName(customName);
         if (ThemeComboBox.ItemsSource is IEnumerable<SettingsChoice<ThemeSelection>> choices)
         {
             foreach (var choice in choices)

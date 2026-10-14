@@ -24,10 +24,30 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("theme-upgrade-preserves-custom-edits", () =>
+    {
+        var source = Path.Combine(fixtures, "new-theme.xaml");
+        var target = Path.Combine(fixtures, "user-theme.xaml");
+        const string original = "original\ntheme\n";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(original)));
+        File.WriteAllText(source, "new palette");
+        File.WriteAllText(target, original.Replace("\n", "\r\n"));
+        Require(BundledThemeUpgrade.TryApply(source, target, hash) && File.ReadAllText(target) == "new palette", "An untouched bundled theme must upgrade regardless of line endings.");
+        File.WriteAllText(target, "my edited palette");
+        Require(!BundledThemeUpgrade.TryApply(source, target, hash) && File.ReadAllText(target) == "my edited palette", "User edits must survive upgrades.");
+        Require(!BundledThemeUpgrade.TryApply(source, Path.Combine(fixtures, "missing-theme.xaml"), hash), "Missing copies must use normal installation.");
+        Require(ThemeManager.ResolveLegacyThemeName("CyberpunkTheme.xaml") == "CyberpunkDarkTheme.xaml"
+            && ThemeManager.ResolveLegacyThemeName("ForestTheme.xaml") == "ForestLightTheme.xaml"
+            && ThemeManager.ResolveLegacyThemeName("GrayTheme.xaml") == "GraphiteDarkTheme.xaml"
+            && ThemeManager.ResolveLegacyThemeName("CappuccinoTheme.xaml") == "CappuccinoDarkTheme.xaml"
+            && ThemeManager.ResolveLegacyThemeName("PersonalTheme.xaml") == "PersonalTheme.xaml", "Legacy selection migration changed an unrelated custom theme.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("bundled-theme-pairs-resources-and-contrast", () => RunOnStaAsync(() =>
     {
         var themeDirectory = Path.Combine(AppContext.BaseDirectory, "Themes");
-        var pairNames = new[] { "", "Graphite", "Cappuccino", "Forest", "Ocean", "Sakura", "Lavender", "Amber", "Rose", "Cyberpunk" };
+        var pairNames = new[] { "", "Graphite", "Cappuccino", "Forest", "Ocean", "Sakura", "Lavender", "Amber", "Rose", "Cyberpunk", "Matrix", "Synthwave", "DeepSpace", "Hologram", "Steampunk" };
         var expectedKeys = new HashSet<string>();
         foreach (var name in pairNames)
         foreach (var mode in new[] { "Light", "Dark" })

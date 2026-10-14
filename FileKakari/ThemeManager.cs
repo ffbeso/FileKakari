@@ -86,6 +86,17 @@ public static class ThemeManager
                 }
 
                 var destPath = Path.Combine(userThemesDir, themeFile);
+                var previousHash = themeFile switch
+                {
+                    "CyberpunkLightTheme.xaml" => "EAE8D1544F31C690DE74FF1BDCFD99D099B47FB9F757E37EEEB283C86AC1DA6F",
+                    "CyberpunkDarkTheme.xaml" => "46E7CA8AD02535664A7C24B873571F8788762C42AE863936B726A0DF43A28866",
+                    _ => null
+                };
+                if (previousHash is not null && BundledThemeUpgrade.TryApply(srcPath, destPath, previousHash))
+                {
+                    PerfLog.Write($"theme-template-upgraded file=\"{themeFile}\"");
+                    continue;
+                }
                 if (!File.Exists(destPath))
                 {
                     File.Copy(srcPath, destPath, overwrite: false);
@@ -162,9 +173,19 @@ public static class ThemeManager
             : displayName;
     }
 
+    public static string? ResolveLegacyThemeName(string? fileName) => fileName?.ToLowerInvariant() switch
+    {
+        "cappuccinotheme.xaml" => "CappuccinoDarkTheme.xaml",
+        "cyberpunktheme.xaml" => "CyberpunkDarkTheme.xaml",
+        "foresttheme.xaml" => "ForestLightTheme.xaml",
+        "graytheme.xaml" or "blacktheme.xaml" => "GraphiteDarkTheme.xaml",
+        _ => fileName
+    };
+
     private static bool IsReservedThemeFile(string? fileName)
     {
         return string.IsNullOrWhiteSpace(fileName)
+            || !string.Equals(fileName, ResolveLegacyThemeName(fileName), StringComparison.OrdinalIgnoreCase)
             || string.Equals(fileName, ThemeResourcesFileName, StringComparison.OrdinalIgnoreCase)
             || string.Equals(fileName, "LightTheme.xaml", StringComparison.OrdinalIgnoreCase)
             || string.Equals(fileName, "DarkTheme.xaml", StringComparison.OrdinalIgnoreCase);
@@ -198,6 +219,7 @@ public static class ThemeManager
     public static string? ValidateCustomTheme(string? customThemeName)
     {
         InitializeUserThemes();
+        customThemeName = ResolveLegacyThemeName(customThemeName);
 
         if (string.IsNullOrWhiteSpace(customThemeName))
         {
@@ -256,6 +278,7 @@ public static class ThemeManager
 
         if (themeMode == AppThemeMode.Custom)
         {
+            customThemeName = ResolveLegacyThemeName(customThemeName);
             var validationError = ValidateCustomTheme(customThemeName);
             if (validationError != null)
             {

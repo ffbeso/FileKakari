@@ -116,7 +116,7 @@ public partial class MainWindow
 
     private void UpdateWorkspacePaneSelectionFromListView(FolderPane pane, ListView listView)
     {
-        if (_suppressWorkspaceSelectionSync)
+        if (pane.FileList.ViewStateSyncSuppression.IsActive)
         {
             return;
         }

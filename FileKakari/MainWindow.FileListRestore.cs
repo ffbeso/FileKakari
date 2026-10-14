@@ -269,6 +269,21 @@ public partial class MainWindow
             offset);
     }
 
+    private Func<bool> CreatePaneRestoreStaleCheck(FolderPane pane, int workspaceSwitchId, WorkspaceSession? session)
+    {
+        var state = pane.ActiveTabState;
+        var path = state?.CurrentPath;
+        var generation = pane.FileList.LoadGeneration;
+        var switchGeneration = _workspaceSwitchGeneration;
+        var listView = GetFolderPaneListView(pane);
+        return () => !ReferenceEquals(pane.ActiveTabState, state)
+            || pane.FileList.LoadGeneration != generation
+            || _workspaceSwitchGeneration != switchGeneration
+            || !string.Equals(state?.CurrentPath, path, StringComparison.OrdinalIgnoreCase)
+            || !ReferenceEquals(GetFolderPaneListView(pane), listView)
+            || (workspaceSwitchId > 0 && session is not null && !CanApplyWorkspaceSwitch(workspaceSwitchId, session));
+    }
+
     private async Task RestoreWorkspacePaneScrollOffsetAsync(
         FolderPane pane,
         double offset,
@@ -280,6 +295,7 @@ public partial class MainWindow
             return;
         }
 
+        var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         var deleteRestoreState = GetDeleteScrollRestoreStateForPane(pane);
         if (deleteRestoreState is not null
             && pane.ActiveTabState is { GroupMode: var deleteGroupMode and not GroupMode.None })
@@ -289,7 +305,7 @@ public partial class MainWindow
                 deleteRestoreState.AnchorState,
                 deleteGroupMode,
                 Dispatcher,
-                deleteRestoreState.FlowId))
+                deleteRestoreState.FlowId, isStale))
             {
                 return;
             }
@@ -297,22 +313,20 @@ public partial class MainWindow
         else if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
         {
             pane.FileList.PendingAnchorScrollState = null;
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }
         }
         else if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
         {
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }
         }
 
-        Func<bool>? isStale = (workspaceSwitchId > 0 && session is not null)
-            ? () => !CanApplyWorkspaceSwitch(workspaceSwitchId, session)
-            : null;
+        if (isStale()) return;
 
         ScrollViewer? GetPaneScrollViewer()
         {
@@ -589,7 +603,7 @@ public partial class MainWindow
 
         var restoreKey = session is null
             ? null
-            : $"{session.Id}|{pane.Id}|{targetState.Id}";
+            : $"{session.Id}|{pane.Id}|{targetState.Id}|{pane.FileList.LoadGeneration}|{workspaceSwitchId}";
         if (policy == FileListRestorePolicy.ExactRestore
             && restoreKey is not null
             && !_activeWorkspaceRestoreKeys.Add(restoreKey))
@@ -603,6 +617,7 @@ public partial class MainWindow
 
         var restoreId = System.Threading.Interlocked.Increment(ref _workspaceRestoreGeneration);
         var listView = GetFolderPaneListView(pane);
+        using var viewStateSuppression = pane.FileList.ViewStateSyncSuppression.Enter();
 
         try
         {
@@ -713,10 +728,12 @@ public partial class MainWindow
         int workspaceSwitchId = 0,
         WorkspaceSession? session = null)
     {
+        var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         if (targetState.SelectedPaths.Count > 0)
         {
             var selectedEntries = await Dispatcher.InvokeAsync(() =>
             {
+                if (isStale()) return Array.Empty<FileEntry>();
                 if (workspaceSwitchId > 0
                     && session is not null
                     && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -744,6 +761,7 @@ public partial class MainWindow
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
         }
         WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), "viewstate-before-scroll-restore", pane);
+        if (isStale()) return;
         if (workspaceSwitchId > 0
             && session is not null
             && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -762,8 +780,10 @@ public partial class MainWindow
         int workspaceSwitchId = 0,
         WorkspaceSession? session = null)
     {
+        var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         await Dispatcher.InvokeAsync(() =>
         {
+            if (isStale()) return;
             if (workspaceSwitchId > 0
                 && session is not null
                 && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -786,6 +806,7 @@ public partial class MainWindow
             return;
         }
 
+        if (isStale()) return;
         await RestoreWorkspacePaneScrollOffsetAsync(pane, verticalOffset, workspaceSwitchId, session);
     }
 
@@ -795,8 +816,10 @@ public partial class MainWindow
         int workspaceSwitchId = 0,
         WorkspaceSession? session = null)
     {
+        var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         var selectedEntries = await Dispatcher.InvokeAsync(() =>
         {
+            if (isStale()) return Array.Empty<FileEntry>();
             if (workspaceSwitchId > 0
                 && session is not null
                 && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -819,6 +842,7 @@ public partial class MainWindow
 
         // Wait for container layout generation before centering the selected item.
         await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        if (isStale()) return;
         if (workspaceSwitchId > 0
             && session is not null
             && !CanApplyWorkspaceSwitch(workspaceSwitchId, session))
@@ -831,7 +855,7 @@ public partial class MainWindow
             listView,
             firstSelected,
             () => FindVisualChild<ScrollViewer>(listView),
-            Dispatcher);
+            Dispatcher, isStale: isStale);
     }
 
     private async Task RevealWorkspacePaneSelectionAsync(

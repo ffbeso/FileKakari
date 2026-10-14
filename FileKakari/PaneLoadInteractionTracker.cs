@@ -19,7 +19,14 @@ internal sealed class PaneLoadInteractionTracker : IDisposable
         listView.PreviewKeyDown += OnKeyDown;
     }
 
-    private void Record() { if (_state.IsPublishingItems) HasInteracted = true; }
+    private void Record()
+    {
+        if (_state.IsPublishingItems)
+        {
+            HasInteracted = true;
+            _state.HasPublicationInteraction = true;
+        }
+    }
     private void OnMouseDown(object sender, MouseButtonEventArgs e) => Record();
     private void OnMouseWheel(object sender, MouseWheelEventArgs e) => Record();
     private void OnKeyDown(object sender, KeyEventArgs e) => Record();

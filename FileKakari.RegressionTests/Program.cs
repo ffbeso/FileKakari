@@ -24,6 +24,82 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("pane-viewstate-capture-isolation-and-transient-guard", () => RunOnStaAsync(() =>
+    {
+        var left = new FileListState();
+        var right = new FileListState();
+        left.ReplaceItems(fixtures, [], loadedStateId: "left-tab");
+        right.ReplaceItems(fixtures, [], loadedStateId: "right-tab");
+        using (left.ViewStateSyncSuppression.Enter())
+        {
+            Require(!left.CanCaptureViewState("left-tab", fixtures), "Partial restore can overwrite saved state.");
+            Require(right.CanCaptureViewState("right-tab", fixtures), "Loading left suppresses right pane state capture.");
+            using (left.ViewStateSyncSuppression.Enter()) { }
+            Require(!left.CanCaptureViewState("left-tab", fixtures), "Overlapping restore released suppression early.");
+        }
+        Require(left.CanCaptureViewState("left-tab", fixtures), "Completed restore still suppresses capture.");
+        Require(!left.CanCaptureViewState("right-tab", fixtures), "Same-folder subtab identity was ignored.");
+        Require(!left.CanCaptureViewState("left-tab", Path.Combine(fixtures, "other")), "Navigation path was ignored.");
+        left.BeginLoad("next-tab", fixtures);
+        left.BeginStagedItems(fixtures, "next-tab");
+        Require(!left.CanCaptureViewState("next-tab", fixtures), "Incomplete publication was saved as empty state.");
+        left.IsPublishingItems = true;
+        typeof(FileListState).GetProperty(nameof(FileListState.HasPublicationInteraction))!.SetValue(left, true);
+        using (left.ViewStateSyncSuppression.Enter())
+        {
+            Require(left.CanCaptureViewState("next-tab", fixtures), "Explicit input during publication cannot be saved before switching away.");
+            Require(!left.CanCaptureViewState("left-tab", fixtures), "Partial view was attributed to the previous tab.");
+        }
+        left.PendingAnchorScrollState = new AnchorScrollState("old-tab-file", 0, null, null, 10);
+        left.BeginLoad("third-tab", fixtures);
+        Require(!left.HasPublicationInteraction, "New load inherited earlier input intent.");
+        Require(left.PendingAnchorScrollState is null, "New tab inherited previous tab's pending anchor.");
+    }));
+
+    await CheckAsync("obsolete-group-anchor-restore-does-not-scroll", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "stale-anchor");
+        Directory.CreateDirectory(folder);
+        var entries = Enumerable.Range(0, 120).Select(index =>
+        {
+            var path = Path.Combine(folder, $"{index:D4}.txt");
+            File.WriteAllText(path, "anchor");
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var list = new System.Windows.Controls.ListView { ItemsSource = entries, Width = 400, Height = 240 };
+        System.Windows.Controls.ScrollViewer.SetCanContentScroll(list, true);
+        var host = new System.Windows.Window { Content = list, Width = 420, Height = 280, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            host.Show();
+            list.UpdateLayout();
+            System.Windows.Controls.ScrollViewer? FindScroll(System.Windows.DependencyObject parent)
+            {
+                if (parent is System.Windows.Controls.ScrollViewer found) return found;
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+                    if (FindScroll(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+                return null;
+            }
+            var scroll = FindScroll(list)!;
+            scroll.ScrollToVerticalOffset(10);
+            list.UpdateLayout();
+            var before = scroll.VerticalOffset;
+            Require(before > 0, "Scroll fixture did not move away from the top.");
+            var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            var stale = false;
+            var restore = typeof(FileEntry).Assembly.GetType("FileKakari.AnchorScrollService")!.GetMethod("RestoreAnchorScrollAsync")!;
+            var task = (Task<bool>)restore.Invoke(null, new object[] { list,
+                new AnchorScrollState(entries[100].FullPath, 0, null, null, 100), GroupMode.Extension, dispatcher,
+                0L, (Func<bool>)(() => stale) })!;
+            dispatcher.BeginInvoke(new Action(() => stale = true), System.Windows.Threading.DispatcherPriority.Input);
+            PumpDispatcherUntilComplete(task);
+            list.UpdateLayout();
+            Require(!task.Result, "Obsolete anchor restore reported success.");
+            Require(Math.Abs(scroll.VerticalOffset - before) < 0.5, "Old tab's delayed anchor scrolled the current view.");
+        }
+        finally { host.Close(); }
+    }));
+
     await CheckAsync("range-selection-deltas-and-visible-grouped-rows", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "range-selection");

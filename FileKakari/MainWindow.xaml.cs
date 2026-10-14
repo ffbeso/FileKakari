@@ -129,9 +129,6 @@ public partial class MainWindow : Window
     private bool _driveListRefreshPending;
     private bool _driveListRefreshRunning;
     private bool _isSyncingPaneFilter;
-    private readonly OperationSuppression _workspaceViewStateSyncSuppression = new();
-    private bool _suppressWorkspaceSelectionSync => _workspaceViewStateSyncSuppression.IsActive;
-    private bool _suppressWorkspaceScrollSync => _workspaceViewStateSyncSuppression.IsActive;
     private Point? _tabDragStartPoint;
     private WorkspaceSession? _draggedTab;
     private WorkspaceSession? _pendingWorkspaceRenameSession;
@@ -4994,7 +4991,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_suppressWorkspaceScrollSync)
+        if (pane.FileList.ViewStateSyncSuppression.IsActive)
         {
             return;
         }
@@ -5799,7 +5796,15 @@ public partial class MainWindow : Window
 
     private void SaveWorkspacePaneNavigationViewState(FolderPane pane, FolderTab tab)
     {
-        var targetTab = GetDisplayedWorkspacePaneTabOrDefault(pane, tab);
+        // A switched/partially restored view is not a new user state. Keep the
+        // saved selection and offset until this pane has finished restoration.
+        if (!pane.FileList.CanCaptureViewState(tab.State.Id, tab.Navigation.CurrentPath)
+            || GetFolderPaneListView(pane) is not { } listView
+            || !ReferenceEquals(listView.ItemsSource, pane.FileList.ItemsView))
+        {
+            return;
+        }
+        var targetTab = tab;
         var verticalOffset = GetFolderPaneVerticalOffset(pane);
         var selectedPaths = GetFolderPaneListView(pane)?.SelectedItems
             .OfType<FileEntry>()
@@ -5813,6 +5818,10 @@ public partial class MainWindow : Window
 
         targetTab.State.VerticalOffset = verticalOffset;
         targetTab.State.SelectedPaths = selectedPaths;
+        if (targetTab.State.GroupMode != GroupMode.None)
+        {
+            targetTab.State.AnchorState = AnchorScrollService.CaptureAnchorState(listView, targetTab.State.GroupMode, verticalOffset);
+        }
         SaveNavigationViewState(targetTab, targetTab.Navigation.CurrentPath, targetTab.State.FilterText, verticalOffset, selectedPaths);
 
         if (_performanceLogger.IsEnabled)

@@ -1533,8 +1533,7 @@ public partial class MainWindow
             {
                 var listView = GetFolderPaneListView(pane);
                 var scrollViewer = listView is null ? null : FindVisualChild<ScrollViewer>(listView);
-                var restoreKey = $"{workspaceSession.Id}|{pane.Id}|{targetState.Id}";
-                if (!_activeWorkspaceRestoreKeys.Contains(restoreKey)
+                if (!pane.FileList.ViewStateSyncSuppression.IsActive
                     && WorkspacePaneViewReuse.CanPreserve(pane, listView, scrollViewer?.VerticalOffset, _settingsService.Settings.SortFoldersFirst))
                 {
                     PerfLog.WriteVerbose($"workspace-pane-view-preserved switchId={switchId} paneId={pane.Id} stateId={targetState.Id}");
@@ -1634,7 +1633,7 @@ public partial class MainWindow
 
         var requestedState = pane.ActiveTabState;
         using var loadInteraction = new PaneLoadInteractionTracker(GetFolderPaneListView(pane), pane.FileList);
-        var viewStateSuppression = _workspaceViewStateSyncSuppression.Enter();
+        var viewStateSuppression = pane.FileList.ViewStateSyncSuppression.Enter();
         try
         {
             ApplyColumnWidthsToWorkspacePane(pane);
@@ -1691,6 +1690,8 @@ public partial class MainWindow
             {
                 await RestoreWorkspacePaneStateAsync(pane, policy, restoreTrigger, workspaceSwitchId);
             }
+            if (pane.FileList.LoadGeneration != requestedGeneration
+                || !ReferenceEquals(pane.ActiveTabState, requestedState)) return;
         }
         finally
         {
@@ -1722,7 +1723,9 @@ public partial class MainWindow
 
     private void SynchronizeWorkspacePaneSelectionAfterLoad(FolderPane pane)
     {
-        if (!IsWorkspaceDisplayPane(pane))
+        if (!IsWorkspaceDisplayPane(pane)
+            || !IsPaneOwnedByActiveWorkspaceSession(pane)
+            || pane.FileList.ViewStateSyncSuppression.IsActive)
         {
             return;
         }

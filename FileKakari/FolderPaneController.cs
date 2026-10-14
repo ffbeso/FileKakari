@@ -206,7 +206,9 @@ sealed class FolderPaneController
             if (targetState.GroupMode != GroupMode.None
                 && pane.FileList.PendingDeleteScrollRestoreState is null)
             {
-                capturedAnchor = AnchorScrollService.CaptureAnchorState(_getListView?.Invoke(pane), targetState.GroupMode, targetState.VerticalOffset);
+                // The view can still contain the previous subtab here. Restore
+                // the requested tab's saved anchor, never that previous view.
+                capturedAnchor = targetState.AnchorState;
             }
 
             if (targetState.GroupMode == GroupMode.None && items.Count > AdaptiveBatchSizer.MinimumSize)

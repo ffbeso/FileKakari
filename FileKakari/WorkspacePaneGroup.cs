@@ -34,6 +34,14 @@ public sealed class FileListState : INotifyPropertyChanged
     public AnchorScrollState? PendingAnchorScrollState { get; set; }
     public bool IsPublishingItems { get; set; }
     public long LoadGeneration => _loadGeneration;
+    public OperationSuppression ViewStateSyncSuppression { get; } = new();
+    public bool HasPublicationInteraction { get; internal set; }
+
+    public bool CanCaptureViewState(string stateId, string path) =>
+        (!ViewStateSyncSuppression.IsActive && IsLoadedFor(stateId, path))
+        || (IsPublishingItems && HasPublicationInteraction
+            && string.Equals(LoadedStateId, stateId, StringComparison.Ordinal)
+            && string.Equals(LoadedPath, path, StringComparison.OrdinalIgnoreCase));
     public DeleteScrollRestoreState? PendingDeleteScrollRestoreState { get; private set; }
 
     public void BeginDeleteScrollRestore(DeleteScrollRestoreState restoreState)
@@ -245,6 +253,8 @@ public sealed class FileListState : INotifyPropertyChanged
     public long BeginLoad(string stateId, string path)
     {
         IsPublishingItems = false;
+        HasPublicationInteraction = false;
+        PendingAnchorScrollState = null;
         _loadGeneration++;
         _loadStateId = stateId;
         _loadPath = path;

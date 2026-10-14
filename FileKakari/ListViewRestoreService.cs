@@ -222,13 +222,16 @@ internal sealed class ListViewRestoreService
         object item,
         Func<ScrollViewer?> findScrollViewer,
         Dispatcher dispatcher,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        Func<bool>? isStale = null)
     {
+        if (isStale?.Invoke() == true) return false;
         itemsList.ScrollIntoView(item);
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var centered = await dispatcher.InvokeAsync(() =>
             {
+                if (isStale?.Invoke() == true) return false;
                 if (findScrollViewer() is not { } scrollViewer)
                 {
                     return false;

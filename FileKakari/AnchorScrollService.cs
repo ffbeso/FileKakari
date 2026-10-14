@@ -101,8 +101,10 @@ internal static class AnchorScrollService
         AnchorScrollState? anchorState,
         GroupMode mode,
         Dispatcher dispatcher,
-        long deleteFlowId = 0)
+        long deleteFlowId = 0,
+        Func<bool>? isStale = null)
     {
+        if (isStale?.Invoke() == true) return false;
         if (listView == null || anchorState == null || mode == GroupMode.None || listView.Items.Count == 0)
         {
             return false;
@@ -153,11 +155,13 @@ internal static class AnchorScrollService
             return false;
         }
 
-        await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view");
+        await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
+        if (isStale?.Invoke() == true) return false;
 
         // Step 1: ScrollIntoView
         await dispatcher.InvokeAsync(() =>
         {
+            if (isStale?.Invoke() == true) return;
             listView.ScrollIntoView(targetEntry);
         }, DispatcherPriority.Send);
 
@@ -169,14 +173,15 @@ internal static class AnchorScrollService
             anchorState,
             dispatcher,
             deleteFlowId,
-            resolveReason);
+            resolveReason, isStale);
     }
 
     private static async Task WaitForStableExtentAsync(
         ListView listView,
         Dispatcher dispatcher,
         long deleteFlowId,
-        string stage)
+        string stage,
+        Func<bool>? isStale)
     {
         const int requiredStableTransitions = 2;
         const int maxLayoutPasses = 10;
@@ -190,10 +195,12 @@ internal static class AnchorScrollService
         {
             var sample = await dispatcher.InvokeAsync(() =>
             {
+                if (isStale?.Invoke() == true) return -1d;
                 listView.UpdateLayout();
                 return FindVisualChild<ScrollViewer>(listView)?.ScrollableHeight ?? -1;
             }, DispatcherPriority.ContextIdle);
 
+            if (isStale?.Invoke() == true) return;
             samples.Add(sample);
             if (sample >= 0
                 && previousScrollableHeight is { } previous
@@ -224,7 +231,8 @@ internal static class AnchorScrollService
         AnchorScrollState anchorState,
         Dispatcher dispatcher,
         long deleteFlowId,
-        string resolveReason)
+        string resolveReason,
+        Func<bool>? isStale)
     {
         const int requiredStableTransitions = 2;
         const int maxLayoutPasses = 12;
@@ -241,6 +249,8 @@ internal static class AnchorScrollService
         {
             var sample = await dispatcher.InvokeAsync(() =>
             {
+                if (isStale?.Invoke() == true)
+                    return (Valid: false, ScrollableHeight: -1d, VerticalOffset: -1d, RelativeY: double.NaN);
                 listView.UpdateLayout();
                 var scrollViewer = FindVisualChild<ScrollViewer>(listView);
                 if (scrollViewer == null)
@@ -282,6 +292,7 @@ internal static class AnchorScrollService
                 }
             }, DispatcherPriority.ContextIdle);
 
+            if (isStale?.Invoke() == true) return false;
             samples.Add(
                 $"{sample.ScrollableHeight.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/" +
                 $"{sample.VerticalOffset.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/" +

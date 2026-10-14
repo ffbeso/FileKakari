@@ -1195,7 +1195,21 @@ public partial class MainWindow : Window
                 entry.PropertyChanged += FileEntry_PropertyChanged;
             }
 
-            MutateItemsForLoad(() => _items.AddRange(batch));
+            // Non-grouped views can retain their realized rows and selection on
+            // single-item Add notifications. Keep the existing grouped path.
+            var incrementalAppend = loadState.GroupMode == GroupMode.None
+                && ItemsView.GroupDescriptions.Count == 0;
+            MutateItemsForLoad(() =>
+            {
+                if (incrementalAppend)
+                {
+                    foreach (var entry in batch) _items.Add(entry);
+                }
+                else
+                {
+                    _items.AddRange(batch);
+                }
+            });
             bindStopwatch.Stop();
 
             var bindResult = _loadController.RecordBatchBound(
@@ -1210,7 +1224,7 @@ public partial class MainWindow : Window
 
             var uiMilliseconds = bindStopwatch.Elapsed.TotalMilliseconds + statusStopwatch.Elapsed.TotalMilliseconds;
             batchSizer.Observe(batch.Count, uiMilliseconds);
-            _performanceLogger.Write($"load-batch-budget id={loadId} batchItems={batch.Count} uiMs={uiMilliseconds:F2} nextBatch={batchSizer.NextSize} targetUiMs={AdaptiveBatchSizer.TargetMilliseconds}");
+            _performanceLogger.Write($"load-batch-budget id={loadId} batchItems={batch.Count} uiMs={uiMilliseconds:F2} nextBatch={batchSizer.NextSize} targetUiMs={AdaptiveBatchSizer.TargetMilliseconds} appendMode={(incrementalAppend ? "item-add" : "reset")}");
 
             if (bindResult.IsFirstBatch)
             {

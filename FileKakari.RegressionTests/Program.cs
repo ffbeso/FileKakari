@@ -87,6 +87,28 @@ try
         Require((long)bounded.Width * bounded.Height <= ImagePreviewSizing.MaxDecodedPixels, "Decoded pixel budget exceeded.");
         return Task.CompletedTask;
     });
+    await CheckAsync("image-portrait-cache-and-invalidation", async () =>
+    {
+        var path = Path.Combine(fixtures, "portrait.png");
+        var bitmap = BitmapSource.Create(120, 1200, 96, 96, PixelFormats.Bgra32, null, new byte[120 * 1200 * 4], 120 * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var stream = File.Create(path)) encoder.Save(stream);
+        var provider = new BuiltInImagePreviewProvider();
+        var request = new PreviewRequest(path) { TargetWidthDip = 600, TargetHeightDip = 120 };
+        var first = await provider.CreatePreviewAsync(request, CancellationToken.None);
+        Require(first.ImageSource is { PixelWidth: 12, PixelHeight: 120 }, "Portrait decoded beyond viewport bounds.");
+        var second = await provider.CreatePreviewAsync(request, CancellationToken.None);
+        Require(ReferenceEquals(first.ImageSource, second.ImageSource), "Unchanged image was not reused.");
+        var larger = await provider.CreatePreviewAsync(request with { TargetHeightDip = 480 }, CancellationToken.None);
+        Require(larger.ImageSource is { PixelWidth: 48, PixelHeight: 480 }, "Larger viewport did not upgrade resolution.");
+        File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(1));
+        var updated = await provider.CreatePreviewAsync(request, CancellationToken.None);
+        Require(!ReferenceEquals(larger.ImageSource, updated.ImageSource), "Modified image reused stale bitmap.");
+        File.Delete(path);
+        var missing = await provider.CreatePreviewAsync(request, CancellationToken.None);
+        Require(missing.Status == FilePreviewStatus.Missing, "Deleted image was served from cache.");
+    });
     await CheckAsync("image-decode", async () =>
     {
         var path = Path.Combine(fixtures, "image.png");

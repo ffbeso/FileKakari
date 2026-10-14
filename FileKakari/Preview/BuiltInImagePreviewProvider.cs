@@ -7,7 +7,7 @@ using System.Windows.Media.Imaging;
 
 namespace FileKakari;
 
-public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
+public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
 {
     // Shared by selection loads and resize loads. Cancellation removes obsolete waiters
     // before they open a file; a codec already running is allowed to finish safely.
@@ -74,6 +74,9 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
 
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (FindCachedImage(fileInfoResult, targetWidthPx, targetHeightPx) is { } cached)
+                return cached;
+
             (BitmapImage, (double openMs, double decodeMs, double freezeMs, int originalWidth, int originalHeight)) Decode()
             {
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -134,8 +137,12 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
                 PreviewDiagnostics.Verbose("PreviewImage", $"Load\r\npath=\"{request.FilePath}\"\r\nfileBytes={fileInfo.Length}\r\ndecodedPixels=\"{decodedPixels}\"\r\nrequestedMaxPixels=\"{requestedMaxPixels}\"\r\ndecodePixelWidth={targetWidthPx}\r\ndecodePixelHeight=0\r\nopenMs={metrics.openMs:F1}\r\ndecodeMs={metrics.decodeMs:F1}\r\nfreezeMs={metrics.freezeMs:F1}\r\ntotalMs={totalMs:F1}\r\ncancelled=false\r\ngeneration={request.Generation}");
             }
 
-            return new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Image, ImageSource: bitmap, FileInfo: fileInfoResult,
+            var result = new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Image, ImageSource: bitmap, FileInfo: fileInfoResult,
                 OriginalPixelWidth: metrics.originalWidth, OriginalPixelHeight: metrics.originalHeight);
+            fileInfo.Refresh();
+            if (fileInfo.Exists && fileInfo.Length == fileInfoResult.Size && fileInfo.LastWriteTime == fileInfoResult.LastWriteTime)
+                RememberImage(result);
+            return result;
         }
         catch (OperationCanceledException)
         {

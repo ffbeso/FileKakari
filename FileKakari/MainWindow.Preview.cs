@@ -39,6 +39,8 @@ public partial class MainWindow
 
     private static TimeSpan GetPreviewLoadDelay(string? path)
     {
+        if (path is not null && new BuiltInImagePreviewProvider().CanPreview(path))
+            return TimeSpan.FromMilliseconds(60);
         return IsExcelPreviewExtension(path)
             ? TimeSpan.FromMilliseconds(400)
             : PreviewLoadDelay;

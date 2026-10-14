@@ -24,6 +24,35 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("group-switch-after-layout-keeps-virtualization-mode", () => RunOnStaAsync(() =>
+    {
+        var path = Path.Combine(fixtures, "virtualization.txt");
+        File.WriteAllText(path, "layout");
+        var entry = FileEntry.FromFileBasic(new FileInfo(path));
+        var state = new FileListState();
+        state.ReplaceItems(fixtures, Enumerable.Repeat(entry, 200).ToArray());
+        var list = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView, Width = 400, Height = 240 };
+        System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+        var helper = typeof(FileListState).Assembly.GetType("FileKakari.FileGroupHelper")!;
+        var apply = helper.GetMethod("ApplyGroupMode", new[] { typeof(System.Windows.Controls.ListView), typeof(GroupMode), typeof(SimilarNameGroupIndex) })!;
+        void Layout()
+        {
+            list.Measure(new System.Windows.Size(400, 240));
+            list.Arrange(new System.Windows.Rect(0, 0, 400, 240));
+            list.UpdateLayout();
+        }
+        Layout();
+        foreach (var mode in new[] { GroupMode.Extension, GroupMode.None, GroupMode.Date, GroupMode.SimilarName, GroupMode.None })
+        {
+            apply.Invoke(null, new object?[] { list, mode, mode == GroupMode.SimilarName ? state.EnsureSimilarNameIndex() : null });
+            list.InvalidateMeasure();
+            Layout();
+            Require(System.Windows.Controls.VirtualizingPanel.GetVirtualizationMode(list) == System.Windows.Controls.VirtualizationMode.Recycling,
+                "Changing groups after layout must not switch the virtualization mode.");
+        }
+    }));
+
     await CheckAsync("staged-pane-publication-selection-cancel-and-ownership", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "staged-pane");

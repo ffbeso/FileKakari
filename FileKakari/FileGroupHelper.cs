@@ -15,21 +15,6 @@ public enum GroupMode
     SimilarName
 }
 
-public sealed class GroupModeToVirtualizationModeConverter : IValueConverter
-{
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        return value is GroupMode mode && mode != GroupMode.None
-            ? VirtualizationMode.Standard
-            : VirtualizationMode.Recycling;
-    }
-
-    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        throw new NotSupportedException();
-    }
-}
-
 internal static class FileGroupHelper
 {
     public static string GetGroupKey(FileEntry entry, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)
@@ -188,12 +173,9 @@ internal static class FileGroupHelper
     {
         if (listView == null) return;
 
-        var targetMode = mode == GroupMode.None ? VirtualizationMode.Recycling : VirtualizationMode.Standard;
-        if (VirtualizingPanel.GetVirtualizationMode(listView) != targetMode)
-        {
-            VirtualizingPanel.SetVirtualizationMode(listView, targetMode);
-            VirtualizingPanel.SetIsVirtualizingWhenGrouping(listView, true);
-        }
+        // WPF forbids changing VirtualizationMode after the items host has measured.
+        // Both grouped and ungrouped views keep the Recycling mode set in XAML.
+        VirtualizingPanel.SetIsVirtualizingWhenGrouping(listView, true);
     }
 
     public static void ApplyGroupMode(ListView? listView, GroupMode mode, SimilarNameGroupIndex? groupIndex = null)

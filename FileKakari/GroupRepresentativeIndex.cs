@@ -30,33 +30,25 @@ public sealed class GroupRepresentativeIndex
 
         string normalizedColumn = ColumnLayoutService.NormalizeColumnId(sortColumn);
 
-        var grouped = new Dictionary<string, List<FileEntry>>(StringComparer.OrdinalIgnoreCase);
+        var useNameKey = normalizedColumn is not ("Size" or "ModifiedAt" or "CreatedAt" or "AccessedAt" or "Kind");
+        var representativeNameKeys = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
             string key = FileGroupHelper.GetGroupKey(entry, mode, groupIndex);
-            if (!grouped.TryGetValue(key, out var list))
+            var nameKey = useNameKey ? FileNameNormalizer.BuildCompareKey(entry.Name) : "";
+            if (!index._groupToRepresentative.TryGetValue(key, out var representative))
             {
-                list = new List<FileEntry>();
-                grouped[key] = list;
+                index._groupToRepresentative[key] = entry;
+                if (useNameKey) representativeNameKeys[key] = nameKey;
+                continue;
             }
-            list.Add(entry);
-        }
-
-        foreach (var (key, items) in grouped)
-        {
-            if (items.Count == 0) continue;
-
-            FileEntry representative = items[0];
-            for (int i = 1; i < items.Count; i++)
+            var cmp = CompareByColumn(entry, representative, normalizedColumn, sortFoldersFirst,
+                nameKey, useNameKey ? representativeNameKeys[key] : "");
+            if (sortAscending ? cmp < 0 : cmp > 0)
             {
-                var candidate = items[i];
-                int cmp = CompareByColumn(candidate, representative, normalizedColumn, sortFoldersFirst);
-                if (sortAscending ? cmp < 0 : cmp > 0)
-                {
-                    representative = candidate;
-                }
+                index._groupToRepresentative[key] = entry;
+                if (useNameKey) representativeNameKeys[key] = nameKey;
             }
-            index._groupToRepresentative[key] = representative;
         }
 
         sw.Stop();
@@ -69,7 +61,7 @@ public sealed class GroupRepresentativeIndex
         return _groupToRepresentative.TryGetValue(groupKey, out var rep) ? rep : null;
     }
 
-    private static int CompareByColumn(FileEntry left, FileEntry right, string columnId, bool foldersFirst)
+    private static int CompareByColumn(FileEntry left, FileEntry right, string columnId, bool foldersFirst, string leftNameKey, string rightNameKey)
     {
         if (foldersFirst && left.IsDirectory != right.IsDirectory)
         {
@@ -78,13 +70,13 @@ public sealed class GroupRepresentativeIndex
 
         return columnId switch
         {
-            "Name" => string.Compare(FileNameNormalizer.BuildCompareKey(left.Name), FileNameNormalizer.BuildCompareKey(right.Name), StringComparison.OrdinalIgnoreCase),
+            "Name" => string.Compare(leftNameKey, rightNameKey, StringComparison.OrdinalIgnoreCase),
             "Size" => left.Size < right.Size ? -1 : (left.Size > right.Size ? 1 : 0),
             "ModifiedAt" => DateTime.Compare(left.ModifiedAt, right.ModifiedAt),
             "CreatedAt" => DateTime.Compare(left.CreatedAt, right.CreatedAt),
             "AccessedAt" => DateTime.Compare(left.AccessedAt, right.AccessedAt),
             "Kind" => string.Compare(left.Kind, right.Kind, StringComparison.OrdinalIgnoreCase),
-            _ => string.Compare(FileNameNormalizer.BuildCompareKey(left.Name), FileNameNormalizer.BuildCompareKey(right.Name), StringComparison.OrdinalIgnoreCase)
+            _ => string.Compare(leftNameKey, rightNameKey, StringComparison.OrdinalIgnoreCase)
         };
     }
 }

@@ -24,6 +24,30 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("group-representative-order-and-ties", () =>
+    {
+        var folder = Path.Combine(fixtures, "representatives");
+        Directory.CreateDirectory(folder);
+        var entries = new List<FileEntry>();
+        foreach (var name in new[] { "Ａ.txt", "a.txt", "B.txt", "C.pdf" })
+        {
+            var path = Path.Combine(folder, name);
+            File.WriteAllText(path, name.StartsWith("B") ? "longer" : "x");
+            entries.Add(FileEntry.FromFile(new FileInfo(path)));
+        }
+        var ascending = GroupRepresentativeIndex.Build(entries, GroupMode.Extension, "Name", true, true);
+        var descending = GroupRepresentativeIndex.Build(entries, GroupMode.Extension, "Name", false, true);
+        Require(ReferenceEquals(ascending.GetRepresentative("txt"), entries[0]), "Normalized name tie must retain first representative.");
+        Require(ReferenceEquals(descending.GetRepresentative("txt"), entries[2]), "Descending representative changed.");
+        var size = GroupRepresentativeIndex.Build(entries, GroupMode.Extension, "Size", false, true);
+        Require(ReferenceEquals(size.GetRepresentative("txt"), entries[2]), "Largest representative not selected.");
+        Require(ReferenceEquals(size.GetRepresentative("pdf"), entries[3]), "Single-member group changed.");
+        entries[0].Name = "Z.txt";
+        var updated = GroupRepresentativeIndex.Build(entries, GroupMode.Extension, "Name", false, true);
+        Require(ReferenceEquals(updated.GetRepresentative("txt"), entries[0]), "Rebuild reused stale name keys.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("wpf-filter-single-refresh-and-count", () => RunOnStaAsync(() =>
     {
         var items = new BulkObservableCollection<int> { 1, 2, 3 };

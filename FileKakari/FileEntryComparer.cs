@@ -12,6 +12,7 @@ public sealed class FileEntryComparer : IComparer
     private readonly GroupMode _groupMode;
     private readonly SimilarNameGroupIndex? _groupIndex;
     private readonly GroupRepresentativeIndex? _representativeIndex;
+    private readonly Dictionary<string, string> _groupCompareKeys = new(StringComparer.Ordinal);
 
     public FileEntryComparer(
         string columnId,
@@ -67,8 +68,8 @@ public sealed class FileEntryComparer : IComparer
                     return _ascending ? groupResult : -groupResult;
                 }
 
-                string keyL = FileNameNormalizer.BuildCompareKey(groupLeft);
-                string keyR = FileNameNormalizer.BuildCompareKey(groupRight);
+                string keyL = GetGroupCompareKey(groupLeft);
+                string keyR = GetGroupCompareKey(groupRight);
                 return string.Compare(keyL, keyR, StringComparison.OrdinalIgnoreCase);
             }
         }
@@ -120,6 +121,16 @@ public sealed class FileEntryComparer : IComparer
             "BaseName" => CompareText(left.BaseName, right.BaseName),
             _ => CompareText(left.Name, right.Name)
         };
+    }
+
+    private string GetGroupCompareKey(string group)
+    {
+        if (!_groupCompareKeys.TryGetValue(group, out var key))
+        {
+            key = FileNameNormalizer.BuildCompareKey(group);
+            _groupCompareKeys[group] = key;
+        }
+        return key;
     }
 
     private static int CompareText(string left, string right)

@@ -104,7 +104,7 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
 
                 var freezeMs = stopwatch.Elapsed.TotalMilliseconds;
 
-                return (bitmapImage, (openMs, decodeMs, freezeMs));
+                return (bitmapImage, (openMs, decodeMs, freezeMs, originalWidth: frame.PixelWidth, originalHeight: frame.PixelHeight));
             }, cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -117,7 +117,8 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
                 PreviewDiagnostics.Verbose("PreviewImage", $"Load\r\npath=\"{request.FilePath}\"\r\nfileBytes={fileInfo.Length}\r\ndecodedPixels=\"{decodedPixels}\"\r\nrequestedMaxPixels=\"{requestedMaxPixels}\"\r\ndecodePixelWidth={targetWidthPx}\r\ndecodePixelHeight=0\r\nopenMs={metrics.openMs:F1}\r\ndecodeMs={metrics.decodeMs:F1}\r\nfreezeMs={metrics.freezeMs:F1}\r\ntotalMs={totalMs:F1}\r\ncancelled=false\r\ngeneration={request.Generation}");
             }
 
-            return new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Image, ImageSource: bitmap, FileInfo: fileInfoResult);
+            return new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Image, ImageSource: bitmap, FileInfo: fileInfoResult,
+                OriginalPixelWidth: metrics.originalWidth, OriginalPixelHeight: metrics.originalHeight);
         }
         catch (OperationCanceledException)
         {

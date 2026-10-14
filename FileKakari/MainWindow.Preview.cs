@@ -404,6 +404,7 @@ public partial class MainWindow
 
     private void InitializePreviewPaneSizeFromSettings()
     {
+        PreviewContentViewport.SizeChanged += (_, _) => QueueImagePreviewResize();
         if (ItemsListHost.Parent is FrameworkElement layout)
         {
             layout.SizeChanged += (_, _) => ConstrainPreviewPaneToLayout();
@@ -1328,7 +1329,7 @@ public partial class MainWindow
                     return false;
                 }
 
-                ReplacePreviewWithImage(result.ImageSource);
+                ReplacePreviewWithImage(result);
                 break;
 
             case FilePreviewStatus.Success when result.Kind == FilePreviewKind.Shell && result.Clsid is not null:
@@ -1460,11 +1461,14 @@ public partial class MainWindow
             $"Text UI set after source=\"{source}\" path=\"{path}\" generation={generation} currentGeneration={_previewGeneration} control=\"PreviewTextBox\" afterLength={PreviewTextBox.Text.Length} visibility={PreviewTextBox.Visibility} isVisible={PreviewTextBox.IsVisible} opacity={PreviewTextBox.Opacity} fontFamily=\"{PreviewTextBox.FontFamily}\" fontSize={PreviewTextBox.FontSize} foreground=\"{PreviewTextBox.Foreground}\" background=\"{PreviewTextBox.Background}\" textWrapping={PreviewTextBox.TextWrapping} cancellationRequested={cancellationToken.IsCancellationRequested}");
     }
 
-    private void ReplacePreviewWithImage(ImageSource imageSource)
+    private void ReplacePreviewWithImage(FilePreviewResult result)
     {
         ClearPreviewContent();
-        PreviewImage.Source = imageSource;
+        _displayedImagePreview = result;
+        _displayedImageGeneration = _previewGeneration;
+        PreviewImage.Source = result.ImageSource;
         PreviewImageScrollViewer.Visibility = Visibility.Visible;
+        QueueImagePreviewResize();
     }
 
 
@@ -2075,6 +2079,8 @@ public partial class MainWindow
 
     private void ClearNonVideoPreviewContent()
     {
+        _displayedImagePreview = null;
+        _imageResizeCancellation?.Cancel();
         PreviewDiagnostics.Info("Preview", $"ClearNonVideoPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration}");
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
@@ -2107,6 +2113,8 @@ public partial class MainWindow
 
     private void ClearBuiltInPreviewContent(bool keepWebView = false)
     {
+        _displayedImagePreview = null;
+        _imageResizeCancellation?.Cancel();
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
         PreviewImage.Source = null;

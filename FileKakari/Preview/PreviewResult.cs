@@ -21,7 +21,9 @@ public sealed record FilePreviewResult(
     string? ErrorMessage = null,
     FilePreviewInfo? FileInfo = null,
     Guid? Clsid = null,
-    string? EncodingName = null);
+    string? EncodingName = null,
+    int OriginalPixelWidth = 0,
+    int OriginalPixelHeight = 0);
 public sealed record FilePreviewInfo(
     string FileName,
     string FullPath,

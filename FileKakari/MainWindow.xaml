@@ -2400,7 +2400,7 @@
                               Visibility="Collapsed">
                             <Image x:Name="PreviewImage"
                                    Stretch="Uniform"
-                                   StretchDirection="DownOnly"
+                                   StretchDirection="Both"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center" />
                         </Grid>

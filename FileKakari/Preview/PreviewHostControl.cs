@@ -242,6 +242,14 @@ public sealed class PreviewHostControl : HwndHost
 
     private int _lastSentWidthPx = -1;
     private int _lastSentHeightPx = -1;
+    private double _lastSentDpiX;
+    private double _lastSentDpiY;
+    private Task? _resizePump;
+    private bool _resizePending;
+    private bool _resizeCorrection;
+    private string? _resizeRequestId;
+    private int _resizeGeneration;
+    private bool _isDisposed;
 
     public int LastSentWidthPx => _lastSentWidthPx;
     public int LastSentHeightPx => _lastSentHeightPx;
@@ -256,8 +264,46 @@ public sealed class PreviewHostControl : HwndHost
         return default;
     }
 
-    public async Task RequestResizeAsync(bool isCorrection = false, string? requestId = null, int generation = 0)
+    public Task RequestResizeAsync(bool isCorrection = false, string? requestId = null, int generation = 0)
     {
+        if (_isDisposed) return Task.CompletedTask;
+        _resizePending = true;
+        _resizeCorrection |= isCorrection;
+        if (isCorrection)
+        {
+            _resizeRequestId = requestId;
+            _resizeGeneration = generation;
+        }
+        if (_resizePump is null || _resizePump.IsCompleted) _resizePump = FlushResizeAsync();
+        return _resizePump;
+    }
+
+    private async Task FlushResizeAsync()
+    {
+        try
+        {
+            while (_resizePending && !_isDisposed)
+            {
+                // At most one send in flight and one latest size pending.
+                await Task.Delay(16);
+                if (_isDisposed) return;
+                var correction = _resizeCorrection;
+                var requestId = _resizeRequestId;
+                var generation = _resizeGeneration;
+                _resizePending = false;
+                _resizeCorrection = false;
+                await SendCurrentResizeAsync(correction, requestId, generation);
+            }
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or System.IO.IOException or InvalidOperationException)
+        {
+            PreviewDiagnostics.Error("PreviewHostControl", $"Resize failed: {ex.Message}");
+        }
+    }
+
+    private async Task SendCurrentResizeAsync(bool isCorrection, string? requestId, int generation)
+    {
+        if (!_processManager.IsConnected) return;
         double scaleX = 1.0;
         double scaleY = 1.0;
         var source = PresentationSource.FromVisual(this);
@@ -271,7 +317,13 @@ public sealed class PreviewHostControl : HwndHost
         var pixelHeight = Math.Max(0, (int)Math.Ceiling(ActualHeight * scaleY));
 
         var clientRect = GetHostClientRect();
-        if (!isCorrection && pixelWidth == _lastSentWidthPx && pixelHeight == _lastSentHeightPx)
+        if (pixelWidth > 0 && pixelHeight > 0 && clientRect.Right > clientRect.Left && clientRect.Bottom > clientRect.Top)
+        {
+            pixelWidth = clientRect.Right - clientRect.Left;
+            pixelHeight = clientRect.Bottom - clientRect.Top;
+        }
+        if (!isCorrection && pixelWidth == _lastSentWidthPx && pixelHeight == _lastSentHeightPx
+            && scaleX == _lastSentDpiX && scaleY == _lastSentDpiY)
         {
             return;
         }
@@ -280,6 +332,8 @@ public sealed class PreviewHostControl : HwndHost
         var prevHeight = _lastSentHeightPx;
         _lastSentWidthPx = pixelWidth;
         _lastSentHeightPx = pixelHeight;
+        _lastSentDpiX = scaleX;
+        _lastSentDpiY = scaleY;
 
         if (isCorrection)
         {
@@ -306,10 +360,18 @@ public sealed class PreviewHostControl : HwndHost
         _ = RequestResizeAsync(isCorrection: false);
     }
 
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _ = RequestResizeAsync(isCorrection: true);
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _isDisposed = true;
+            _resizePending = false;
             IsVisibleChanged -= PreviewHostControl_IsVisibleChanged;
             _processManager.OnAttached -= ProcessManager_OnAttached;
             _processManager.OnExited -= ProcessManager_OnExited;

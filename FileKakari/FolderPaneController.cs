@@ -164,6 +164,7 @@ sealed class FolderPaneController
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration)) return;
         pane.IsLoading = true;
         try
         {
@@ -173,17 +174,16 @@ sealed class FolderPaneController
             var sortAscending = targetState.SortAscending;
             var sortFoldersFirst = _sortFoldersFirst();
             var extraColumnsEnabled = _shouldLoadExtraColumns(sortColumn);
-            // Snapshot loading publishes only after the view is configured. For an
-            // ungrouped pane, let the view sort once instead of sorting twice.
-            // Grouped panes retain enumeration order for representative tie-breaking.
-            var enumerationSortColumn = targetState.GroupMode == GroupMode.None ? "__none" : sortColumn;
+            // Sorted enumeration makes every published prefix correctly ordered.
+            // Grouped panes keep the existing snapshot path and tie-breaking order.
+            var enumerationSortColumn = sortColumn;
             _performanceLogger.Write($"folder-pane-load-start paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" sort={sortColumn}:{sortAscending} shellIcons={_devListPerfOptions.ShellIconsEnabled}");
 
             var items = await Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entries = _fileService.Enumerate(
-                    targetState.CurrentPath,
+                    requestedPath,
                     enumerationSortColumn,
                     sortAscending,
                     sortFoldersFirst,
@@ -209,13 +209,35 @@ sealed class FolderPaneController
                 capturedAnchor = AnchorScrollService.CaptureAnchorState(_getListView?.Invoke(pane), targetState.GroupMode, targetState.VerticalOffset);
             }
 
-            targetState.StoreItems(targetState.CurrentPath, items);
-            targetState.ClearPendingExternalChange();
-            using (pane.FileList.ItemsView.DeferRefresh())
+            if (targetState.GroupMode == GroupMode.None && items.Count > AdaptiveBatchSizer.MinimumSize)
             {
-                pane.FileList.ReplaceItems(targetState.CurrentPath, items, targetState.LastLoadedAt, targetState.Id);
-                ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
+                var published = await StagedFileListPublisher.PublishAsync(
+                    pane.FileList, items, requestedPath, targetState.Id,
+                    () => IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration),
+                    () => ApplyViewStateToPane(pane, targetState, sortFoldersFirst),
+                    (count, uiMs, nextSize) =>
+                    {
+                        pane.FileList.StatusText = _text.Format("LoadingProgress", count, stopwatch.ElapsedMilliseconds);
+                        _performanceLogger.Write($"folder-pane-batch paneId={pane.Id} generation={loadGeneration} items={count} uiMs={uiMs:F2} nextBatch={nextSize}");
+                    }, cancellationToken);
+                if (!published) return;
+                // The user may have changed grouping while batches were being added.
+                // Rebuild group representatives/indexes from the complete collection.
+                if (targetState.GroupMode != GroupMode.None)
+                    ApplyViewStateToPane(pane, targetState, _sortFoldersFirst());
+                targetState.StoreItems(requestedPath, items);
+                pane.FileList.LastLoadedAt = targetState.LastLoadedAt;
             }
+            else
+            {
+                targetState.StoreItems(requestedPath, items);
+                using (pane.FileList.ItemsView.DeferRefresh())
+                {
+                    pane.FileList.ReplaceItems(requestedPath, items, targetState.LastLoadedAt, targetState.Id);
+                    ApplyViewStateToPane(pane, targetState, sortFoldersFirst);
+                }
+            }
+            targetState.ClearPendingExternalChange();
             if (pane.FileList.PendingDeleteScrollRestoreState is null)
             {
                 pane.FileList.PendingAnchorScrollState = capturedAnchor;
@@ -249,6 +271,7 @@ sealed class FolderPaneController
         {
             if (pane.FileList.IsLoadCurrent(loadGeneration, targetState.Id, requestedPath))
             {
+                pane.FileList.IsPublishingItems = false;
                 pane.IsLoading = false;
             }
         }

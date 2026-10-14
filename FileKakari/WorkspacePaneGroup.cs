@@ -32,6 +32,8 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public SimilarNameGroupIndex? SimilarNameIndex { get; private set; }
     public AnchorScrollState? PendingAnchorScrollState { get; set; }
+    public bool IsPublishingItems { get; set; }
+    public long LoadGeneration => _loadGeneration;
     public DeleteScrollRestoreState? PendingDeleteScrollRestoreState { get; private set; }
 
     public void BeginDeleteScrollRestore(DeleteScrollRestoreState restoreState)
@@ -242,6 +244,7 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public long BeginLoad(string stateId, string path)
     {
+        IsPublishingItems = false;
         _loadGeneration++;
         _loadStateId = stateId;
         _loadPath = path;
@@ -280,6 +283,22 @@ public sealed class FileListState : INotifyPropertyChanged
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
         LoadedPath = path;
         LoadedStateId = loadedStateId;
+    }
+
+    public void BeginStagedItems(string path, string stateId)
+    {
+        InvalidateSimilarNameIndex();
+        LastLoadedAt = null;
+        CurrentPath = path;
+        LoadedPath = path;
+        LoadedStateId = stateId;
+        Items.Clear();
+    }
+
+    public void AppendStagedItem(FileEntry item)
+    {
+        InvalidateSimilarNameIndex();
+        Items.Add(item);
     }
 
     public bool RemoveItem(FileEntry item)

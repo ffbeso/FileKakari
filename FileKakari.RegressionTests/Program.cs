@@ -24,6 +24,55 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("staged-pane-publication-selection-cancel-and-ownership", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "staged-pane");
+        Directory.CreateDirectory(folder);
+        var entries = Enumerable.Range(0, 300).Select(index =>
+        {
+            var path = Path.Combine(folder, $"{index:D4}.txt");
+            File.WriteAllText(path, "stage");
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var state = new FileListState();
+        var view = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView };
+        var resets = 0;
+        var batches = 0;
+        var yielded = false;
+        state.ItemsView.CollectionChanged += (_, e) => { if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++; };
+        var load = StagedFileListPublisher.PublishAsync(state, entries, folder, "stage", () => true,
+            () => state.ApplySort("Name", true, true),
+            (count, _, _) =>
+            {
+                batches++;
+                Require(!state.IsLoadedFor("stage", folder), "Partial rows must never be considered a completed load.");
+                if (batches == 1)
+                {
+                    view.SelectedItem = entries[0];
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(new Action(() => yielded = true), System.Windows.Threading.DispatcherPriority.Input);
+                }
+            }, CancellationToken.None);
+        PumpDispatcherUntilComplete(load);
+        Require(load.Result && batches > 1 && yielded, "Publication must yield between batches.");
+        Require(state.Items.SequenceEqual(entries) && ReferenceEquals(view.SelectedItem, entries[0]), "Appending rows must preserve order and existing selection.");
+        Require(resets == 1 && !state.IsPublishingItems, "Publication must reset only when replacing the old list.");
+
+        using var cancellation = new CancellationTokenSource();
+        var cancelled = StagedFileListPublisher.PublishAsync(state, entries, folder, "cancel", () => true,
+            () => state.ApplySort("Name", true, true), (_, _, _) => cancellation.Cancel(), cancellation.Token);
+        try { PumpDispatcherUntilComplete(cancelled); throw new InvalidOperationException("Cancellation was ignored."); }
+        catch (OperationCanceledException) { }
+        Require(state.Items.Count == 64 && state.LastLoadedAt is null && !state.IsPublishingItems, "Cancellation must leave an incomplete, reloadable list.");
+
+        var owner = true;
+        var obsolete = StagedFileListPublisher.PublishAsync(state, entries, folder, "obsolete", () => owner,
+            () => state.ApplySort("Name", true, true), (_, _, _) => owner = false, CancellationToken.None);
+        PumpDispatcherUntilComplete(obsolete);
+        Require(!obsolete.Result && state.Items.Count == 64 && state.LastLoadedAt is null, "An obsolete load must stop publishing.");
+        state.BeginLoad("next", folder);
+        Require(!state.IsPublishingItems, "A replacement load must clear obsolete publication state.");
+    }));
+
     await CheckAsync("adaptive-ui-batch-budget-and-load-isolation", () =>
     {
         var sizer = new AdaptiveBatchSizer();
@@ -680,6 +729,18 @@ async Task CheckAsync(string name, Func<Task> check)
     }
 }
 
+static void PumpDispatcherUntilComplete(Task task)
+{
+    if (!task.IsCompleted)
+    {
+        var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+        var frame = new System.Windows.Threading.DispatcherFrame();
+        _ = task.ContinueWith(_ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)), TaskScheduler.Default);
+        System.Windows.Threading.Dispatcher.PushFrame(frame);
+    }
+    task.GetAwaiter().GetResult();
+}
+
 static double ThemeContrast(Color first, Color second)
 {
     static double Linear(byte channel)
@@ -703,7 +764,13 @@ static Task RunOnStaAsync(Action action)
     var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
     var thread = new Thread(() =>
     {
-        try { action(); completion.SetResult(); }
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(
+                System.Windows.Threading.Dispatcher.CurrentDispatcher));
+            action();
+            completion.SetResult();
+        }
         catch (Exception ex) { completion.SetException(ex); }
         finally { System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown(); }
     }) { IsBackground = true };

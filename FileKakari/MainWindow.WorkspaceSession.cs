@@ -1632,11 +1632,20 @@ public partial class MainWindow
             BeginPreviewAwaitingExplicitSelection(restoreTrigger);
         }
 
+        var requestedState = pane.ActiveTabState;
+        using var loadInteraction = new PaneLoadInteractionTracker(GetFolderPaneListView(pane), pane.FileList);
         var viewStateSuppression = _workspaceViewStateSyncSuppression.Enter();
         try
         {
             ApplyColumnWidthsToWorkspacePane(pane);
-            await _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
+            var paneLoadTask = _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
+            var requestedGeneration = pane.FileList.LoadGeneration;
+            await paneLoadTask;
+
+            if (pane.FileList.LoadGeneration != requestedGeneration)
+            {
+                return;
+            }
 
             var failedState = pane.ActiveTabState;
             if (failedState is not null
@@ -1660,7 +1669,25 @@ public partial class MainWindow
                 return;
             }
 
-            if (policy != FileListRestorePolicy.None && WorkspaceSplitGrid.Visibility == Visibility.Visible)
+            if (!ReferenceEquals(pane.ActiveTabState, requestedState) || !pane.IsActiveStateLoaded)
+            {
+                return;
+            }
+
+            if (loadInteraction.HasInteracted && GetFolderPaneListView(pane) is { } interactedList)
+            {
+                // Keep explicit input made against the progressively displayed rows.
+                var selected = interactedList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList();
+                requestedState!.SelectedPaths = selected;
+                pane.SelectedPaths = selected;
+                if (FindVisualChild<ScrollViewer>(interactedList) is { } interactedScroll)
+                {
+                    requestedState.VerticalOffset = interactedScroll.VerticalOffset;
+                    pane.ScrollOffset = interactedScroll.VerticalOffset;
+                }
+                requestedState.AnchorState = AnchorScrollService.CaptureAnchorState(interactedList, requestedState.GroupMode, requestedState.VerticalOffset);
+            }
+            else if (policy != FileListRestorePolicy.None && WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
                 await RestoreWorkspacePaneStateAsync(pane, policy, restoreTrigger, workspaceSwitchId);
             }

@@ -74,10 +74,10 @@ internal sealed class FolderWatchTabTracker
         try
         {
             var folder = NormalizeFolderPath(folderPath);
-            var candidate = Path.GetFullPath(candidatePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var candidate = NormalizeFolderPath(candidatePath);
+            var prefix = Path.EndsInDirectorySeparator(folder) ? folder : folder + Path.DirectorySeparatorChar;
             return string.Equals(folder, candidate, StringComparison.OrdinalIgnoreCase)
-                || candidate.StartsWith(folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                || candidate.StartsWith(folder + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+                || candidate.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -87,6 +87,6 @@ internal sealed class FolderWatchTabTracker
 
     private static string NormalizeFolderPath(string path)
     {
-        return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return FolderWatchService.NormalizeFolderPath(path);
     }
 }

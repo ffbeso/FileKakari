@@ -294,9 +294,9 @@ public sealed class FolderWatchService : IDisposable
         state.Watcher.Dispose();
     }
 
-    private static string NormalizeFolderPath(string path)
+    public static string NormalizeFolderPath(string path)
     {
-        return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
     }
 
     private void ThrowIfDisposed()

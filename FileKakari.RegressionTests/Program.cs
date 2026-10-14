@@ -131,6 +131,15 @@ try
         await undo.UndoLastAsync();
         Require(File.ReadAllText(b) == "b" && undo.LastAction is null, "Retry failed.");
     });
+    await CheckAsync("watch-root-normalization", () =>
+    {
+        var root = Path.GetPathRoot(fixtures)!;
+        Require(FolderWatchService.NormalizeFolderPath(root) == root, "Drive root became drive-relative.");
+        Require(Path.IsPathFullyQualified(FolderWatchService.NormalizeFolderPath(root)), "Root is not fully qualified.");
+        Require(FolderWatchService.NormalizeFolderPath(fixtures + Path.DirectorySeparatorChar) == fixtures, "Folder separator not normalized.");
+        Require(FolderWatchService.NormalizeFolderPath(@"\\server\share\") == @"\\server\share", "UNC root changed.");
+        return Task.CompletedTask;
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

@@ -196,6 +196,22 @@ try
         try { await entry.LoadIconAsync(cancelled.Token); throw new InvalidOperationException("Cancelled icon request completed."); }
         catch (OperationCanceledException) { }
     });
+    await CheckAsync("overlapping-viewstate-suppression", () =>
+    {
+        var suppression = new OperationSuppression();
+        var first = suppression.Enter();
+        var second = suppression.Enter();
+        first.Dispose();
+        Require(suppression.IsActive, "First completion released another operation's suppression.");
+        first.Dispose();
+        Require(suppression.IsActive, "Double disposal released another operation.");
+        second.Dispose();
+        Require(!suppression.IsActive, "Suppression leaked after completion.");
+        try { using var failed = suppression.Enter(); throw new OperationCanceledException(); }
+        catch (OperationCanceledException) { }
+        Require(!suppression.IsActive, "Suppression leaked on cancellation.");
+        return Task.CompletedTask;
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

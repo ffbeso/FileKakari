@@ -1622,8 +1622,7 @@ public partial class MainWindow
             BeginPreviewAwaitingExplicitSelection(restoreTrigger);
         }
 
-        _suppressWorkspaceSelectionSync = true;
-        _suppressWorkspaceScrollSync = true;
+        var viewStateSuppression = _workspaceViewStateSyncSuppression.Enter();
         try
         {
             ApplyColumnWidthsToWorkspacePane(pane);
@@ -1658,8 +1657,7 @@ public partial class MainWindow
         }
         finally
         {
-            _suppressWorkspaceSelectionSync = false;
-            _suppressWorkspaceScrollSync = false;
+            viewStateSuppression.Dispose();
 
             if (workspaceSwitchId == 0
                 || FindSessionContainingPane(pane) is not { } switchSession

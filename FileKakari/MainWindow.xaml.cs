@@ -131,8 +131,9 @@ public partial class MainWindow : Window
     private bool _driveListRefreshPending;
     private bool _driveListRefreshRunning;
     private bool _isSyncingPaneFilter;
-    private bool _suppressWorkspaceSelectionSync;
-    private bool _suppressWorkspaceScrollSync;
+    private readonly OperationSuppression _workspaceViewStateSyncSuppression = new();
+    private bool _suppressWorkspaceSelectionSync => _workspaceViewStateSyncSuppression.IsActive;
+    private bool _suppressWorkspaceScrollSync => _workspaceViewStateSyncSuppression.IsActive;
     private Point? _tabDragStartPoint;
     private WorkspaceSession? _draggedTab;
     private WorkspaceSession? _pendingWorkspaceRenameSession;

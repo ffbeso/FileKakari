@@ -6,6 +6,8 @@ namespace FileKakari;
 
 public sealed class WorkspaceService
 {
+    private readonly SerializedTaskQueue _saveQueue = new();
+    public Task PendingSaves => _saveQueue.Completion;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -96,10 +98,10 @@ public sealed class WorkspaceService
         return null;
     }
 
-    public bool SaveWorkspace(WorkspaceSession session, string workspaceName, string? targetFilePath = null)
+    public async Task<bool> SaveWorkspaceAsync(WorkspaceSession session, string workspaceName, string? targetFilePath = null)
     {
         var rootDir = session.RootPath;
-        if (string.IsNullOrWhiteSpace(rootDir) || !Directory.Exists(rootDir))
+        if (string.IsNullOrWhiteSpace(rootDir))
         {
             return false;
         }
@@ -178,15 +180,12 @@ public sealed class WorkspaceService
                 Tabs = []
             };
 
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrWhiteSpace(directory))
+            return await _saveQueue.Enqueue(() =>
             {
-                Directory.CreateDirectory(directory);
-            }
-
-            File.WriteAllText(filePath, JsonSerializer.Serialize(doc, JsonOptions));
-
-            return true;
+                if (!Directory.Exists(rootDir)) return false;
+                AtomicFileWriter.WriteAllText(filePath, JsonSerializer.Serialize(doc, JsonOptions));
+                return true;
+            });
         }
         catch (Exception ex)
         {

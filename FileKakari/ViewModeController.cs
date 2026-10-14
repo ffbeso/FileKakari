@@ -106,7 +106,7 @@ internal sealed class ViewModeController
         _applyColumnSettings();
         _restoreSelection(selectedPaths);
         await _restoreScrollOffsetAsync(offset);
-        _settingsService.SaveCurrent();
+        await _settingsService.SaveCurrentAsync();
         _performanceLogger.Write($"display-mode-switch mode={mode} selected={selectedPaths.Count} offset={offset:N1} items={_getItemCount()}");
     }
 

@@ -388,7 +388,7 @@ public partial class MainWindow : Window
             WorkspaceLocalStateSaveDelay,
             () => _activeWorkspaceSession,
             () => TabsControl.SelectedIndex,
-            SaveSessionState);
+            SaveSessionStateAsync);
         _workspaceSessionFactory = new WorkspaceSessionFactory(NormalizeSortColumn, () => AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement));
         _primaryPaneGroup = new WorkspacePaneGroup("primary", _primaryPaneTabs, placement: AppSettings.NormalizeSubTabPlacement(_settingsService.Settings.SubTabPlacement), subTabBarWidth: AppSettings.NormalizeSubTabBarWidth(_settingsService.Settings.DefaultSubTabBarWidth));
         _activeWorkspacePaneGroup = _primaryPaneGroup;
@@ -609,36 +609,63 @@ public partial class MainWindow : Window
             ApplyTabSort(startupTab);
         }
         UpdateCrashContextSnapshot("startup");
-        Closing += (_, _) =>
+        var closingInProgress = false;
+        var savesCompletedForClose = false;
+        Closing += async (_, args) =>
         {
-            RememberPreviewPaneSize();
-            SyncPreviewPaneSizeToSettings(_settingsService.Settings);
-            CancelPreviewLoad();
-            ClearWebViewForShutdown();
-            _previewHostProcessManager?.Dispose();
-            _deviceChangeService.Dispose();
-
-            _folderWatchService.Dispose();
-            _scrollBehavior.StopAutoScroll();
-            _statusSummaryCoordinator.Dispose();
-            _workspaceLocalState.Stop();
-            if (_activeWorkspaceSession is not null)
+            if (savesCompletedForClose) return;
+            args.Cancel = true;
+            if (closingInProgress) return;
+            closingInProgress = true;
+            _isClosingForSave = true;
+            IsEnabled = false;
+            try
             {
-                if (_activeWorkspaceSession.IsWorkspace)
+                await (_workspaceSaveCompletion?.Task ?? Task.CompletedTask);
+                RememberPreviewPaneSize();
+                SyncPreviewPaneSizeToSettings(_settingsService.Settings);
+                CancelPreviewLoad();
+                ClearWebViewForShutdown();
+                _previewHostProcessManager?.Dispose();
+                _deviceChangeService.Dispose();
+
+                _folderWatchService.Dispose();
+                _scrollBehavior.StopAutoScroll();
+                _statusSummaryCoordinator.Dispose();
+                _workspaceLocalState.Stop();
+                if (_activeWorkspaceSession is not null)
                 {
-                    foreach (var pane in _activeWorkspaceSession.PaneGroups)
+                    if (_activeWorkspaceSession.IsWorkspace)
                     {
-                        SaveWorkspacePaneColumnWidths(pane);
+                        foreach (var pane in _activeWorkspaceSession.PaneGroups)
+                        {
+                            SaveWorkspacePaneColumnWidths(pane);
+                        }
+                    }
+                    else
+                    {
+                        SaveColumnWidths();
                     }
                 }
-                else
+                await _workspaceService.PendingSaves;
+                try { await _settingsService.SaveCurrentAsync(); }
+                catch (Exception ex)
                 {
-                    SaveColumnWidths();
+                    MessageBox.Show(this, ex.Message, _text.Get("NamedSessionSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
+                if (!await SaveSessionSnapshotAsync())
+                    MessageBox.Show(this, _text.Format("NamedSessionSaveFailed", _sessionStateService.SessionPath),
+                        _text.Get("NamedSessionSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-            _settingsService.SaveCurrent();
-            SaveSessionState();
-            _workspaceLocalState.SaveActiveLocalState();
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, _text.Get("NamedSessionSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                savesCompletedForClose = true;
+                _ = Dispatcher.BeginInvoke(new Action(Close));
+            }
         };
 
         Loaded += async (_, _) =>

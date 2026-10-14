@@ -212,6 +212,35 @@ try
         Require(!suppression.IsActive, "Suppression leaked on cancellation.");
         return Task.CompletedTask;
     });
+    await CheckAsync("atomic-save-preserves-previous-on-failure", () =>
+    {
+        var path = Path.Combine(fixtures, "atomic.json");
+        AtomicFileWriter.WriteAllText(path, "{\"version\":1}");
+        using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            try { AtomicFileWriter.WriteAllText(path, "{\"version\":2}"); throw new InvalidOperationException("Expected locked destination to fail."); }
+            catch (IOException) { }
+        }
+        Require(File.ReadAllText(path) == "{\"version\":1}", "Failed save damaged previous file.");
+        Require(!Directory.EnumerateFiles(fixtures, ".atomic.json.*.tmp").Any(), "Temporary save file leaked.");
+        AtomicFileWriter.WriteAllText(path, "{\"version\":3}");
+        Require(File.ReadAllText(path) == "{\"version\":3}", "Atomic replacement failed.");
+        return Task.CompletedTask;
+    });
+    await CheckAsync("session-save-request-order", async () =>
+    {
+        var path = Path.Combine(fixtures, "ordered-session.json");
+        var service = new SessionStateService();
+        var saves = Enumerable.Range(0, 20).Select(index => service.SaveAsync(path,
+            new SessionState { SelectedTabIndex = index })).ToArray();
+        Require((await Task.WhenAll(saves)).All(saved => saved), "Queued save failed.");
+        Require(service.Load(path).State?.SelectedTabIndex == 19, "An older snapshot overwrote the latest save.");
+        var queue = new SerializedTaskQueue();
+        var failed = queue.Enqueue<int>(() => throw new IOException("test failure"));
+        var next = queue.Enqueue(() => 42);
+        try { await failed; } catch (IOException) { }
+        Require(await next == 42, "A failed operation blocked the save queue.");
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

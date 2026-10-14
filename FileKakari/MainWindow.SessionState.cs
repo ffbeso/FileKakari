@@ -5,6 +5,7 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
+    private bool _isClosingForSave;
     private WorkspaceSession? CreateInitialSession(SessionTabState tabState)
     {
         if (tabState.IsWorkspace)
@@ -132,7 +133,25 @@ public partial class MainWindow
 
     private void SaveSessionState()
     {
-        _sessionStateService.Save(CaptureCurrentSessionState());
+        _ = SaveSessionStateAsync();
+    }
+
+    private Task<bool> SaveSessionStateAsync() => _isClosingForSave ? Task.FromResult(true) : SaveSessionSnapshotAsync();
+
+    private async Task<bool> SaveSessionSnapshotAsync()
+    {
+        try
+        {
+            var saved = await _sessionStateService.SaveAsync(CaptureCurrentSessionState());
+            if (!saved) SetNormalStatusText(_text.Format("NamedSessionSaveFailed", _sessionStateService.SessionPath));
+            return saved;
+        }
+        catch (Exception ex)
+        {
+            PerfLog.Write($"session-save-failed error=\"{ex.Message}\"");
+            SetNormalStatusText(_text.Format("NamedSessionSaveFailed", ex.Message));
+            return false;
+        }
     }
 
     private SessionState CaptureCurrentSessionState()

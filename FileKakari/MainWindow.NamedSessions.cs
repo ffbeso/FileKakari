@@ -7,7 +7,7 @@ public partial class MainWindow
 {
     private readonly NamedSessionStore _namedSessionStore = new();
 
-    private void SaveNamedSessionMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void SaveNamedSessionMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new NamedSessionSaveDialog
         {
@@ -47,7 +47,7 @@ public partial class MainWindow
         }
 
         var state = CaptureCurrentSessionState();
-        if (!_sessionStateService.Save(path, state))
+        if (!await _sessionStateService.SaveAsync(path, state))
         {
             ShowNamedSessionError("NamedSessionSaveFailed", path);
             return;

@@ -11,8 +11,11 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
-    private void SaveWorkspaceMenuItem_Click(WorkspaceSession? session)
+    private TaskCompletionSource? _workspaceSaveCompletion;
+
+    private async void SaveWorkspaceMenuItem_Click(WorkspaceSession? session)
     {
+        if (_workspaceSaveCompletion is { Task.IsCompleted: false }) return;
         if (session is null || !session.IsWorkspace)
         {
             return;
@@ -24,21 +27,27 @@ public partial class MainWindow
             return;
         }
 
-        var success = _workspaceService.SaveWorkspace(session, session.Name, session.WorkspaceFilePath);
-        if (success)
+        var completion = _workspaceSaveCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
         {
-            SaveSessionState();
-            SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
+            var success = await _workspaceService.SaveWorkspaceAsync(session, session.Name, session.WorkspaceFilePath);
+            if (success)
+            {
+                SaveSessionState();
+                SetNormalStatusText(_text.Get("WorkspaceSaveSuccess"));
+            }
+            else
+            {
+                var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error.");
+                MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
-        else
-        {
-            var errorMsg = _text.Format("WorkspaceSaveFailed", "Write error.");
-            MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        finally { completion.TrySetResult(); }
     }
 
-    private void SaveWorkspaceAsMenuItem_Click(WorkspaceSession? session)
+    private async void SaveWorkspaceAsMenuItem_Click(WorkspaceSession? session)
     {
+        if (_workspaceSaveCompletion is { Task.IsCompleted: false }) return;
         if (session is null || !session.IsWorkspace) return;
 
         var sfd = new Microsoft.Win32.SaveFileDialog
@@ -52,6 +61,7 @@ public partial class MainWindow
 
         if (sfd.ShowDialog(this) == true)
         {
+            var completion = _workspaceSaveCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
             var requestedSavePath = sfd.FileName;
             var oldWorkspaceFilePath = session.WorkspaceFilePath;
             var expectedWorkspaceId = session.Workspace?.WorkspaceId;
@@ -73,10 +83,10 @@ public partial class MainWindow
 
             try
             {
-                var success = _workspaceService.SaveWorkspace(session, chosenName, requestedSavePath);
+                var success = await _workspaceService.SaveWorkspaceAsync(session, chosenName, requestedSavePath);
                 if (success)
                 {
-                    var savedWorkspace = _workspaceService.LoadFromFile(requestedSavePath);
+                    var savedWorkspace = await Task.Run(() => _workspaceService.LoadFromFile(requestedSavePath));
                     var jsonSaveComplete = savedWorkspace is not null
                         && (string.IsNullOrWhiteSpace(expectedWorkspaceId)
                             || string.Equals(savedWorkspace.WorkspaceId, expectedWorkspaceId, StringComparison.Ordinal));
@@ -129,6 +139,7 @@ public partial class MainWindow
                 var errorMsg = _text.Format("WorkspaceSaveFailed", ex.Message);
                 MessageBox.Show(errorMsg, _text.Get("WorkspaceSaveTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
             }
+            finally { completion.TrySetResult(); }
         }
     }
 

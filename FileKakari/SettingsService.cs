@@ -6,6 +6,7 @@ namespace FileKakari;
 
 public sealed class SettingsService
 {
+    private readonly SerializedTaskQueue _saveQueue = new();
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -43,28 +44,33 @@ public sealed class SettingsService
 
     public async Task SaveAsync(AppSettings settings)
     {
-        var clone = settings.Clone();
+        var requestedSettings = settings.Clone();
+        var clone = requestedSettings.Clone();
         clone.FolderColumnWidths.Clear();
         clone.ColumnWidths.Clear();
         clone.EnsureDefaults();
-        AppPaths.EnsureSettingsDirectory();
-
-        var json = JsonSerializer.Serialize(clone, JsonOptions);
-        await File.WriteAllTextAsync(SettingsPath, json);
+        await _saveQueue.Enqueue(() =>
+        {
+            AppPaths.EnsureSettingsDirectory();
+            AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(clone, JsonOptions));
+            return true;
+        });
         PerfLog.WriteVerbose($"json-save-complete target=\"settings\" path=\"{SettingsPath}\"");
-        Settings = settings.Clone();
+        Settings = requestedSettings;
     }
 
-    public void SaveCurrent()
+    public async Task SaveCurrentAsync()
     {
         var clone = Settings.Clone();
         clone.FolderColumnWidths.Clear();
         clone.ColumnWidths.Clear();
         clone.EnsureDefaults();
-        AppPaths.EnsureSettingsDirectory();
-
-        var json = JsonSerializer.Serialize(clone, JsonOptions);
-        File.WriteAllText(SettingsPath, json);
+        await _saveQueue.Enqueue(() =>
+        {
+            AppPaths.EnsureSettingsDirectory();
+            AtomicFileWriter.WriteAllText(SettingsPath, JsonSerializer.Serialize(clone, JsonOptions));
+            return true;
+        });
         PerfLog.WriteVerbose($"json-save-complete target=\"settings\" path=\"{SettingsPath}\"");
     }
 }

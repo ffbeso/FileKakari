@@ -10,9 +10,11 @@ sealed class WorkspaceLocalStateCoordinator
     private readonly DispatcherTimer _saveTimer;
     private readonly Func<WorkspaceSession?> _getActiveSession;
     private readonly Func<int> _getSelectedIndex;
-    private readonly System.Action _saveSessionState;
+    private readonly Func<Task<bool>> _saveSessionState;
     private bool _isDirty;
     private bool _captureQueued;
+    private bool _stopped;
+    private long _dirtyVersion;
 
     internal WorkspaceLocalStateCoordinator(
         WorkspaceSessionFolderTabSync tabSync,
@@ -21,7 +23,7 @@ sealed class WorkspaceLocalStateCoordinator
         TimeSpan saveDelay,
         Func<WorkspaceSession?> getActiveSession,
         Func<int> getSelectedIndex,
-        System.Action saveSessionState)
+        Func<Task<bool>> saveSessionState)
     {
         _tabSync = tabSync;
         _performanceLogger = performanceLogger;
@@ -37,6 +39,7 @@ sealed class WorkspaceLocalStateCoordinator
 
     internal void Stop()
     {
+        _stopped = true;
         _saveTimer.Stop();
     }
 
@@ -89,7 +92,7 @@ sealed class WorkspaceLocalStateCoordinator
             new Action(() =>
             {
                 _captureQueued = false;
-                if (_tabSync.IsApplying || _getActiveSession() is null)
+                if (_stopped || _tabSync.IsApplying || _getActiveSession() is null)
                 {
                     return;
                 }
@@ -99,8 +102,9 @@ sealed class WorkspaceLocalStateCoordinator
             DispatcherPriority.Background);
     }
 
-    internal void SaveActiveLocalState()
+    internal async void SaveActiveLocalState()
     {
+        if (_stopped) return;
         _saveTimer.Stop();
         var session = _getActiveSession();
         if (session is null)
@@ -110,21 +114,23 @@ sealed class WorkspaceLocalStateCoordinator
         }
 
         Capture();
-        _saveSessionState?.Invoke();
-        PerfLog.WriteVerbose($"workspace-local-save-complete sessionId=\"{session.Id}\" reason=\"dirty-flush\"");
-        _isDirty = false;
+        var version = _dirtyVersion;
+        var saved = await _saveSessionState();
+        if (saved && version == _dirtyVersion) _isDirty = false;
+        PerfLog.WriteVerbose($"workspace-local-save-complete sessionId=\"{session.Id}\" success={saved} reason=\"dirty-flush\"");
     }
 
     internal void MarkDirty(string reason)
     {
         var session = _getActiveSession();
-        if (session is null
+        if (_stopped || session is null
             || _tabSync.IsApplying)
         {
             return;
         }
 
         _isDirty = true;
+        _dirtyVersion++;
         _saveTimer.Stop();
         _saveTimer.Start();
         PerfLog.WriteVerbose($"workspace-local-dirty reason={reason}");

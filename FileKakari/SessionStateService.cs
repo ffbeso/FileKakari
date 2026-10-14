@@ -22,6 +22,11 @@ public sealed record SessionStateLoadResult(
 
 public sealed class SessionStateService
 {
+    private readonly SerializedTaskQueue _saveQueue = new();
+
+    // The caller supplies a detached snapshot and must not modify it while saving.
+    public Task<bool> SaveAsync(string path, SessionState snapshot) => _saveQueue.Enqueue(() => Save(path, snapshot));
+    public Task<bool> SaveAsync(SessionState snapshot) => SaveAsync(SessionPath, snapshot);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -94,7 +99,7 @@ public sealed class SessionStateService
             }
 
             var json = JsonSerializer.Serialize(state, JsonOptions);
-            File.WriteAllText(fullPath, json);
+            AtomicFileWriter.WriteAllText(fullPath, json);
             PerfLog.WriteVerbose(
                 $"json-save-complete target=\"session\" path=\"{fullPath}\" " +
                 $"tabs={state.Tabs.Count} folderColumnWidthKeys={state.FolderColumnWidths.Count} columnWidths={state.ColumnWidths.Count}");

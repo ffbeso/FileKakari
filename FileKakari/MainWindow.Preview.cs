@@ -490,24 +490,8 @@ public partial class MainWindow
 
     private double ClampPreviewPaneSize(double value, PreviewPanePlacement placement)
     {
-        var available = GetPreviewLayoutAvailableSize(placement);
-        if (available <= 0)
-        {
-            return Math.Max(MinPreviewPaneSize, value);
-        }
-
-        var max = available - PreviewSplitterSize - MinFileListPaneSize;
-        if (max <= 0)
-        {
-            return 0;
-        }
-
-        if (max < MinPreviewPaneSize)
-        {
-            return max;
-        }
-
-        return Math.Clamp(value, MinPreviewPaneSize, max);
+        return PreviewPaneSizing.Clamp(value, GetPreviewLayoutAvailableSize(placement),
+            MinPreviewPaneSize, MinFileListPaneSize, PreviewSplitterSize);
     }
 
     private double GetPreviewLayoutAvailableSize(PreviewPanePlacement placement)

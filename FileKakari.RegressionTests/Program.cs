@@ -67,6 +67,14 @@ try
         catch (OperationCanceledException) { return; }
         throw new InvalidOperationException("Cancelled text read completed without cancellation.");
     });
+    await CheckAsync("preview-pane-preserves-file-list", () =>
+    {
+        Require(PreviewPaneSizing.Clamp(700, 500, 100, 180, 5) == 315, "Large preview hides file list after shrink.");
+        Require(PreviewPaneSizing.Clamp(315, 250, 100, 180, 5) == 65, "Preview minimum must yield to file list.");
+        Require(PreviewPaneSizing.Clamp(315, 180, 100, 180, 5) == 0, "Preview must collapse when no space remains.");
+        Require(PreviewPaneSizing.Clamp(210, 900, 100, 180, 5) == 210, "Normal requested pane size changed.");
+        return Task.CompletedTask;
+    });
     await CheckAsync("image-cancelled", async () =>
     {
         using var cts = new CancellationTokenSource();
@@ -100,6 +108,8 @@ try
         Require(first.ImageSource is { PixelWidth: 12, PixelHeight: 120 }, "Portrait decoded beyond viewport bounds.");
         var second = await provider.CreatePreviewAsync(request, CancellationToken.None);
         Require(ReferenceEquals(first.ImageSource, second.ImageSource), "Unchanged image was not reused.");
+        var highDpi = await provider.CreatePreviewAsync(request with { DpiScaleX = 2, DpiScaleY = 2 }, CancellationToken.None);
+        Require(highDpi.ImageSource is { PixelWidth: 24, PixelHeight: 240 }, "DPI scaling did not update decode size.");
         var larger = await provider.CreatePreviewAsync(request with { TargetHeightDip = 480 }, CancellationToken.None);
         Require(larger.ImageSource is { PixelWidth: 48, PixelHeight: 480 }, "Larger viewport did not upgrade resolution.");
         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(1));

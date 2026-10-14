@@ -1531,6 +1531,16 @@ public partial class MainWindow
             }
             else
             {
+                var listView = GetFolderPaneListView(pane);
+                var scrollViewer = listView is null ? null : FindVisualChild<ScrollViewer>(listView);
+                var restoreKey = $"{workspaceSession.Id}|{pane.Id}|{targetState.Id}";
+                if (!_activeWorkspaceRestoreKeys.Contains(restoreKey)
+                    && WorkspacePaneViewReuse.CanPreserve(pane, listView, scrollViewer?.VerticalOffset, _settingsService.Settings.SortFoldersFirst))
+                {
+                    PerfLog.WriteVerbose($"workspace-pane-view-preserved switchId={switchId} paneId={pane.Id} stateId={targetState.Id}");
+                    continue;
+                }
+
                 WriteDiagLog($"event=pane-load-skip-restore-viewstate switchId={switchId} workspaceSessionId={workspaceSession.Id} paneId={pane.Id} paneHash={pane.GetHashCode()} path=\"{targetState.CurrentPath}\" stateId={targetState.Id} itemsCount={pane.FileList.Items.Count} loadedPath=\"{pane.FileList.LoadedPath ?? ""}\" loadedStateId=\"{pane.FileList.LoadedStateId ?? ""}\" firstItem=\"{GetPaneFirstItemPath(pane)}\"");
                 loadTasks.Add(RestoreWorkspacePaneStateAsync(pane, FileListRestorePolicy.ExactRestore, "workspace-switch", switchId));
             }

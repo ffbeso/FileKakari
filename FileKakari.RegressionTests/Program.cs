@@ -24,6 +24,47 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("workspace-live-view-reuse-boundaries", () => RunOnStaAsync(() =>
+    {
+        var path = Path.Combine(fixtures, "view-reuse.txt");
+        File.WriteAllText(path, "reuse");
+        var entry = FileEntry.FromFileBasic(new FileInfo(path));
+        var tab = new FolderTab(fixtures);
+        var pane = new FolderPane("reuse", new System.Collections.ObjectModel.ObservableCollection<FolderTab> { tab });
+        pane.FileList.ReplaceItems(fixtures, new[] { entry }, loadedStateId: tab.Id);
+        pane.FileList.ApplySort("Name", true, true);
+        tab.State.VerticalOffset = 120;
+        tab.State.SelectedPaths = new[] { path };
+        var view = new System.Windows.Controls.ListView { DataContext = pane, ItemsSource = pane.ItemsView };
+        view.SelectedItem = entry;
+        var resets = 0;
+        pane.ItemsView.CollectionChanged += (_, _) => resets++;
+        Require(WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "An unchanged live view should be preserved.");
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 0, true), "A reset scroll position still needs restoration.");
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, null, true), "A missing scroll viewer still needs restoration.");
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, false), "Changed folder ordering still needs restoration.");
+        view.SelectedItem = null;
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "Lost selection still needs restoration.");
+        view.SelectedItem = entry;
+        tab.State.SortAscending = false;
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "Changed sorting still needs restoration.");
+        tab.State.SortAscending = true;
+        tab.State.FilterText = "changed";
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "Changed filtering still needs restoration.");
+        tab.State.FilterText = "";
+        tab.State.GroupMode = GroupMode.Extension;
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "Changed grouping still needs restoration.");
+        tab.State.GroupMode = GroupMode.None;
+        tab.State.MarkPendingExternalChange();
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "External changes must not reuse the view.");
+        tab.State.ClearPendingExternalChange();
+        pane.IsLoading = true;
+        Require(!WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true), "An unfinished load must not reuse the view.");
+        pane.IsLoading = false;
+        Require(WorkspacePaneViewReuse.CanPreserve(pane, view, 120, true) && resets == 0,
+            "Reuse checks must leave the live collection view untouched.");
+    }));
+
     await CheckAsync("pane-activation-loaded-state-boundaries", () => RunOnStaAsync(() =>
     {
         var tab = new FolderTab(fixtures);

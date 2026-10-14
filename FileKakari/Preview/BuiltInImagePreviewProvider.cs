@@ -9,6 +9,9 @@ namespace FileKakari;
 
 public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
 {
+    // Shared by selection loads and resize loads. Cancellation removes obsolete waiters
+    // before they open a file; a codec already running is allowed to finish safely.
+    private static readonly SemaphoreSlim DecodeGate = new(1, 1);
     public const long MaxImageBytes = 32L * 1024 * 1024;
 
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -22,8 +25,18 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
         return ImageExtensions.Contains(extension);
     }
 
-    public Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
-        => Task.Run(() => CreatePreview(request, cancellationToken), cancellationToken);
+    public async Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
+    {
+        await DecodeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await Task.Run(() => CreatePreview(request, cancellationToken), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            DecodeGate.Release();
+        }
+    }
 
     private FilePreviewResult CreatePreview(PreviewRequest request, CancellationToken cancellationToken)
     {

@@ -67,6 +67,17 @@ try
         catch (OperationCanceledException) { return; }
         throw new InvalidOperationException("Cancelled text read completed without cancellation.");
     });
+    await CheckAsync("image-cancelled", async () =>
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        try
+        {
+            await new BuiltInImagePreviewProvider().CreatePreviewAsync(new PreviewRequest(Path.Combine(fixtures, "missing.png")), cts.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        throw new InvalidOperationException("Cancelled image request completed without cancellation.");
+    });
     await CheckAsync("image-fit-bounds", () =>
     {
         Require(ImagePreviewSizing.Fit(1000, 10000, 1000, 200) == (20, 200), "Portrait must fit height.");

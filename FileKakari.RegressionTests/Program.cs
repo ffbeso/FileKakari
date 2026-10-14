@@ -24,6 +24,38 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("bundled-theme-pairs-resources-and-contrast", () => RunOnStaAsync(() =>
+    {
+        var themeDirectory = Path.Combine(AppContext.BaseDirectory, "Themes");
+        var pairNames = new[] { "", "Graphite", "Cappuccino", "Forest", "Ocean", "Sakura", "Lavender", "Amber", "Rose", "Cyberpunk" };
+        var expectedKeys = new HashSet<string>();
+        foreach (var name in pairNames)
+        foreach (var mode in new[] { "Light", "Dark" })
+        {
+            var fileName = $"{name}{mode}Theme.xaml";
+            using var stream = File.OpenRead(Path.Combine(themeDirectory, fileName));
+            var dictionary = (System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Load(stream);
+            var keys = dictionary.Keys.Cast<string>().ToHashSet();
+            if (expectedKeys.Count == 0) expectedKeys = keys;
+            Require(expectedKeys.SetEquals(keys), $"Theme resources differ: {fileName}");
+            foreach (var key in new[] { "PanelBackground", "ControlBackground", "HeaderBackground", "RowHover", "TabBackground", "TabSelectedBackground" })
+            {
+                Require(ThemeContrast((Color)dictionary["TextColor"], (Color)dictionary[key + "Color"]) >= 4.5,
+                    $"Insufficient text contrast: {fileName}/{key}");
+            }
+            foreach (var key in new[] { "PanelBackground", "ControlBackground", "HeaderBackground" })
+                Require(ThemeContrast((Color)dictionary["SubtleTextColor"], (Color)dictionary[key + "Color"]) >= 4.5,
+                    $"Insufficient secondary text contrast: {fileName}/{key}");
+            foreach (var key in new[] { "SelectionBackground", "SelectionInactiveBackground" })
+                Require(ThemeContrast((Color)dictionary["SelectionTextColor"], (Color)dictionary[key + "Color"]) >= 4.5,
+                    $"Insufficient selection text contrast: {fileName}/{key}");
+            Require(ThemeContrast((Color)dictionary["ActivePaneAccentColor"], (Color)dictionary["PanelBackgroundColor"]) >= 3,
+                $"Insufficient active pane marker contrast: {fileName}");
+            Require(dictionary["PanelBackgroundBrush"] is SolidColorBrush && dictionary["ActivePaneAccentBrush"] is SolidColorBrush,
+                $"Required brushes missing: {fileName}");
+        }
+    }));
+
     await CheckAsync("pane-selection-colors-follow-active-pane", () => RunOnStaAsync(() =>
     {
         using var themeStream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", "ThemeResources.xaml"));
@@ -593,6 +625,19 @@ async Task CheckAsync(string name, Func<Task> check)
         checks.Add(new CheckResult(name, false, ex.ToString()));
         Console.Error.WriteLine($"FAIL {name}: {ex}");
     }
+}
+
+static double ThemeContrast(Color first, Color second)
+{
+    static double Linear(byte channel)
+    {
+        var value = channel / 255.0;
+        return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+    }
+    static double Luminance(Color color) => 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
+    var a = Luminance(first);
+    var b = Luminance(second);
+    return (Math.Max(a, b) + 0.05) / (Math.Min(a, b) + 0.05);
 }
 
 static void Require(bool condition, string message)

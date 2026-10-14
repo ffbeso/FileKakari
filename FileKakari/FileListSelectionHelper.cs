@@ -48,19 +48,19 @@ internal static class FileListSelectionHelper
         var start = Math.Min(anchorIndex, targetIndex);
         var end = Math.Max(anchorIndex, targetIndex);
 
-        if (!additive)
-        {
-            listView.SelectedItems.Clear();
-        }
+        var targetSelection = additive
+            ? new HashSet<FileEntry>(listView.SelectedItems.OfType<FileEntry>())
+            : new HashSet<FileEntry>();
 
         for (var i = start; i <= end; i++)
         {
-            if (listView.Items[i] is FileEntry item
-                && !listView.SelectedItems.Contains(item))
+            if (listView.Items[i] is FileEntry item)
             {
-                listView.SelectedItems.Add(item);
+                targetSelection.Add(item);
             }
         }
+
+        FileListRangeSelectionHelper.ApplySelection(listView, targetSelection);
     }
 
     public static bool PrepareRightClickSelection(ListView listView, FileEntry? clickedEntry)

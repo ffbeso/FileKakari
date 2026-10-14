@@ -24,6 +24,90 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("range-selection-deltas-and-visible-grouped-rows", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "range-selection");
+        Directory.CreateDirectory(folder);
+        var entries = Enumerable.Range(0, 300).Select(index =>
+        {
+            var path = Path.Combine(folder, $"{index:D4}.{(index % 2 == 0 ? "txt" : "log")}");
+            File.WriteAllText(path, "selection");
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var list = new System.Windows.Controls.ListView
+        {
+            ItemsSource = entries, Width = 400, Height = 240,
+            SelectionMode = System.Windows.Controls.SelectionMode.Extended
+        };
+        var assembly = typeof(FileEntry).Assembly;
+        var shift = assembly.GetType("FileKakari.FileListSelectionHelper")!.GetMethod("PerformShiftSelection")!;
+        var range = assembly.GetType("FileKakari.FileListRangeSelectionHelper")!.GetMethod("SelectItemsInRange")!;
+        void Shift(FileEntry? anchor, FileEntry target, bool additive = false) =>
+            shift.Invoke(null, new object?[] { list, anchor, target, additive });
+        void Expect(IEnumerable<FileEntry> expected) => Require(
+            list.SelectedItems.Cast<FileEntry>().ToHashSet().SetEquals(expected), "Selection differs from requested range.");
+        var added = 0;
+        var removed = 0;
+        list.SelectionChanged += (_, e) => { added += e.AddedItems.Count; removed += e.RemovedItems.Count; };
+        Shift(entries[0], entries[199]);
+        Expect(entries.Take(200));
+        added = removed = 0;
+        Shift(entries[0], entries[199]);
+        Require(added == 0 && removed == 0, "Unchanged Shift range reselected rows.");
+        Shift(entries[0], entries[209]);
+        Require(added == 10 && removed == 0, "Growing range changed retained selections.");
+        Shift(entries[29], entries[10]);
+        Expect(entries.Skip(10).Take(20));
+        Shift(entries[99], entries[90], true);
+        Expect(entries.Skip(10).Take(20).Concat(entries.Skip(90).Take(10)));
+        Shift(null, entries[299]);
+        Require(list.SelectedItems.Contains(entries[299]), "Missing anchor fallback lost the target.");
+
+        // View order, not source order, defines Shift selection after sorting/filtering.
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(entries);
+        view.Filter = item => ((FileEntry)item).Name.EndsWith(".txt", StringComparison.Ordinal);
+        view.SortDescriptions.Add(new System.ComponentModel.SortDescription(nameof(FileEntry.Name), System.ComponentModel.ListSortDirection.Descending));
+        var ordered = view.Cast<FileEntry>().ToArray();
+        Shift(ordered[2], ordered[12]);
+        Expect(ordered.Skip(2).Take(11));
+        view.Filter = null;
+        view.SortDescriptions.Clear();
+
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizing(list, true);
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+        System.Windows.Controls.ScrollViewer.SetCanContentScroll(list, true);
+        // A presentation source is needed for the same IsVisible checks as the app.
+        var host = new System.Windows.Window
+        {
+            Content = list, Width = 420, Height = 280, Opacity = 0,
+            ShowActivated = false, ShowInTaskbar = false
+        };
+        try
+        {
+            host.Show();
+            foreach (var grouped in new[] { false, true })
+            {
+                if (grouped) view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
+                list.Measure(new System.Windows.Size(400, 240));
+                list.Arrange(new System.Windows.Rect(0, 0, 400, 240));
+                list.UpdateLayout();
+                list.SelectedItems.Clear();
+                range.Invoke(null, new object[] { list, new System.Windows.Rect(0, 0, 400, 240), false, new HashSet<FileEntry>() });
+                Require(list.SelectedItems.Count > 0 && list.SelectedItems.Count < entries.Length,
+                    $"Rectangle selection failed to select visible rows (grouped={grouped}).");
+                var visible = list.SelectedItems.Cast<FileEntry>().ToHashSet();
+                added = removed = 0;
+                range.Invoke(null, new object[] { list, new System.Windows.Rect(0, 0, 400, 240), false, new HashSet<FileEntry>() });
+                Require(added == 0 && removed == 0, "Stationary rectangle reselected rows.");
+                range.Invoke(null, new object[] { list, new System.Windows.Rect(-100, -100, 1, 1), true, visible });
+                Expect(visible);
+                range.Invoke(null, new object[] { list, new System.Windows.Rect(-100, -100, 1, 1), false, visible });
+                Expect(Array.Empty<FileEntry>());
+            }
+        }
+        finally { host.Close(); }
+    }));
+
     await CheckAsync("group-switch-after-layout-keeps-virtualization-mode", () => RunOnStaAsync(() =>
     {
         var path = Path.Combine(fixtures, "virtualization.txt");

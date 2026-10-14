@@ -976,7 +976,7 @@ public partial class MainWindow
         string RequestId,
         int Generation);
 
-    private PreviewDisplayKey? TryCreatePreviewDisplayKey(string path)
+    private PreviewDisplayKey? TryCreatePreviewDisplayKey(FileEntry entry)
     {
         var pane = GetActiveFolderPane();
         if (pane is null)
@@ -985,7 +985,7 @@ public partial class MainWindow
         }
 
         var session = FindSessionContainingPane(pane) ?? _activeWorkspaceSession;
-        if (session is null || !TryGetPreviewFileRevision(path, out var normalizedPath, out var revision))
+        if (session is null || entry.Size is null)
         {
             return null;
         }
@@ -994,32 +994,10 @@ public partial class MainWindow
             session.Id,
             pane.Id,
             pane.ActiveTabState?.Id,
-            normalizedPath,
+            Path.GetFullPath(entry.FullPath),
             PreviewKind: null,
             PreviewPaneVisible: IsPreviewPaneActuallyVisible,
-            revision);
-    }
-
-    private static bool TryGetPreviewFileRevision(string path, out string normalizedPath, out PreviewFileRevision revision)
-    {
-        normalizedPath = "";
-        revision = default!;
-        try
-        {
-            normalizedPath = Path.GetFullPath(path);
-            var fileInfo = new FileInfo(normalizedPath);
-            if (!fileInfo.Exists)
-            {
-                return false;
-            }
-
-            revision = new PreviewFileRevision(fileInfo.LastWriteTimeUtc.Ticks, fileInfo.Length);
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            return false;
-        }
+            new PreviewFileRevision(entry.ModifiedAt.ToUniversalTime().Ticks, entry.Size.Value));
     }
 
     private bool TrySuppressDuplicatePreviewRequest(PreviewDisplayKey requestedKey, string source)
@@ -1123,7 +1101,7 @@ public partial class MainWindow
         PreviewDisplayKey? requestedKey = null;
         if (selectedEntries.Count == 1 && !selectedEntries[0].IsDirectory)
         {
-            requestedKey = TryCreatePreviewDisplayKey(selectedEntries[0].FullPath);
+            requestedKey = TryCreatePreviewDisplayKey(selectedEntries[0]);
             if (!forcedRefresh
                 && requestedKey is not null
                 && TrySuppressDuplicatePreviewRequest(requestedKey, source))

@@ -22,7 +22,10 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
         return ImageExtensions.Contains(extension);
     }
 
-    public async Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
+    public Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
+        => Task.Run(() => CreatePreview(request, cancellationToken), cancellationToken);
+
+    private FilePreviewResult CreatePreview(PreviewRequest request, CancellationToken cancellationToken)
     {
         try
         {
@@ -58,7 +61,7 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var (bitmap, metrics) = await Task.Run(() =>
+            (BitmapImage, (double openMs, double decodeMs, double freezeMs, int originalWidth, int originalHeight)) Decode()
             {
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -105,7 +108,8 @@ public sealed class BuiltInImagePreviewProvider : IFilePreviewProvider
                 var freezeMs = stopwatch.Elapsed.TotalMilliseconds;
 
                 return (bitmapImage, (openMs, decodeMs, freezeMs, originalWidth: frame.PixelWidth, originalHeight: frame.PixelHeight));
-            }, cancellationToken).ConfigureAwait(false);
+            }
+            var (bitmap, metrics) = Decode();
 
             cancellationToken.ThrowIfCancellationRequested();
 

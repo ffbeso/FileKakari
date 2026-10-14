@@ -24,6 +24,39 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("adaptive-ui-batch-budget-and-load-isolation", () =>
+    {
+        var sizer = new AdaptiveBatchSizer();
+        Require(sizer.NextSize == 64, "First display must retain the small initial batch.");
+        for (var i = 0; i < 20; i++) sizer.Observe(sizer.NextSize, 1);
+        Require(sizer.NextSize == 2048, "Cheap UI updates must grow to the bounded throughput limit.");
+        sizer.Observe(2048, 24);
+        Require(sizer.NextSize < 2048, "An over-budget UI update must reduce the next batch.");
+        var stableSize = sizer.NextSize;
+        sizer.Observe(stableSize, 6);
+        Require(sizer.NextSize == stableSize, "Normal timing variation must not oscillate the batch size.");
+        for (var i = 0; i < 20; i++) sizer.Observe(sizer.NextSize, 40);
+        Require(sizer.NextSize == 64, "Heavy UI updates must retain a nonzero lower bound.");
+        sizer.Observe(0, 0);
+        sizer.Observe(2048, double.NaN);
+        sizer.Observe(2048, double.PositiveInfinity);
+        Require(sizer.NextSize == 64, "Skipped or invalid measurements must not change the budget.");
+        sizer.Observe(64, 0);
+        Require(sizer.NextSize > 64 && new AdaptiveBatchSizer().NextSize == 64, "A new load must not inherit another load's feedback.");
+
+        var rows = Enumerable.Range(0, 10003).ToArray();
+        var published = new List<int>();
+        for (var offset = 0; offset < rows.Length;)
+        {
+            var count = Math.Min(sizer.NextSize, rows.Length - offset);
+            published.AddRange(rows.AsSpan(offset, count).ToArray());
+            offset += count;
+            sizer.Observe(count, offset % 3 == 0 ? 16 : 1);
+        }
+        Require(rows.SequenceEqual(published), "Changing batch boundaries must not drop, duplicate or reorder entries.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("theme-upgrade-preserves-custom-edits", () =>
     {
         var source = Path.Combine(fixtures, "new-theme.xaml");

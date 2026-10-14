@@ -19,8 +19,6 @@ public partial class MainWindow : Window
 {
     private static readonly object CrashContextGate = new();
     private static string _crashContextSnapshot = "reason=not-initialized stateId= activeStateId= loadingStateId= selectedIndex=-1 tabCount=0";
-    private const int InitialBatchSize = 64;
-    private const int SubsequentBatchSize = 2048;
     private const string TabDragFormat = "FileKakari.WorkspaceSession";
     private const string SubTabDragFormat = "FileKakari.FolderPaneSubTab";
     private const string FileDragFormat = "FileKakari.FileEntries";
@@ -877,13 +875,14 @@ public partial class MainWindow : Window
         var extraColumnsEnabled = ShouldLoadExtraColumns(sortColumn);
         var enumerateMilliseconds = 0L;
         ClearItemsSort();
-        _performanceLogger.Write($"load-start id={loadId} stateId={loadState.Id} paneId={loadState.PaneId} path=\"{path}\" viewMode={loadState.ViewMode} sort={sortColumn}:{sortAscending} sortEnabled={_devListPerfOptions.SortEnabled} shellIcons={_devListPerfOptions.ShellIconsEnabled} statusAggregation={_devListPerfOptions.StatusAggregationEnabled} extraColumns={extraColumnsEnabled} initialBatch={InitialBatchSize} subsequentBatch={SubsequentBatchSize}");
+        _performanceLogger.Write($"load-start id={loadId} stateId={loadState.Id} paneId={loadState.PaneId} path=\"{path}\" viewMode={loadState.ViewMode} sort={sortColumn}:{sortAscending} sortEnabled={_devListPerfOptions.SortEnabled} shellIcons={_devListPerfOptions.ShellIconsEnabled} statusAggregation={_devListPerfOptions.StatusAggregationEnabled} extraColumns={extraColumnsEnabled} initialBatch={AdaptiveBatchSizer.MinimumSize} maxBatch={AdaptiveBatchSizer.MaximumSize} targetUiMs={AdaptiveBatchSizer.TargetMilliseconds}");
 
         try
         {
             await Task.Run(async () =>
             {
-                var batchSize = InitialBatchSize;
+                var batchSizer = new AdaptiveBatchSizer();
+                var batchSize = batchSizer.NextSize;
                 var batch = new List<FileEntry>(batchSize);
                 var enumerateStopwatch = Stopwatch.StartNew();
 
@@ -901,15 +900,15 @@ public partial class MainWindow : Window
 
                     if (batch.Count >= batchSize)
                     {
-                        await AddBatchAsync(batch, token, loadId, loadState, stopwatch);
-                        batchSize = SubsequentBatchSize;
+                        await AddBatchAsync(batch, token, loadId, loadState, stopwatch, batchSizer);
+                        batchSize = batchSizer.NextSize;
                         batch = new List<FileEntry>(batchSize);
                     }
                 }
 
                 if (batch.Count > 0)
                 {
-                    await AddBatchAsync(batch, token, loadId, loadState, stopwatch);
+                    await AddBatchAsync(batch, token, loadId, loadState, stopwatch, batchSizer);
                 }
 
                 enumerateMilliseconds = enumerateStopwatch.ElapsedMilliseconds;
@@ -1173,7 +1172,8 @@ public partial class MainWindow : Window
         CancellationToken token,
         int loadId,
         WorkspaceTabState loadState,
-        Stopwatch stopwatch)
+        Stopwatch stopwatch,
+        AdaptiveBatchSizer batchSizer)
     {
         var waitForFirstDisplay = false;
         var isFirstBatch = !_firstBatchDisplayed;
@@ -1207,6 +1207,10 @@ public partial class MainWindow : Window
             SetNormalStatusText(_text.Format("LoadingProgress", _items.Count, stopwatch.ElapsedMilliseconds));
             statusStopwatch.Stop();
             _statusSummaryCoordinator.RecordLoadingProgressSummary(statusStopwatch.ElapsedMilliseconds);
+
+            var uiMilliseconds = bindStopwatch.Elapsed.TotalMilliseconds + statusStopwatch.Elapsed.TotalMilliseconds;
+            batchSizer.Observe(batch.Count, uiMilliseconds);
+            _performanceLogger.Write($"load-batch-budget id={loadId} batchItems={batch.Count} uiMs={uiMilliseconds:F2} nextBatch={batchSizer.NextSize} targetUiMs={AdaptiveBatchSizer.TargetMilliseconds}");
 
             if (bindResult.IsFirstBatch)
             {

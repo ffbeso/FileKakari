@@ -327,4 +327,7 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>An unknown load error occurred.</value></data>
   <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Session Error</value></data>
   <data name="ContextOpenWith" xml:space="preserve"><value>Open with...</value></data>
+  <data name="CopyReparsePointUnsupported" xml:space="preserve">
+    <value>Copying folders containing links or junctions is not supported: {0}</value>
+  </data>
 </root>

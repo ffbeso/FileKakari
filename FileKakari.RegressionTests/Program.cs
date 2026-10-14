@@ -140,6 +140,34 @@ try
         Require(FolderWatchService.NormalizeFolderPath(@"\\server\share\") == @"\\server\share", "UNC root changed.");
         return Task.CompletedTask;
     });
+    await CheckAsync("copy-rejects-junction-cycle", async () =>
+    {
+        var source = Path.Combine(fixtures, "junction-source");
+        Directory.CreateDirectory(source);
+        File.WriteAllText(Path.Combine(source, "keep.txt"), "unchanged");
+        var link = Path.Combine(source, "parent-link");
+        var start = new System.Diagnostics.ProcessStartInfo("powershell.exe")
+        {
+            UseShellExecute = false, CreateNoWindow = true,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden, RedirectStandardError = true
+        };
+        foreach (var arg in new[] { "-NoProfile", "-NonInteractive", "-Command",
+            "$ErrorActionPreference='Stop'; $null=New-Item -ItemType Junction -Path $env:TEST_LINK -Target $env:TEST_TARGET" }) start.ArgumentList.Add(arg);
+        start.Environment["TEST_LINK"] = link;
+        start.Environment["TEST_TARGET"] = source;
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var error = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        Require(process.ExitCode == 0, "Could not create test junction: " + await error);
+        try
+        {
+            var result = await FileSystemOperations.CopySelfMultipleAsync([source], fixtures);
+            Require(result.Error is IOException && result.ExecutedPaths.Count == 0, "Junction cycle was not rejected.");
+            Require(File.ReadAllText(Path.Combine(source, "keep.txt")) == "unchanged", "Source changed.");
+            Require(Directory.GetDirectories(fixtures, "junction-source*").Length == 1, "Partial copy created before rejecting junction.");
+        }
+        finally { Directory.Delete(link); } // Remove only the link, never recurse into its target.
+    });
     await CheckAsync("session-invalid-json", () =>
     {
         var path = Path.Combine(fixtures, "broken-session.json");

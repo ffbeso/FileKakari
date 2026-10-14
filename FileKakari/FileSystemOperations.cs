@@ -93,6 +93,7 @@ public static class FileSystemOperations
 
             if (isDirectory)
             {
+                ValidateDirectoryCopy(sourcePath, targetPath);
                 CopyDirectory(sourcePath, targetPath);
                 return;
             }
@@ -157,6 +158,7 @@ public static class FileSystemOperations
 
     private static void CopyDirectory(string sourcePath, string targetPath)
     {
+        RejectReparsePoint(sourcePath);
         var sourceFullPath = EnsureTrailingSeparator(Path.GetFullPath(sourcePath));
         var targetFullPath = EnsureTrailingSeparator(Path.GetFullPath(targetPath));
         if (targetFullPath.StartsWith(sourceFullPath, StringComparison.OrdinalIgnoreCase))
@@ -168,6 +170,7 @@ public static class FileSystemOperations
 
         foreach (var filePath in Directory.EnumerateFiles(sourcePath))
         {
+            RejectReparsePoint(filePath);
             var fileName = Path.GetFileName(filePath);
             File.Copy(filePath, Path.Combine(targetPath, fileName), overwrite: false);
         }
@@ -177,6 +180,36 @@ public static class FileSystemOperations
             var directoryName = Path.GetFileName(directoryPath);
             CopyDirectory(directoryPath, Path.Combine(targetPath, directoryName));
         }
+    }
+
+    private static void ValidateDirectoryCopy(string sourcePath, string targetPath)
+    {
+        // Reject aliases before creating any output. Recheck entries while copying as well.
+        foreach (var path in new[] { sourcePath, Path.GetDirectoryName(Path.GetFullPath(targetPath))! })
+        {
+            for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
+                RejectReparsePoint(directory.FullName);
+        }
+        var pending = new Stack<string>();
+        pending.Push(sourcePath);
+        while (pending.TryPop(out var directory))
+        {
+            RejectReparsePoint(directory);
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+            {
+                var attributes = File.GetAttributes(entry);
+                RejectReparsePoint(entry, attributes);
+                if ((attributes & FileAttributes.Directory) != 0) pending.Push(entry);
+            }
+        }
+    }
+
+    private static void RejectReparsePoint(string path) => RejectReparsePoint(path, File.GetAttributes(path));
+
+    private static void RejectReparsePoint(string path, FileAttributes attributes)
+    {
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            throw new IOException(AppStrings.Format("CopyReparsePointUnsupported", path));
     }
 
     private static string EnsureTrailingSeparator(string path)
@@ -391,6 +424,7 @@ public static class FileSystemOperations
 
                     if (isDirectory)
                     {
+                        ValidateDirectoryCopy(sourcePath, targetPath);
                         CopyDirectory(sourcePath, targetPath);
                     }
                     else

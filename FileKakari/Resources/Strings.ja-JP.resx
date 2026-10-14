@@ -327,4 +327,7 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="NamedSessionLoadUnknown" xml:space="preserve"><value>不明な読み込みエラーが発生しました。</value></data>
   <data name="NamedSessionErrorTitle" xml:space="preserve"><value>Sessionエラー</value></data>
   <data name="ContextOpenWith" xml:space="preserve"><value>プログラムから開く...</value></data>
+  <data name="CopyReparsePointUnsupported" xml:space="preserve">
+    <value>リンクまたはジャンクションを含むフォルダのコピーには対応していません: {0}</value>
+  </data>
 </root>

@@ -2425,7 +2425,7 @@ public partial class MainWindow
         var context = GetActiveNavigationContext(pane);
         if (context.Pane is not null && context.Tab is { } tab)
         {
-            await ReloadFolderPanesShowingPathAsync(tab.Navigation.CurrentPath, context.Pane);
+            await ReloadFolderPaneAsync(context.Pane);
         }
     }
 

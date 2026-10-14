@@ -262,7 +262,7 @@ public partial class MainWindow
         var context = GetActiveNavigationContext();
         if (context.Pane is { } pane && context.Tab is { } tab)
         {
-            await ReloadFolderPanesShowingPathAsync(tab.Navigation.CurrentPath, pane);
+            await ReloadFolderPaneAsync(pane);
             RefreshPreviewForActiveSelection(
                 "explicit-folder-refresh",
                 explicitlyRequested: true,

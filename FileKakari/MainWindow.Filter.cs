@@ -69,7 +69,7 @@ public partial class MainWindow
                 return false;
             }
 
-            ItemsView.Filter = null;
+            CollectionViewUpdate.SetFilterAndRefresh(ItemsView, null);
             _itemsFilterEnabled = false;
             return true;
         }
@@ -77,7 +77,7 @@ public partial class MainWindow
         // Keep the predicate bound to the tab state supplied by the caller.
         // FilterBox is only the editor for the active pane and must not decide
         // how a reload or watcher update filters its collection.
-        ItemsView.Filter = item => FilterEntry(item, filter);
+        CollectionViewUpdate.SetFilterAndRefresh(ItemsView, item => FilterEntry(item, filter));
         _itemsFilterEnabled = true;
         return true;
     }
@@ -364,8 +364,7 @@ public partial class MainWindow
     {
         var state = ActiveTabState;
         var stopwatch = Stopwatch.StartNew();
-        UpdateItemsFilter(filter);
-        RefreshItemsView($"filter-{reason}");
+        if (!UpdateItemsFilter(filter)) RefreshItemsView($"filter-{reason}");
         stopwatch.Stop();
         _statusSummaryCoordinator.StatusMessagePrefix = null;
         RefreshCurrentFolderSummary();
@@ -418,8 +417,7 @@ public partial class MainWindow
                 }
             }
 
-            UpdateItemsFilter(filter);
-            RefreshItemsView($"pane-filter-refresh-{source}");
+            if (!UpdateItemsFilter(filter)) RefreshItemsView($"pane-filter-refresh-{source}");
             if (ReferenceEquals(pane, GetNormalFolderPane()))
             {
                 RefreshCurrentFolderSummary();
@@ -481,13 +479,7 @@ public partial class MainWindow
 
     private static int CountVisibleItems(System.ComponentModel.ICollectionView itemsView)
     {
-        var count = 0;
-        foreach (var _ in itemsView)
-        {
-            count++;
-        }
-
-        return count;
+        return CollectionViewUpdate.Count(itemsView);
     }
 
     private void FocusPaneFilterBox()

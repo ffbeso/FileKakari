@@ -24,6 +24,45 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("wpf-filter-single-refresh-and-count", () => RunOnStaAsync(() =>
+    {
+        var items = new BulkObservableCollection<int> { 1, 2, 3 };
+        var view = new System.Windows.Data.ListCollectionView(items);
+        var resets = 0;
+        ((System.Collections.Specialized.INotifyCollectionChanged)view).CollectionChanged += (_, _) => resets++;
+        var calls = 0;
+        var minimum = 2;
+        Predicate<object> filter = item => { calls++; return (int)item >= minimum; };
+        CollectionViewUpdate.SetFilterAndRefresh(view, filter);
+        Require(resets == 1 && calls == 3 && CollectionViewUpdate.Count(view) == 2, "Filter evaluated more than once or count is incorrect.");
+        minimum = 3;
+        CollectionViewUpdate.SetFilterAndRefresh(view, filter);
+        Require(resets == 2 && calls == 6 && CollectionViewUpdate.Count(view) == 1, "Reused predicate did not refresh changed data.");
+        CollectionViewUpdate.SetFilterAndRefresh(view, null);
+        Require(resets == 3 && CollectionViewUpdate.Count(view) == 3, "Clearing filter did not restore all items in one refresh.");
+        items.ReplaceAll(new[] { 4, 5 });
+        Require(resets == 4 && CollectionViewUpdate.Count(view) == 2, "Collection replacement did not update the view once.");
+    }));
+
+    await CheckAsync("wpf-pane-replace-preserves-sort-filter", () => RunOnStaAsync(() =>
+    {
+        var path = Path.Combine(fixtures, "view-a.txt");
+        File.WriteAllText(path, "a");
+        var first = FileEntry.FromFileBasic(new FileInfo(path));
+        var secondPath = Path.Combine(fixtures, "view-b.txt");
+        File.WriteAllText(secondPath, "bb");
+        var second = FileEntry.FromFileBasic(new FileInfo(secondPath));
+        var state = new FileListState();
+        state.ApplySort("Name", false, true);
+        CollectionViewUpdate.SetFilterAndRefresh(state.ItemsView, item => ((FileEntry)item).Name.EndsWith(".txt"));
+        var notifications = 0;
+        state.ItemsView.CollectionChanged += (_, _) => notifications++;
+        state.ReplaceItems(fixtures, new[] { first, second });
+        Require(notifications == 1 && state.ItemsView.Cast<FileEntry>().SequenceEqual(new[] { second, first }), "Pane replacement lost sort/filter or refreshed multiple times.");
+        state.ReplaceItems(fixtures, Array.Empty<FileEntry>());
+        Require(notifications == 2 && CollectionViewUpdate.Count(state.ItemsView) == 0, "Empty pane retained stale rows.");
+    }));
+
     await CheckAsync("collection-replace-single-reset", () =>
     {
         var items = new BulkObservableCollection<int> { 1, 2, 3 };
@@ -388,6 +427,20 @@ async Task CheckAsync(string name, Func<Task> check)
 static void Require(bool condition, string message)
 {
     if (!condition) throw new InvalidOperationException(message);
+}
+
+static Task RunOnStaAsync(Action action)
+{
+    var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var thread = new Thread(() =>
+    {
+        try { action(); completion.SetResult(); }
+        catch (Exception ex) { completion.SetException(ex); }
+        finally { System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown(); }
+    }) { IsBackground = true };
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    return completion.Task;
 }
 
 internal sealed record CheckResult(string Name, bool Passed, string? Error);

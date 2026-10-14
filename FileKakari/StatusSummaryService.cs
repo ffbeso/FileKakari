@@ -103,12 +103,6 @@ internal sealed class StatusSummaryService
 
     private static int GetVisibleItemCount(ICollectionView itemsView)
     {
-        var count = 0;
-        foreach (var _ in itemsView)
-        {
-            count++;
-        }
-
-        return count;
+        return CollectionViewUpdate.Count(itemsView);
     }
 }

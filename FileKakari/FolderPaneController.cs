@@ -284,16 +284,14 @@ sealed class FolderPaneController
         pane.FileList.SetDisplayFilterText(filter);
         if (string.IsNullOrWhiteSpace(filter))
         {
-            pane.FileList.ItemsView.Filter = null;
+            CollectionViewUpdate.SetFilterAndRefresh(pane.FileList.ItemsView, null);
         }
         else
         {
-            pane.FileList.ItemsView.Filter = item =>
+            CollectionViewUpdate.SetFilterAndRefresh(pane.FileList.ItemsView, item =>
                 item is FileEntry entry
-                && entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase);
+                && entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase));
         }
-
-        pane.FileList.ItemsView.Refresh();
     }
 
     internal void UpdateStatus(FolderPane pane)

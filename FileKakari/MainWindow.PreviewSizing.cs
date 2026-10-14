@@ -56,6 +56,7 @@ public partial class MainWindow
                 || result.Status != FilePreviewStatus.Success || result.ImageSource is null) return;
             _displayedImagePreview = result;
             PreviewImage.Source = result.ImageSource;
+            QueueImagePreviewResize();
         }
         catch (OperationCanceledException) { }
     }

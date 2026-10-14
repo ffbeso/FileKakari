@@ -404,6 +404,10 @@ public partial class MainWindow
 
     private void InitializePreviewPaneSizeFromSettings()
     {
+        if (ItemsListHost.Parent is FrameworkElement layout)
+        {
+            layout.SizeChanged += (_, _) => ConstrainPreviewPaneToLayout();
+        }
         _previewPaneWidth = new GridLength(GetValidPreviewPaneSize(
             _settingsService.Settings.PreviewPaneWidth,
             DefaultPreviewPaneWidth));
@@ -411,6 +415,24 @@ public partial class MainWindow
             _settingsService.Settings.PreviewPaneHeight,
             DefaultPreviewPaneHeight));
         SyncPreviewPaneSizeToSettings(_settingsService.Settings);
+    }
+
+    private void ConstrainPreviewPaneToLayout()
+    {
+        if (_isPreviewMaximized || !IsPreviewPaneActuallyVisible) return;
+        var placement = AppSettings.NormalizePreviewPanePlacement(_settingsService.Settings.PreviewPanePlacement);
+        if (placement == PreviewPanePlacement.Right)
+        {
+            var width = ClampPreviewPaneSize(PreviewPaneColumn.Width.Value, placement);
+            if (Math.Abs(width - PreviewPaneColumn.Width.Value) > 0.5)
+                PreviewPaneColumn.Width = new GridLength(width);
+        }
+        else
+        {
+            var height = ClampPreviewPaneSize(PreviewPaneRow.Height.Value, placement);
+            if (Math.Abs(height - PreviewPaneRow.Height.Value) > 0.5)
+                PreviewPaneRow.Height = new GridLength(height);
+        }
     }
 
     private GridLength GetPreviewPaneWidthLength()

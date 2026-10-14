@@ -1348,7 +1348,7 @@
                                                                                         <Binding Path="DataContext.SelectedTabId" RelativeSource="{RelativeSource AncestorType=ListBox}" />
                                                                                     </MultiBinding>
                                                                                 </DataTrigger.Binding>
-                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
+                                                                                <Setter TargetName="SelectedTabAccentLine" Property="Background" Value="{DynamicResource SubtleTextBrush}" />
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Opacity" Value="0.9" />
                                                                             </DataTrigger>
                                                                             <MultiDataTrigger>
@@ -1380,7 +1380,7 @@
                                                                                 </MultiDataTrigger.Conditions>
                                                                                 <Setter TargetName="SelectedTabAccentLine" Property="Visibility" Value="Collapsed" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Visibility" Value="Visible" />
-                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource InactivePaneAccentBrush}" />
+                                                                                <Setter TargetName="SelectedTabVerticalAccentLine" Property="Background" Value="{DynamicResource SubtleTextBrush}" />
                                                                                 <Setter TargetName="SelectedTabVerticalAccentLine" Property="Opacity" Value="0.9" />
                                                                             </MultiDataTrigger>
                                                                             <MultiDataTrigger>

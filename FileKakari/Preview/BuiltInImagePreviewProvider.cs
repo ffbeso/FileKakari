@@ -134,7 +134,7 @@ public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
                 var totalMs = metrics.openMs + metrics.decodeMs + metrics.freezeMs;
                 var decodedPixels = $"{bitmap.PixelWidth}x{bitmap.PixelHeight}";
                 var requestedMaxPixels = $"{targetWidthPx}x{targetHeightPx}";
-                PreviewDiagnostics.Verbose("PreviewImage", $"Load\r\npath=\"{request.FilePath}\"\r\nfileBytes={fileInfo.Length}\r\ndecodedPixels=\"{decodedPixels}\"\r\nrequestedMaxPixels=\"{requestedMaxPixels}\"\r\ndecodePixelWidth={targetWidthPx}\r\ndecodePixelHeight=0\r\nopenMs={metrics.openMs:F1}\r\ndecodeMs={metrics.decodeMs:F1}\r\nfreezeMs={metrics.freezeMs:F1}\r\ntotalMs={totalMs:F1}\r\ncancelled=false\r\ngeneration={request.Generation}");
+                PreviewDiagnostics.Verbose("PreviewImage", $"Load\r\npath=\"{request.FilePath}\"\r\nfileBytes={fileInfo.Length}\r\ndecodedPixels=\"{decodedPixels}\"\r\nrequestedMaxPixels=\"{requestedMaxPixels}\"\r\ndecodePixelWidth={bitmap.DecodePixelWidth}\r\ndecodePixelHeight={bitmap.DecodePixelHeight}\r\nopenMs={metrics.openMs:F1}\r\ndecodeMs={metrics.decodeMs:F1}\r\nfreezeMs={metrics.freezeMs:F1}\r\ntotalMs={totalMs:F1}\r\ncancelled=false\r\ngeneration={request.Generation}");
             }
 
             var result = new FilePreviewResult(FilePreviewStatus.Success, FilePreviewKind.Image, ImageSource: bitmap, FileInfo: fileInfoResult,
@@ -148,7 +148,7 @@ public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
         {
             throw;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidOperationException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidOperationException or FileFormatException)
         {
             return new FilePreviewResult(FilePreviewStatus.Failed, FilePreviewKind.Image, ErrorMessage: ex.Message);
         }

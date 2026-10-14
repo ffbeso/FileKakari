@@ -119,6 +119,13 @@ try
         var missing = await provider.CreatePreviewAsync(request, CancellationToken.None);
         Require(missing.Status == FilePreviewStatus.Missing, "Deleted image was served from cache.");
     });
+    await CheckAsync("image-corrupt", async () =>
+    {
+        var path = Path.Combine(fixtures, "corrupt.png");
+        await File.WriteAllTextAsync(path, "not an image");
+        var result = await new BuiltInImagePreviewProvider().CreatePreviewAsync(new PreviewRequest(path), CancellationToken.None);
+        Require(result.Status == FilePreviewStatus.Failed, "Corrupt image did not produce a failure result.");
+    });
     await CheckAsync("image-decode", async () =>
     {
         var path = Path.Combine(fixtures, "image.png");

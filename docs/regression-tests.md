@@ -59,6 +59,23 @@ pwsh -NoProfile -File ./run_regression_test.ps1 -Configuration Release -TimeoutS
 親プロセスの環境変数も変更しません。タイムアウト時に終了するのは、このスクリプトが起動した
 テストプロセスとその子だけです。既に起動しているFileKakari、Explorer、Preview Handlerは終了しません。
 
+## Excel / ShellプレビューのDPI・リサイズ確認
+
+自動テスト `preview-host-parent-dpi-and-native-resize` は、非表示のネイティブ親ウィンドウを使い、
+親と異なるDPIスレッドからのホスト作成、DPIコンテキストの復元、拡大・縮小、再接続、
+GC後のウィンドウコールバックを確認します。Office自体は起動しません。
+
+実操作では、複数シートのExcelファイルをF3でプレビューし、次を確認してください。
+
+* Windowsの表示倍率100%・125%・150%で、シートバーと水平スクロールバーが下端に収まり、表示位置をクリックできる。
+* ペインの縦横サイズ変更、F3での再表示、別ファイル選択、Workspace切り替え後もサイズが追従する。
+* 異なる倍率のモニター間を移動しても、右端・下端の余白やクリック位置のずれが発生しない。
+* Word・PDFなど他のShell Preview Handlerでも表示・リサイズが維持される。
+
+診断時は起動前に `FILEKAKARI_PERF_LOG` を書き込み可能なログパスに設定します。
+`DPI.Attach` の親・ホストのコンテキスト/DPI、`DPI.Resize` の要求サイズ・実クライアントサイズを比較してください。
+このログで追えるのはホスト境界です。Excel内部の子ウィンドウやOfficeのバージョン依存の描画は実操作で確認が必要です。
+
 このテストはサービス層の回帰テストです。Shell Preview Handler／PowerToys／WebView2の表示、
 PDF・動画・音声の再生、WPF上の選択・スクロール・Workspace復元は別途実操作で確認してください。
 旧スクリプトの `FILEKAKARI_AUTO_TEST` は本体に実装がなく、破損したPDF／メディアを置いても

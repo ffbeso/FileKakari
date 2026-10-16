@@ -9,10 +9,11 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
-        // 1. Match DPI Awareness with FileKakari (PerMonitorV2)
+        // Default only. Each hosted window/COM action matches the actual parent context.
         try
         {
-            NativeMethods.SetProcessDpiAwarenessContext(NativeMethods.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            if (!NativeMethods.SetProcessDpiAwarenessContext(NativeMethods.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+                HostPerfLog.Write($"[DPI] Process default unchanged error={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
         }
         catch
         {

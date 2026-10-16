@@ -37,6 +37,7 @@ public sealed class PreviewHostServer : IDisposable
 
     private IntPtr _hostHwnd = IntPtr.Zero;
     private IntPtr _parentHwnd = IntPtr.Zero;
+    private readonly NativeMethods.WndProcDelegate _windowProc;
     private int _currentWidth = 400;
     private int _currentHeight = 300;
     private double _currentDpiX = 1.0;
@@ -50,6 +51,7 @@ public sealed class PreviewHostServer : IDisposable
         _pipeName = pipeName;
         _expectedParentPid = parentPid;
         _expectedSessionToken = sessionToken;
+        _windowProc = WndProc;
     }
 
     public void SetStaThreadId(uint threadId)
@@ -63,6 +65,7 @@ public sealed class PreviewHostServer : IDisposable
         {
             try
             {
+                using var dpiContext = new WindowDpiContext(_hostHwnd);
                 action();
             }
             catch (Exception ex)
@@ -412,6 +415,12 @@ public sealed class PreviewHostServer : IDisposable
 
     private void AttachToParent(IntPtr parentHwnd, int widthPx, int heightPx, double dpiX, double dpiY)
     {
+        using var dpiContext = new WindowDpiContext(parentHwnd);
+        var parentContext = NativeMethods.GetWindowDpiAwarenessContext(parentHwnd);
+        if (_hostHwnd != IntPtr.Zero && !NativeMethods.AreDpiAwarenessContextsEqual(
+                parentContext, NativeMethods.GetWindowDpiAwarenessContext(_hostHwnd)))
+            throw new InvalidOperationException("Preview host DPI context differs from the new parent; restart the preview host.");
+
         _parentHwnd = parentHwnd;
         _currentWidth = widthPx;
 
@@ -424,25 +433,23 @@ public sealed class PreviewHostServer : IDisposable
             _hostHwnd = CreateHostWindow();
         }
 
-        // 1. SetParent
-        NativeMethods.SetParent(_hostHwnd, parentHwnd);
-
-        // 2. Remove WS_POPUP, add WS_CHILD | WS_VISIBLE
-        var currentStyle = unchecked(
-            (int)NativeMethods.GetWindowLongPtr(_hostHwnd, NativeMethods.GWL_STYLE).ToInt64());
-        currentStyle &= ~NativeMethods.WS_POPUP;
-        currentStyle |= (NativeMethods.WS_CHILD | NativeMethods.WS_VISIBLE | NativeMethods.WS_CLIPSIBLINGS | NativeMethods.WS_CLIPCHILDREN);
-        NativeMethods.SetWindowLongPtr(_hostHwnd, NativeMethods.GWL_STYLE, new IntPtr(currentStyle));
+        // The HWND is created as a child with the parent's DPI context, before any COM activation.
+        Marshal.SetLastPInvokeError(0);
+        if (NativeMethods.SetParent(_hostHwnd, parentHwnd) == IntPtr.Zero && Marshal.GetLastWin32Error() != 0)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Preview SetParent failed.");
 
         // 3. SetWindowPos with SWP_FRAMECHANGED
-        NativeMethods.SetWindowPos(
+        if (!NativeMethods.SetWindowPos(
             _hostHwnd,
             IntPtr.Zero,
             0,
             0,
             widthPx,
             heightPx,
-            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_FRAMECHANGED | NativeMethods.SWP_SHOWWINDOW);
+            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED | NativeMethods.SWP_SHOWWINDOW))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Preview SetWindowPos failed.");
+
+        HostPerfLog.Write($"[DPI.Attach] parentContext={parentContext} hostContext={NativeMethods.GetWindowDpiAwarenessContext(_hostHwnd)} parentDpi={NativeMethods.GetDpiForWindow(parentHwnd)} hostDpi={NativeMethods.GetDpiForWindow(_hostHwnd)} scale={dpiX}x{dpiY} size={widthPx}x{heightPx}");
     }
 
     private void ResizeHost(int widthPx, int heightPx, double dpiX, double dpiY)
@@ -454,7 +461,10 @@ public sealed class PreviewHostServer : IDisposable
 
         if (_hostHwnd != IntPtr.Zero)
         {
-            NativeMethods.MoveWindow(_hostHwnd, 0, 0, widthPx, heightPx, true);
+            if (!NativeMethods.MoveWindow(_hostHwnd, 0, 0, Math.Max(0, widthPx), Math.Max(0, heightPx), true))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Preview MoveWindow failed.");
+            var size = GetHostClientSize(widthPx, heightPx);
+            HostPerfLog.Write($"[DPI.Resize] requested={widthPx}x{heightPx} client={size.WidthPx}x{size.HeightPx} parentDpi={NativeMethods.GetDpiForWindow(_parentHwnd)} hostDpi={NativeMethods.GetDpiForWindow(_hostHwnd)} scale={dpiX}x{dpiY}");
         }
     }
 
@@ -478,32 +488,35 @@ public sealed class PreviewHostServer : IDisposable
 
     private IntPtr CreateHostWindow()
     {
-        var hInstance = Process.GetCurrentProcess().Handle;
+        var hInstance = NativeMethods.GetModuleHandle(null);
         var wndClass = new NativeMethods.WNDCLASSEX
         {
             cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.WNDCLASSEX>(),
             style = 3, // CS_HREDRAW | CS_VREDRAW
-            lpfnWndProc = WndProc,
+            lpfnWndProc = _windowProc,
             hInstance = hInstance,
             lpszClassName = "FileKakari_PreviewHost_WndClass"
         };
 
-        NativeMethods.RegisterClassEx(ref wndClass);
+        if (NativeMethods.RegisterClassEx(ref wndClass) == 0 && Marshal.GetLastWin32Error() != 1410) // ERROR_CLASS_ALREADY_EXISTS
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Preview window class registration failed.");
 
-        // Create initial frameless top-level popup
-        return NativeMethods.CreateWindowEx(
+        var hwnd = NativeMethods.CreateWindowEx(
             0,
             "FileKakari_PreviewHost_WndClass",
             "FileKakari Preview Host Window",
-            NativeMethods.WS_POPUP,
+            NativeMethods.WS_CHILD | NativeMethods.WS_CLIPSIBLINGS | NativeMethods.WS_CLIPCHILDREN,
             0,
             0,
             _currentWidth,
             _currentHeight,
-            IntPtr.Zero,
+            _parentHwnd,
             IntPtr.Zero,
             hInstance,
             IntPtr.Zero);
+        if (hwnd == IntPtr.Zero)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Preview window creation failed.");
+        return hwnd;
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)

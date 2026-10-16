@@ -24,6 +24,8 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("preview-host-parent-dpi-and-native-resize", () => RunOnStaAsync(PreviewHostDpiChecks.Run));
+
     await CheckAsync("pane-viewstate-capture-isolation-and-transient-guard", () => RunOnStaAsync(() =>
     {
         var left = new FileListState();

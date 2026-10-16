@@ -30,6 +30,7 @@ public sealed class PreviewHostControl : HwndHost
         if ((bool)e.NewValue)
         {
             _ = _processManager.SendMessageAsync(new ShowCommand { PaneId = "active-pane" });
+            _ = RequestResizeAsync(isCorrection: true);
         }
         else
         {
@@ -39,11 +40,19 @@ public sealed class PreviewHostControl : HwndHost
 
     private void ProcessManager_OnAttached(AttachedEvent evt)
     {
+        if (!Dispatcher.CheckAccess())
+        {
+            _ = Dispatcher.InvokeAsync(() => ProcessManager_OnAttached(evt));
+            return;
+        }
+        if (_isDisposed) return;
+
         if (evt.ParentHwnd == _currentChildHwndValue && evt.ChildHwnd != 0)
         {
             IsAttached = true;
             PreviewDiagnostics.Info("PreviewHostControl", $"AttachedEvent accepted. parentHwnd=0x{evt.ParentHwnd:X} childHwnd=0x{evt.ChildHwnd:X}");
             _attachTcs?.TrySetResult(true);
+            _ = RequestResizeAsync(isCorrection: true);
         }
         else
         {
@@ -64,6 +73,8 @@ public sealed class PreviewHostControl : HwndHost
             PreviewDiagnostics.Info("PreviewHostControl", $"IsAttached reset reason=\"{reason}\" previousIsAttached={IsAttached} currentHwnd=0x{_currentChildHwndValue:X}");
         }
         IsAttached = false;
+        _lastSentWidthPx = -1;
+        _lastSentHeightPx = -1;
         _pendingAttachTask = null;
         if (_attachTcs is not null && !_attachTcs.Task.IsCompleted)
         {
@@ -303,7 +314,7 @@ public sealed class PreviewHostControl : HwndHost
 
     private async Task SendCurrentResizeAsync(bool isCorrection, string? requestId, int generation)
     {
-        if (!_processManager.IsConnected) return;
+        if (!_processManager.IsConnected || !IsAttached || _currentChildHwndValue == 0) return;
         double scaleX = 1.0;
         double scaleY = 1.0;
         var source = PresentationSource.FromVisual(this);
@@ -330,10 +341,6 @@ public sealed class PreviewHostControl : HwndHost
 
         var prevWidth = _lastSentWidthPx;
         var prevHeight = _lastSentHeightPx;
-        _lastSentWidthPx = pixelWidth;
-        _lastSentHeightPx = pixelHeight;
-        _lastSentDpiX = scaleX;
-        _lastSentDpiY = scaleY;
 
         if (isCorrection)
         {
@@ -351,7 +358,19 @@ public sealed class PreviewHostControl : HwndHost
             HeightPx = pixelHeight,
             DpiX = scaleX,
             DpiY = scaleY
-        }).ConfigureAwait(false);
+        });
+        _lastSentWidthPx = pixelWidth;
+        _lastSentHeightPx = pixelHeight;
+        _lastSentDpiX = scaleX;
+        _lastSentDpiY = scaleY;
+    }
+
+    protected override void OnWindowPositionChanged(Rect rcBoundingBox)
+    {
+        base.OnWindowPositionChanged(rcBoundingBox);
+        // HwndHost has now applied its rounded/clipped native bounds. A size-only
+        // notification can precede this update and read the previous client rectangle.
+        _ = RequestResizeAsync();
     }
 
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

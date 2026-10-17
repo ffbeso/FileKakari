@@ -24,6 +24,27 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("pane-column-sort-preserves-group-policy", () => RunOnStaAsync(() =>
+    {
+        var entries = new[] { ("a.txt", 30), ("b.bin", 20), ("c.txt", 10), ("d.bin", 40) }.Select(pair =>
+        {
+            var path = Path.Combine(fixtures, pair.Item1);
+            File.WriteAllBytes(path, new byte[pair.Item2]);
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var list = new FileListState();
+        list.ReplaceItems(fixtures, entries);
+        list.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
+        var state = new WorkspaceTabState(fixtures) { SortColumn = "Size", SortAscending = true, GroupMode = GroupMode.Extension };
+        list.ApplySort(state, true);
+        Require(list.ItemsView.Cast<FileEntry>().Select(item => item.Name).SequenceEqual(new[] { "c.txt", "a.txt", "b.bin", "d.bin" }),
+            "Ascending column sort did not keep groups ordered by their representatives.");
+        state.SortAscending = false;
+        list.ApplySort(state, true);
+        Require(list.ItemsView.Cast<FileEntry>().Select(item => item.Name).SequenceEqual(new[] { "d.bin", "b.bin", "a.txt", "c.txt" }),
+            "Descending column sort lost group ordering.");
+    }));
+
     await CheckAsync("shared-icon-request-independent-cancellation", async () =>
     {
         var cache = new ShellIconCache(2);

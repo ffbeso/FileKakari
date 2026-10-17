@@ -327,6 +327,11 @@ public sealed class FileListState : INotifyPropertyChanged
         LastExternalChangeAt = changedAt ?? DateTimeOffset.UtcNow;
     }
 
+    public void ApplySort(WorkspaceTabState state, bool sortFoldersFirst, Dictionary<string, int>? currentOrder = null)
+    {
+        ApplySort(state.SortColumn, state.SortAscending, sortFoldersFirst, currentOrder, state.GroupMode);
+    }
+
     public void ApplySort(string sortColumn, bool sortAscending, bool sortFoldersFirst, Dictionary<string, int>? currentOrder = null, GroupMode groupMode = GroupMode.None)
     {
         _displaySortColumn = sortColumn;

@@ -647,8 +647,7 @@ public partial class MainWindow
         using (SuppressPreviewForProgrammaticSelection("reload"))
         {
             pane.FileList.ApplySort(
-                targetState.SortColumn,
-                targetState.SortAscending,
+                targetState,
                 _settingsService.Settings.SortFoldersFirst,
                 currentOrder);
         }

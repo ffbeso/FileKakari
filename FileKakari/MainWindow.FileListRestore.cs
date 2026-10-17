@@ -550,7 +550,8 @@ public partial class MainWindow
         FolderPane pane,
         FileListRestorePolicy policy,
         string trigger = "viewstate-restore",
-        int workspaceSwitchId = 0)
+        int workspaceSwitchId = 0,
+        bool viewPreparedByLoad = false)
     {
         if (policy == FileListRestorePolicy.None)
         {
@@ -669,19 +670,27 @@ public partial class MainWindow
                 return;
             }
 
-            SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
-                ? pane.FileList.EnsureSimilarNameIndex()
-                : null;
-            if (listView is not null)
+            // LoadPaneItemsAsync already applies grouping, sorting and filtering in
+            // one refresh. Reapplying them here rebuilds the just-created groups
+            // and invalidates their layout before selection/scroll restoration.
+            // Other callers still need to prepare the view themselves.
+            if (!viewPreparedByLoad)
             {
-                FileGroupHelper.ApplyGroupMode(listView, targetState.GroupMode, groupIndex);
+                using var refresh = pane.FileList.ItemsView.DeferRefresh();
+                SimilarNameGroupIndex? groupIndex = targetState.GroupMode == GroupMode.SimilarName
+                    ? pane.FileList.EnsureSimilarNameIndex()
+                    : null;
+                if (listView is not null)
+                {
+                    FileGroupHelper.ApplyGroupMode(listView, targetState.GroupMode, groupIndex);
+                }
+                else
+                {
+                    FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
+                }
+                pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, targetState.GroupMode);
+                _folderPaneController.ApplyFilter(pane, targetState.FilterText);
             }
-            else
-            {
-                FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
-            }
-            pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, targetState.GroupMode);
-            _folderPaneController.ApplyFilter(pane, targetState.FilterText);
             WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), $"viewstate-collection-view-ready-{trigger}", pane);
 
             if (policy == FileListRestorePolicy.ExactRestore)

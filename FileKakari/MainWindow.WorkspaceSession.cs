@@ -1684,7 +1684,8 @@ public partial class MainWindow
             }
             else if (policy != FileListRestorePolicy.None && WorkspaceSplitGrid.Visibility == Visibility.Visible)
             {
-                await RestoreWorkspacePaneStateAsync(pane, policy, restoreTrigger, workspaceSwitchId);
+                await RestoreWorkspacePaneStateAsync(pane, policy, restoreTrigger, workspaceSwitchId,
+                    viewPreparedByLoad: requestedState is not null && !SpecialLocationService.IsSpecialUri(requestedState.CurrentPath));
             }
             if (pane.FileList.LoadGeneration != requestedGeneration
                 || !ReferenceEquals(pane.ActiveTabState, requestedState)) return;

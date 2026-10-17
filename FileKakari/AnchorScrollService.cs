@@ -110,70 +110,43 @@ internal static class AnchorScrollService
             return false;
         }
 
-        // Filter / Group / Sort 適用後の表示対象アイテム (listView.Items) のみからターゲットを探索
-        var visibleEntries = listView.Items.OfType<FileEntry>().ToList();
-        if (visibleEntries.Count == 0)
-        {
-            return false;
-        }
-
-        FileEntry? targetEntry = null;
-        string resolveReason = "";
-
-        // 1. AnchorPath (確信)
-        targetEntry = visibleEntries.FirstOrDefault(e => string.Equals(e.FullPath, anchorState.AnchorPath, StringComparison.OrdinalIgnoreCase));
-        if (targetEntry != null)
-        {
-            resolveReason = "exact-anchor";
-        }
-        else
-        {
-            // 2. PreviousPath (削除前の表示順で直前の表示対象)
-            if (!string.IsNullOrEmpty(anchorState.PreviousPath))
-            {
-                targetEntry = visibleEntries.FirstOrDefault(e => string.Equals(e.FullPath, anchorState.PreviousPath, StringComparison.OrdinalIgnoreCase));
-                if (targetEntry != null)
-                {
-                    resolveReason = "previous-fallback";
-                }
-            }
-
-            // 3. NextPath (削除前の表示順で直後の表示対象)
-            if (targetEntry == null && !string.IsNullOrEmpty(anchorState.NextPath))
-            {
-                targetEntry = visibleEntries.FirstOrDefault(e => string.Equals(e.FullPath, anchorState.NextPath, StringComparison.OrdinalIgnoreCase));
-                if (targetEntry != null)
-                {
-                    resolveReason = "next-fallback";
-                }
-            }
-        }
-
+        var stageTimer = System.Diagnostics.Stopwatch.StartNew();
+        var resolved = AnchorTargetResolver.Find(listView.Items.OfType<FileEntry>(), anchorState);
+        var targetEntry = resolved.Entry;
+        var resolveReason = resolved.Reason;
+        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=lookup elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} visited={resolved.Visited} reason={resolveReason}");
         // Anchor / Next / Previous 3件すべて不在の場合 ➔ 既存 VerticalOffset fallback
         if (targetEntry == null)
         {
             return false;
         }
 
+        stageTimer.Restart();
         await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
+        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
         if (isStale?.Invoke() == true) return false;
 
         // Step 1: ScrollIntoView
+        stageTimer.Restart();
         await dispatcher.InvokeAsync(() =>
         {
             if (isStale?.Invoke() == true) return;
             listView.ScrollIntoView(targetEntry);
         }, DispatcherPriority.Send);
+        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
 
         // ScrollIntoView と相対Y補正のどちらでも仮想化コンテナの再配置が起こり得る。
         // Extent・VerticalOffset・相対Yが同時に安定するまで、低優先度のレイアウト周期ごとに再補正する。
-        return await RestoreAnchorRelativePositionUntilStableAsync(
+        stageTimer.Restart();
+        var restored = await RestoreAnchorRelativePositionUntilStableAsync(
             listView,
             targetEntry,
             anchorState,
             dispatcher,
             deleteFlowId,
             resolveReason, isStale);
+        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=position-correction elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} restored={restored}");
+        return restored;
     }
 
     private static async Task WaitForStableExtentAsync(

@@ -24,6 +24,30 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("anchor-target-single-pass-and-fallback-priority", () =>
+    {
+        var entries = new[] { "next", "previous", "anchor" }.Select(name =>
+        {
+            var path = Path.Combine(fixtures, name);
+            File.WriteAllText(path, name);
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var anchor = new AnchorScrollState(entries[2].FullPath.ToUpperInvariant(), 0, entries[0].FullPath, entries[1].FullPath, 0);
+        var enumerations = 0;
+        IEnumerable<FileEntry> Once()
+        {
+            Require(++enumerations == 1, "Anchor lookup enumerated the view more than once.");
+            foreach (var entry in entries) yield return entry;
+            throw new InvalidOperationException("Exact anchor lookup scanned past its match.");
+        }
+        var exact = AnchorTargetResolver.Find(Once(), anchor);
+        Require(ReferenceEquals(exact.Entry, entries[2]) && exact.Visited == 3, "Exact anchor did not outrank earlier fallback candidates.");
+        Require(ReferenceEquals(AnchorTargetResolver.Find(entries.Take(2), anchor).Entry, entries[1]), "Previous fallback must outrank next even when encountered later.");
+        Require(ReferenceEquals(AnchorTargetResolver.Find(entries.Take(1), anchor).Entry, entries[0]), "Next fallback was lost.");
+        Require(AnchorTargetResolver.Find(Array.Empty<FileEntry>(), anchor).Entry is null, "Empty filtered view should use offset fallback.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("pane-column-sort-preserves-group-policy", () => RunOnStaAsync(() =>
     {
         var entries = new[] { ("a.txt", 30), ("b.bin", 20), ("c.txt", 10), ("d.bin", 40) }.Select(pair =>
@@ -37,6 +61,8 @@ try
         list.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
         var state = new WorkspaceTabState(fixtures) { SortColumn = "Size", SortAscending = true, GroupMode = GroupMode.Extension };
         list.ApplySort(state, true);
+        Require(((System.Windows.Data.ListCollectionView)list.ItemsView).CustomSort!.Compare(entries[0], entries[1]) < 0,
+            "Comparer used individual size instead of the group's representative size.");
         Require(list.ItemsView.Cast<FileEntry>().Select(item => item.Name).SequenceEqual(new[] { "c.txt", "a.txt", "b.bin", "d.bin" }),
             "Ascending column sort did not keep groups ordered by their representatives.");
         state.SortAscending = false;

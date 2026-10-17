@@ -339,9 +339,13 @@ public sealed class FileListState : INotifyPropertyChanged
         _displaySortFoldersFirst = sortFoldersFirst;
         if (ItemsView is ListCollectionView listView)
         {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? EnsureSimilarNameIndex() : null;
             GroupRepresentativeIndex? repIndex = groupMode != GroupMode.None ? GroupRepresentativeIndex.Build(Items, groupMode, sortColumn, sortAscending, sortFoldersFirst, groupIndex) : null;
+            PerfLog.WriteVerbose($"pane-sort-stage stage=group-preparation mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2}");
+            timer.Restart();
             listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex, repIndex);
+            PerfLog.WriteVerbose($"pane-sort-stage stage=view-sort-assignment mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2} refreshMayBeDeferred=true");
         }
         else
         {

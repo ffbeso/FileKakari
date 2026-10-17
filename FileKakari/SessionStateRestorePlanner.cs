@@ -98,6 +98,7 @@ public static class SessionStateRestorePlanner
             FilterText = source.FilterText ?? "",
             SelectedPaths = source.SelectedPaths?.ToList() ?? [],
             ScrollOffset = source.ScrollOffset,
+            AnchorState = source.AnchorState,
             LocalState = source.LocalState,
             IsUnsavedWorkspace = source.IsUnsavedWorkspace,
             WorkspaceId = source.WorkspaceId,

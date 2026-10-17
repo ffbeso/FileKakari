@@ -86,6 +86,7 @@ public sealed class WorkspaceTabDefinition
     public IReadOnlyList<string> SelectedPaths { get; init; } = [];
 
     public double ScrollOffset { get; init; }
+    public AnchorScrollState? AnchorState { get; init; }
 
     public bool IsFolderLocked { get; init; }
 }

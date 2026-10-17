@@ -1422,6 +1422,70 @@ try
             tab.ScrollOffset == 42 && tab.SelectedPaths.SequenceEqual(new[] { "a.txt" }), "Session state changed during roundtrip.");
         return Task.CompletedTask;
     });
+    await CheckAsync("workspace-same-folder-subtabs-selection-anchor-roundtrip", () => RunOnStaAsync(() =>
+    {
+        var workspaceService = new WorkspaceService();
+        var sessionService = new SessionStateService();
+        var paneStates = new List<WorkspaceService.LocalPaneStateDocument>();
+        for (var p = 0; p < 2; p++)
+        {
+            var pane = new WorkspaceService.LocalPaneStateDocument { PaneId = $"pane-{p}", SelectedTabId = $"tab-{p}-1" };
+            for (var t = 0; t < 2; t++)
+            {
+                var selectedPath = Path.Combine(fixtures, $"selected-{p}-{t}.txt");
+                pane.Tabs.Add(new WorkspaceService.WorkspaceLocalTabStateDocument
+                {
+                    PaneId = pane.PaneId, TabId = $"tab-{p}-{t}", CurrentPath = fixtures,
+                    GroupMode = t == 0 ? GroupMode.Date : GroupMode.SimilarName,
+                    SortColumn = "ModifiedAt", SortAscending = t == 0,
+                    SelectedPaths = [selectedPath], ScrollOffset = 100 * (p + 1) + t,
+                    AnchorState = new AnchorScrollState(selectedPath, -7.5 - t, null, null, 100 * (p + 1) + t)
+                });
+            }
+            paneStates.Add(pane);
+        }
+        var saved = new SessionTabState
+        {
+            IsWorkspace = true, IsUnsavedWorkspace = true, RootPath = fixtures, Path = fixtures,
+            LocalState = new WorkspaceService.WorkspaceLocalStateDocument
+            {
+                ActivePaneId = "pane-1", PaneStates = paneStates,
+                TabStates = paneStates.SelectMany(p => p.Tabs).ToList()
+            },
+            Layout = new SessionLayoutNodeState
+            {
+                Type = "horizontal", Children = [new() { Type = "pane", PaneId = "pane-0" }, new() { Type = "pane", PaneId = "pane-1" }]
+            }
+        };
+        var path = Path.Combine(fixtures, "same-folder-session.json");
+        Require(sessionService.Save(path, new SessionState { Tabs = [saved] }), "Save failed.");
+        var restored = SessionStateRestorePlanner.Prepare(sessionService.Load(path).State, fixtures, FileDisplayMode.Details).Tabs[0];
+        var definition = workspaceService.LoadFromSessionTabState(restored)!;
+        var factoryType = typeof(WorkspaceSession).Assembly.GetType("FileKakari.WorkspaceSessionFactory")!;
+        var factory = Activator.CreateInstance(factoryType, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            null, new object?[] { (Func<string, string>)(column => column), null }, null)!;
+        var session = (WorkspaceSession)factoryType.GetMethod("Create", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(factory, [definition])!;
+        var roundtrip = workspaceService.BuildLocalState(session);
+        Require(roundtrip.ActivePaneId == "pane-1", "Active pane changed.");
+        foreach (var expectedPane in paneStates)
+        {
+            var actualPane = roundtrip.PaneStates.Single(p => p.PaneId == expectedPane.PaneId);
+            Require(actualPane.SelectedTabId == expectedPane.SelectedTabId, "Selected subtab changed.");
+            foreach (var expected in expectedPane.Tabs)
+            {
+                var actual = actualPane.Tabs.Single(t => t.TabId == expected.TabId);
+                Require(actual.SelectedPaths!.SequenceEqual(expected.SelectedPaths!) && actual.AnchorState == expected.AnchorState
+                    && actual.ScrollOffset == expected.ScrollOffset && actual.GroupMode == expected.GroupMode
+                    && actual.SortAscending == expected.SortAscending, "Same-folder subtab state was merged or lost.");
+            }
+        }
+        // Older sessions omit anchors and continue to use their numeric offset.
+        foreach (var pane in restored.LocalState!.PaneStates) foreach (var tab in pane.Tabs) tab.AnchorState = null;
+        var legacy = workspaceService.LoadFromSessionTabState(restored)!;
+        Require(legacy.PaneGroups.SelectMany(p => p.Tabs).All(t => t.AnchorState is null && t.SelectedPaths.Count == 1),
+            "Legacy session lost its selection without an anchor.");
+    }));
+
     await CheckAsync("undo-retry-after-partial-move", async () =>
     {
         var folder = Path.Combine(fixtures, "undo");

@@ -109,7 +109,8 @@ public partial class MainWindow
             GroupMode = tabState.GroupMode,
             FilterText = tabState.FilterText,
             SelectedPaths = tabState.SelectedPaths?.ToList() ?? [],
-            VerticalOffset = tabState.ScrollOffset
+            VerticalOffset = tabState.ScrollOffset,
+            AnchorState = tabState.AnchorState
         };
         var tab = new FolderTab(tabState.Path, state: state);
         var session = CreateSinglePaneSession(tab);
@@ -263,6 +264,7 @@ public partial class MainWindow
             FilterText = tab.State.FilterText,
             SelectedPaths = tab.State.SelectedPaths.ToList(),
             ScrollOffset = tab.State.VerticalOffset,
+            AnchorState = tab.State.AnchorState,
             Name = session.Name
         };
     }
@@ -480,6 +482,7 @@ public partial class MainWindow
             FilterText = source.FilterText,
             SelectedPaths = source.SelectedPaths?.ToList(),
             ScrollOffset = source.ScrollOffset,
+            AnchorState = source.AnchorState,
             IsFolderLocked = source.IsFolderLocked
         };
     }

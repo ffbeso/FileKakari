@@ -52,6 +52,7 @@ public sealed class SessionTabState
     public List<string> SelectedPaths { get; set; } = [];
 
     public double ScrollOffset { get; set; }
+    public AnchorScrollState? AnchorState { get; set; }
 
     public WorkspaceService.WorkspaceLocalStateDocument? LocalState { get; set; }
 

@@ -707,6 +707,7 @@ public sealed class WorkspaceService
             FilterText = state.FilterText ?? tab.FilterText,
             SelectedPaths = state.SelectedPaths ?? tab.SelectedPaths,
             ScrollOffset = state.ScrollOffset ?? tab.ScrollOffset,
+            AnchorState = state.AnchorState,
             IsFolderLocked = state.IsFolderLocked ?? tab.IsFolderLocked
         };
     }
@@ -735,6 +736,7 @@ public sealed class WorkspaceService
             FilterText = state.FilterText ?? "",
             SelectedPaths = state.SelectedPaths ?? [],
             ScrollOffset = state.ScrollOffset ?? 0,
+            AnchorState = state.AnchorState,
             IsFolderLocked = state.IsFolderLocked ?? false
         };
     }
@@ -820,6 +822,7 @@ public sealed class WorkspaceService
             FilterText = tab.State.FilterText,
             SelectedPaths = tab.State.SelectedPaths,
             ScrollOffset = tab.State.VerticalOffset,
+            AnchorState = tab.State.AnchorState,
             IsFolderLocked = tab.IsFolderLocked
         };
     }
@@ -1195,6 +1198,9 @@ public sealed class WorkspaceService
 
         [JsonPropertyName("scrollOffset")]
         public double? ScrollOffset { get; set; }
+
+        [JsonPropertyName("anchorState")]
+        public AnchorScrollState? AnchorState { get; set; }
 
         [JsonPropertyName("isFolderLocked")]
         public bool? IsFolderLocked { get; set; }

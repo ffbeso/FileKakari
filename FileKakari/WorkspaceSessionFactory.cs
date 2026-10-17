@@ -184,6 +184,7 @@ sealed class WorkspaceSessionFactory
         state.FilterText = tabDefinition.FilterText;
         state.SelectedPaths = tabDefinition.SelectedPaths;
         state.VerticalOffset = tabDefinition.ScrollOffset;
+        state.AnchorState = tabDefinition.AnchorState;
         state.SortColumn = string.IsNullOrWhiteSpace(tabDefinition.SortColumn) ? "Name" : tabDefinition.SortColumn.Trim();
         state.SortAscending = tabDefinition.SortAscending;
         state.GroupMode = tabDefinition.GroupMode;

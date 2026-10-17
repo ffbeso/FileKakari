@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,7 +13,7 @@ namespace FileKakari
     {
         public static readonly ShellIconProvider Instance = new ShellIconProvider();
 
-        private readonly ConcurrentDictionary<string, ImageSource> _cache = new();
+        private readonly ShellIconCache _cache = new(512);
         private readonly SemaphoreSlim _loadSlots = new(2, 2);
 
         private ShellIconProvider() { }
@@ -27,22 +26,17 @@ namespace FileKakari
             var key = useFilePath
                 ? "<PATH>:" + path!.ToLowerInvariant()
                 : isDirectory ? "<DIR>" : string.IsNullOrEmpty(extension) ? "<FILE>" : "." + extension.ToLowerInvariant();
-            if (_cache.TryGetValue(key, out var img))
+            return await _cache.GetAsync(key, async sharedCancellation =>
             {
-                return img;
-            }
-
-            await _loadSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (_cache.TryGetValue(key, out img)) return img;
-                // Hold the slot until native IO actually finishes, even if the row is recycled.
-                img = await Task.Run(() => LoadIconInternalAsync(extension, isDirectory, useFilePath ? path : null)).ConfigureAwait(false);
-                if (img is not null) _cache[key] = img;
-                return img;
-            }
-            finally { _loadSlots.Release(); }
+                await _loadSlots.WaitAsync(sharedCancellation).ConfigureAwait(false);
+                try
+                {
+                    sharedCancellation.ThrowIfCancellationRequested();
+                    // Native IO cannot be interrupted: hold its slot until completion.
+                    return await Task.Run(() => LoadIconInternalAsync(extension, isDirectory, useFilePath ? path : null)).ConfigureAwait(false);
+                }
+                finally { _loadSlots.Release(); }
+            }, cancellationToken).ConfigureAwait(false);
         }
 
         private static bool ShouldUseFilePathIcon(string? extension)

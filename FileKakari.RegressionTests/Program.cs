@@ -24,6 +24,87 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("shared-icon-request-independent-cancellation", async () =>
+    {
+        var cache = new ShellIconCache(2);
+        var completion = new TaskCompletionSource<ImageSource?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loads = 0;
+        CancellationToken sharedToken = default;
+        Task<ImageSource?> Load(CancellationToken token)
+        {
+            loads++;
+            sharedToken = token;
+            return completion.Task;
+        }
+        using var firstCancellation = new CancellationTokenSource();
+        var first = cache.GetAsync(".TXT", Load, firstCancellation.Token);
+        var second = cache.GetAsync(".txt", Load);
+        Require(loads == 1, "Concurrent equivalent icon keys started duplicate loads.");
+        firstCancellation.Cancel();
+        try { await first; throw new InvalidOperationException("Recycled row did not cancel its wait."); }
+        catch (OperationCanceledException) { }
+        Require(!sharedToken.IsCancellationRequested && !second.IsCompleted, "One recycled row cancelled another pane's icon.");
+        var icon = new DrawingImage();
+        icon.Freeze();
+        completion.SetResult(icon);
+        Require(ReferenceEquals(await second.WaitAsync(TimeSpan.FromSeconds(5)), icon), "Remaining caller lost shared result.");
+        Require(ReferenceEquals(await cache.GetAsync(".txt", Load), icon) && loads == 1, "Completed icon was not reused.");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try { await cache.GetAsync(".txt", Load, cancelled.Token); throw new InvalidOperationException("Cache hit ignored cancellation."); }
+        catch (OperationCanceledException) { }
+    });
+
+    await CheckAsync("icon-cache-lru-bound-and-retry", async () =>
+    {
+        var cache = new ShellIconCache(2);
+        var loads = 0;
+        Task<ImageSource?> Load(CancellationToken _)
+        {
+            loads++;
+            var image = new DrawingImage();
+            image.Freeze();
+            return Task.FromResult<ImageSource?>(image);
+        }
+        var a = await cache.GetAsync("a", Load);
+        await cache.GetAsync("b", Load);
+        Require(ReferenceEquals(await cache.GetAsync("A", Load), a), "Cache hit did not reuse image.");
+        await cache.GetAsync("c", Load);
+        Require(ReferenceEquals(await cache.GetAsync("a", Load), a) && loads == 3, "Recently used image was evicted.");
+        await cache.GetAsync("b", Load);
+        Require(loads == 4, "Least recently used image exceeded capacity without eviction.");
+        Require(await cache.GetAsync("missing", _ => Task.FromResult<ImageSource?>(null)) is null, "Null icon was changed.");
+        Require(await cache.GetAsync("missing", Load) is not null, "Failed native icon became a permanent cache entry.");
+        try { await cache.GetAsync("error", _ => Task.FromException<ImageSource?>(new IOException("test"))); }
+        catch (IOException) { }
+        Require(await cache.GetAsync("error", Load) is not null, "Failed request could not retry.");
+    });
+
+    await CheckAsync("abandoned-icon-request-cannot-replace-new-request", async () =>
+    {
+        var cache = new ShellIconCache(2);
+        // Inline completion lets the obsolete load finish before checking the new request.
+        var oldCompletion = new TaskCompletionSource<ImageSource?>();
+        CancellationToken sharedToken = default;
+        using var cancellation = new CancellationTokenSource();
+        var abandoned = cache.GetAsync("same.exe", token => { sharedToken = token; return oldCompletion.Task; }, cancellation.Token);
+        cancellation.Cancel();
+        try { await abandoned; throw new InvalidOperationException("Abandoned request kept waiting."); }
+        catch (OperationCanceledException) { }
+        Require(sharedToken.IsCancellationRequested, "No remaining callers, but queued work was not cancelled.");
+        var freshCompletion = new TaskCompletionSource<ImageSource?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fresh = cache.GetAsync("same.exe", _ => freshCompletion.Task);
+        var oldIcon = new DrawingImage(); oldIcon.Freeze();
+        oldCompletion.SetResult(oldIcon);
+        var follower = cache.GetAsync("same.exe", _ => throw new InvalidOperationException("Old completion removed new request"));
+        var currentIcon = new DrawingImage(); currentIcon.Freeze();
+        freshCompletion.SetResult(currentIcon);
+        Require(ReferenceEquals(await fresh.WaitAsync(TimeSpan.FromSeconds(5)), currentIcon), "New request received abandoned result.");
+        Require(ReferenceEquals(await follower.WaitAsync(TimeSpan.FromSeconds(5)), currentIcon), "New shared request was lost.");
+        Require(ReferenceEquals(await cache.GetAsync("same.exe", _ => throw new InvalidOperationException("Cache entry lost")), currentIcon),
+            "Abandoned request replaced current icon.");
+    });
+
     await CheckAsync("selection-followup-batch-isolation-and-lifetime", () => RunOnStaAsync(() =>
     {
         var left = new System.Windows.Controls.ListView();

@@ -27,10 +27,9 @@ public sealed class FileListState : INotifyPropertyChanged
     private string? _loadStateId;
     private string? _loadPath;
 
-    private int _itemsRevision;
-    private int _builtIndexRevision = -1;
+    private readonly FileListGroupCache _groupCache = new();
 
-    public SimilarNameGroupIndex? SimilarNameIndex { get; private set; }
+    public SimilarNameGroupIndex? SimilarNameIndex => _groupCache.SimilarNameIndex;
     public AnchorScrollState? PendingAnchorScrollState { get; set; }
     public bool IsPublishingItems { get; set; }
     public long LoadGeneration => _loadGeneration;
@@ -59,30 +58,24 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public FileListState()
     {
+        Items.CollectionChanged += (_, _) => InvalidateSimilarNameIndex();
         ItemsView = CollectionViewSource.GetDefaultView(Items);
     }
 
     public void InvalidateSimilarNameIndex()
     {
-        _itemsRevision++;
-        SimilarNameIndex = null;
+        _groupCache.Clear();
     }
 
     public SimilarNameGroupIndex EnsureSimilarNameIndex()
     {
-        if (SimilarNameIndex == null || _builtIndexRevision != _itemsRevision)
-        {
-            SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
-            _builtIndexRevision = _itemsRevision;
-        }
-        return SimilarNameIndex;
+        return _groupCache.EnsureSimilarNames(Items);
     }
 
     public void RebuildSimilarNameIndex()
     {
-        _itemsRevision++;
-        SimilarNameIndex = SimilarNameGroupIndex.Build(Items);
-        _builtIndexRevision = _itemsRevision;
+        InvalidateSimilarNameIndex();
+        EnsureSimilarNameIndex();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -348,9 +341,10 @@ public sealed class FileListState : INotifyPropertyChanged
         if (ItemsView is ListCollectionView listView)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
-            SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? EnsureSimilarNameIndex() : null;
-            GroupRepresentativeIndex? repIndex = groupMode != GroupMode.None ? GroupRepresentativeIndex.Build(Items, groupMode, sortColumn, sortAscending, sortFoldersFirst, groupIndex) : null;
-            PerfLog.WriteVerbose($"pane-sort-stage stage=group-preparation mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2}");
+            GroupRepresentativeIndex? repIndex = groupMode != GroupMode.None ? _groupCache.EnsureRepresentatives(Items, groupMode, sortColumn, sortAscending, sortFoldersFirst) : null;
+            SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? SimilarNameIndex : null;
+            if (groupMode == GroupMode.None) _groupCache.Clear();
+            PerfLog.WriteVerbose($"pane-sort-stage stage=group-preparation mode={groupMode} count={Items.Count} cacheHit={_groupCache.LastRepresentativeCacheHit} elapsedMs={timer.Elapsed.TotalMilliseconds:F2}");
             timer.Restart();
             listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex, repIndex);
             PerfLog.WriteVerbose($"pane-sort-stage stage=view-sort-assignment mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2} refreshMayBeDeferred=true");
@@ -366,6 +360,7 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public void ClearSort()
     {
+        _groupCache.Clear();
         _displaySortColumn = "";
         _displaySortAscending = true;
         if (ItemsView is ListCollectionView listView)

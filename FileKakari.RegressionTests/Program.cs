@@ -1034,6 +1034,81 @@ try
         return Task.CompletedTask;
     });
 
+    await CheckAsync("group-cache-reuse-invalidation-and-list-isolation", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "group-cache");
+        Directory.CreateDirectory(folder);
+        var entries = new List<FileEntry>();
+        foreach (var name in new[] { "Series 01.txt", "Series 02.txt", "Other.pdf" })
+        {
+            var path = Path.Combine(folder, name);
+            File.WriteAllText(path, "x");
+            entries.Add(FileEntry.FromFile(new FileInfo(path)));
+        }
+        var cache = new FileListGroupCache();
+        var similar = cache.EnsureSimilarNames(entries);
+        var first = cache.EnsureRepresentatives(entries, GroupMode.SimilarName, "Size", true, true);
+        Require(ReferenceEquals(first, cache.EnsureRepresentatives(entries, GroupMode.SimilarName, "Size", true, true))
+            && cache.LastRepresentativeCacheHit, "Unchanged preparation did not reuse its representative index.");
+        Require(ReferenceEquals(similar, cache.EnsureSimilarNames(entries)), "Unchanged classification was rebuilt.");
+        var descending = cache.EnsureRepresentatives(entries, GroupMode.SimilarName, "Size", false, true);
+        Require(!ReferenceEquals(first, descending), "Direction change reused representatives.");
+        Require(ReferenceEquals(similar, cache.EnsureSimilarNames(entries)), "Sort change rebuilt classification.");
+        entries[1].Size = 999;
+        var resized = cache.EnsureRepresentatives(entries, GroupMode.SimilarName, "Size", false, true);
+        Require(!ReferenceEquals(descending, resized), "Metadata change reused representatives.");
+        Require(ReferenceEquals(resized.GetRepresentative(cache.SimilarNameIndex!.GetGroupKey(entries[1])), entries[1]),
+            "Changed size did not choose the new representative.");
+        entries[1].Name = "Different.txt";
+        var renamed = cache.EnsureSimilarNames(entries);
+        Require(!ReferenceEquals(similar, renamed) && renamed.GetGroupKey(entries[1]) == SimilarNameGroupIndex.Build(entries).GetGroupKey(entries[1]),
+            "Rename kept stale classification.");
+        var previousIndex = cache.EnsureRepresentatives(entries, GroupMode.Extension, "Name", true, true);
+        foreach (var mutate in new Action[]
+        {
+            () => entries[0].FullPath += ".renamed",
+            () => entries[0].ModifiedAt = entries[0].ModifiedAt.AddDays(-10),
+            () => entries[0].CreatedAt = entries[0].CreatedAt.AddDays(-10),
+            () => entries[0].AccessedAt = entries[0].AccessedAt.AddDays(-10),
+            () => entries[0].Kind = "changed-kind",
+            () => entries.Reverse(),
+            () => entries[0] = FileEntry.FromFile(new FileInfo(Path.Combine(folder, "Other.pdf")))
+        })
+        {
+            mutate();
+            var next = cache.EnsureRepresentatives(entries, GroupMode.Extension, "Name", true, true);
+            Require(!ReferenceEquals(previousIndex, next), "Entry mutation, replacement or reordering reused a stale index.");
+            previousIndex = next;
+        }
+        Require(!ReferenceEquals(previousIndex, cache.EnsureRepresentatives(entries, GroupMode.Extension, "Name", true, false)),
+            "Folder-priority change reused the previous configuration.");
+        foreach (var mode in new[] { GroupMode.Extension, GroupMode.Date, GroupMode.SimilarName })
+        foreach (var column in new[] { "Name", "Size", "ModifiedAt", "CreatedAt", "AccessedAt", "Kind" })
+        foreach (var ascending in new[] { true, false })
+        {
+            var actual = cache.EnsureRepresentatives(entries, mode, column, ascending, true);
+            var names = mode == GroupMode.SimilarName ? cache.SimilarNameIndex : null;
+            var expected = GroupRepresentativeIndex.Build(entries, mode, column, ascending, true, names);
+            var comparer = new FileEntryComparer(column, ascending, true, groupMode: mode, groupIndex: names, representativeIndex: actual);
+            var baseline = new FileEntryComparer(column, ascending, true, groupMode: mode, groupIndex: names, representativeIndex: expected);
+            foreach (var a in entries) foreach (var b in entries)
+                Require(comparer.Compare(a, b) == baseline.Compare(a, b), "Cached group ordering differs from a fresh build.");
+        }
+        var state = new FileListState();
+        state.ReplaceItems(folder, entries);
+        var before = state.EnsureSimilarNameIndex();
+        state.Items.RemoveAt(0);
+        Require(state.SimilarNameIndex is null, "Direct collection mutation retained the old cache.");
+        Require(!ReferenceEquals(before, state.EnsureSimilarNameIndex()), "Changed collection reused classification.");
+        var other = new FileListState();
+        other.ReplaceItems(folder, entries);
+        Require(!ReferenceEquals(other.EnsureSimilarNameIndex(), state.EnsureSimilarNameIndex()), "Panes shared cache ownership.");
+        state.Items.Clear();
+        Require(state.SimilarNameIndex is null, "Empty list retained classification.");
+        cache.Clear();
+        Require(cache.SimilarNameIndex is null && !cache.LastRepresentativeCacheHit, "Explicit clear retained cached data.");
+    }));
+
     await CheckAsync("wpf-filter-single-refresh-and-count", () => RunOnStaAsync(() =>
     {
         var items = new BulkObservableCollection<int> { 1, 2, 3 };

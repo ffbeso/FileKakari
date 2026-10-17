@@ -60,6 +60,13 @@ public partial class MainWindow
 
     private void ResetToSingleWorkspaceDisplay(WorkspaceSession targetSession, string reason)
     {
+        // Synchronization selects the tab under _isSwitchingTabs, bypassing
+        // TabsControl_SelectionChanged. Arm the preview gate before revealing it.
+        if (!IsSameWorkspaceSession(_activeWorkspaceSession, targetSession))
+        {
+            BeginPreviewAwaitingExplicitSelection(
+                $"workspace-display-switch:{reason}", targetSession, targetSession.ActivePaneGroup);
+        }
         _isPreservingMultiSelection = false;
         _displayedWorkspaceSessionIds.Clear();
         _displayedWorkspaceSessionIds.Add(targetSession.Id);

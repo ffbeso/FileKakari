@@ -55,6 +55,8 @@ public partial class MainWindow
                     var remainingSession = GetDisplayedWorkspaceSessionsInTabOrder().FirstOrDefault();
                     if (remainingSession is not null)
                     {
+                        BeginPreviewAwaitingExplicitSelection(
+                            "workspace-ctrl-click-remove", remainingSession, remainingSession.ActivePaneGroup);
                         _activeWorkspaceSession = remainingSession;
                     }
                 }
@@ -70,6 +72,8 @@ public partial class MainWindow
                 }
 
                 _displayedWorkspaceSessionIds.Add(session.Id);
+                BeginPreviewAwaitingExplicitSelection(
+                    "workspace-ctrl-click-add", session, session.ActivePaneGroup);
                 _activeWorkspaceSession = session;
             }
 

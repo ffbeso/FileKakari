@@ -24,6 +24,89 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("prepared-row-columns-do-not-depend-on-visual-parent", () => RunOnStaAsync(() =>
+    {
+        using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", "ThemeResources.xaml"));
+        var resources = (System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Load(stream);
+        foreach (var styleKey in new object[] { typeof(System.Windows.Controls.ListViewItem), "DiagnosticListViewItemStyle" })
+        {
+            var row = new System.Windows.Controls.ListViewItem { Content = "file", Style = (System.Windows.Style)resources[styleKey] };
+            var columns = new System.Windows.Controls.GridViewColumnCollection();
+            columns.Add(new System.Windows.Controls.GridViewColumn { Header = "Name", Width = 200 });
+            // GridView prepares this attached property independently of the visual ancestry.
+            System.Windows.Controls.GridView.SetColumnCollection(row, columns);
+            row.ApplyTemplate(); row.Measure(new System.Windows.Size(400, 24));
+            row.Arrange(new System.Windows.Rect(0, 0, 400, 24));
+            var border = (System.Windows.Controls.Border)VisualTreeHelper.GetChild(row, 0);
+            var presenter = (System.Windows.Controls.GridViewRowPresenter)border.Child;
+            Require(ReferenceEquals(presenter.Columns, columns), "Prepared row lost columns while outside the ListView visual tree.");
+            var replacement = new System.Windows.Controls.GridViewColumnCollection();
+            replacement.Add(new System.Windows.Controls.GridViewColumn { Header = "Size", Width = 100 });
+            System.Windows.Controls.GridView.SetColumnCollection(row, replacement);
+            Require(ReferenceEquals(presenter.Columns, replacement), "Reprepared row retained the previous view's columns.");
+        }
+    }));
+
+    await CheckAsync("grouped-row-content-survives-refresh-and-recycling", () => RunOnStaAsync(() =>
+    {
+        using var themeStream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", "ThemeResources.xaml"));
+        var resources = (System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Load(themeStream);
+        var state = new FileListState();
+        var list = new System.Windows.Controls.ListView { Width = 500, Height = 280, ItemsSource = state.ItemsView,
+            ItemContainerStyle = (System.Windows.Style)resources[typeof(System.Windows.Controls.ListViewItem)] };
+        var columns = new System.Windows.Controls.GridView();
+        columns.Columns.Add(new System.Windows.Controls.GridViewColumn { Header = "Name", Width = 300,
+            DisplayMemberBinding = new System.Windows.Data.Binding(nameof(FileEntry.Name)) });
+        columns.Columns.Add(new System.Windows.Controls.GridViewColumn { Header = "Size", Width = 100,
+            DisplayMemberBinding = new System.Windows.Data.Binding(nameof(FileEntry.Size)) });
+        list.View = columns;
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+        System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
+        System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
+        state.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
+        var host = new System.Windows.Window { Content = list, Width = 520, Height = 320, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        IEnumerable<System.Windows.DependencyObject> Children(System.Windows.DependencyObject parent)
+        {
+            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                yield return child;
+                foreach (var nested in Children(child)) yield return nested;
+            }
+        }
+        try
+        {
+            host.Show();
+            for (var round = 0; round < 12; round++)
+            {
+                var entries = Enumerable.Range(0, 1000).Select(i => new FileEntry
+                {
+                    Name = $"round{round}-file{i:D4}.type{i % 10}", FullPath = Path.Combine(fixtures, $"row{i}"), Kind = "file",
+                    IsDirectory = false, Size = i, ModifiedAt = DateTime.MinValue, CreatedAt = DateTime.MinValue, AccessedAt = DateTime.MinValue
+                }).ToArray();
+                using (state.ItemsView.DeferRefresh())
+                {
+                    state.ReplaceItems(fixtures, entries);
+                    state.ApplySort("Name", round % 2 == 0, true, groupMode: GroupMode.Extension);
+                }
+                list.ScrollIntoView(entries[(round * 83) % entries.Length]);
+                list.UpdateLayout();
+                PumpDispatcherUntilComplete(list.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.ContextIdle).Task);
+                list.UpdateLayout();
+                var rows = Children(list).OfType<System.Windows.Controls.ListViewItem>().Where(row => row.IsVisible && row.Content is FileEntry).ToArray();
+                Require(rows.Length > 0, "Grouped fixture has no realized rows.");
+                foreach (var row in rows)
+                {
+                    var presenter = Children(row).OfType<System.Windows.Controls.GridViewRowPresenter>().Single();
+                    Require(ReferenceEquals(presenter.Columns, columns.Columns), $"Recycled row lost columns: round={round}");
+                    Require(Children(presenter).OfType<System.Windows.Controls.TextBlock>().Any(text => text.Text == ((FileEntry)row.Content).Name),
+                        $"Recycled row lost its file text: round={round}, file={((FileEntry)row.Content).Name}");
+                }
+            }
+        }
+        finally { host.Close(); }
+    }));
+
     await CheckAsync("rectangle-selection-edge-scroll-and-reversal", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "rectangle-scroll");

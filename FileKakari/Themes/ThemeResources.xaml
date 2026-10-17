@@ -609,7 +609,7 @@
                             SnapsToDevicePixels="True">
                         <GridViewRowPresenter Margin="0"
                                               Content="{TemplateBinding Content}"
-                                              Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                              Columns="{TemplateBinding GridView.ColumnCollection}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                     </Border>
@@ -742,7 +742,7 @@
                             SnapsToDevicePixels="True">
                         <GridViewRowPresenter Margin="0"
                                               Content="{TemplateBinding Content}"
-                                              Columns="{Binding View.Columns, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                              Columns="{TemplateBinding GridView.ColumnCollection}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                     </Border>

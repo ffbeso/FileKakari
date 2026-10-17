@@ -13,6 +13,7 @@ public sealed class SelectionInteractionController
     private readonly Func<bool> _isLoading;
     private readonly Action _clearFileDragStart;
     private readonly Action _updateSelectedItemStatus;
+    private readonly Action? _rangeSelectionCompleted;
     private ListViewRangeSelectionSession? _session;
 
     public SelectionInteractionController(
@@ -21,7 +22,8 @@ public sealed class SelectionInteractionController
         FrameworkElement selectionRectangle,
         Func<bool> isLoading,
         Action clearFileDragStart,
-        Action updateSelectedItemStatus)
+        Action updateSelectedItemStatus,
+        Action? rangeSelectionCompleted = null)
     {
         _itemsList = itemsList;
         _overlay = overlay;
@@ -29,6 +31,7 @@ public sealed class SelectionInteractionController
         _isLoading = isLoading;
         _clearFileDragStart = clearFileDragStart;
         _updateSelectedItemStatus = updateSelectedItemStatus;
+        _rangeSelectionCompleted = rangeSelectionCompleted;
     }
 
     public bool IsSelecting { get; private set; }
@@ -161,6 +164,7 @@ public sealed class SelectionInteractionController
 
     private void Finish()
     {
+        var moved = _session?.Moved == true;
         if (_session is not null)
         {
             if (_session.Moved)
@@ -175,6 +179,7 @@ public sealed class SelectionInteractionController
         }
 
         Clear();
+        if (moved) _rangeSelectionCompleted?.Invoke();
         _updateSelectedItemStatus();
     }
 

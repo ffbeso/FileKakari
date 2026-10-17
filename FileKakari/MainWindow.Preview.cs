@@ -778,6 +778,14 @@ public partial class MainWindow
             $"explicitClickCanceled=true previewRequested=false duplicateSuppressed=true skipReason={skipReason}");
     }
 
+    private void CompletePreviewRangeSelection(FolderPane? pane)
+    {
+        if (pane is null || !ReferenceEquals(pane, GetActiveFolderPane())) return;
+
+        CancelPreviewExplicitMouseSelectionCandidate("range-selection-completed");
+        BeginPreviewExplicitSelectionInput(pane, "range-selection");
+    }
+
     private void QueuePreviewExplicitSelectionInputCompletion(FolderPane pane, long inputSequenceId)
     {
         _ = Dispatcher.BeginInvoke(

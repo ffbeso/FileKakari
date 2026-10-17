@@ -424,7 +424,8 @@ public partial class MainWindow : Window
             RangeSelectionRectangle,
             () => _isLoading,
             ClearFileDragStart,
-            UpdateSelectedItemStatus);
+            UpdateSelectedItemStatus,
+            () => CompletePreviewRangeSelection(GetNormalFolderPane()));
         _navigationController = new NavigationController(this);
         _breadcrumbPathBar = new BreadcrumbPathBarController(
             BreadcrumbPanel,
@@ -3279,7 +3280,8 @@ public partial class MainWindow : Window
             return false;
         }
 
-        if (!_workspaceRangeSelectionSession.Moved && !_workspaceRangeSelectionSession.Additive)
+        var moved = _workspaceRangeSelectionSession.Moved;
+        if (!moved && !_workspaceRangeSelectionSession.Additive)
         {
             ClearSelectionForPane(pane, listView, updateStatus: false);
         }
@@ -3291,6 +3293,7 @@ public partial class MainWindow : Window
 
         ClearWorkspacePaneRangeSelection();
         SyncPaneSelectionFromListView(pane, listView);
+        if (moved) CompletePreviewRangeSelection(pane);
         return true;
     }
 

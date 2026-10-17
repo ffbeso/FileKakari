@@ -178,6 +178,39 @@ try
         return Task.CompletedTask;
     });
 
+    await CheckAsync("snapshot-sort-matches-existing-columns", async () =>
+    {
+        var entries = Enumerable.Range(0, 257).Select(i => new FileEntry
+        {
+            Name = $"{(i % 2 == 0 ? "Ａ" : "a")}{i % 17:D2}.{(i % 3 == 0 ? "txt" : "bin")}",
+            FullPath = Path.Combine(fixtures, i.ToString(), $"file{i}.txt"), Kind = $"kind{i % 3}",
+            IsDirectory = i % 11 == 0, Size = i % 7 == 0 ? null : i % 13,
+            ModifiedAt = new DateTime(2020, 1, 1).AddDays(i % 9),
+            CreatedAt = new DateTime(2021, 1, 1).AddDays(i % 7),
+            AccessedAt = new DateTime(2022, 1, 1).AddDays(i % 5)
+        }).Reverse().ToArray();
+        foreach (var column in new[] { "Name", "Kind", "Size", "ModifiedAt", "CreatedAt", "AccessedAt", "Extension", "Attributes", "FullPath", "ParentPath", "BaseName" })
+        foreach (var ascending in new[] { true, false })
+        foreach (var foldersFirst in new[] { true, false })
+        foreach (var preserveTies in new[] { true, false })
+        {
+            var previous = preserveTies ? entries.Select((entry, i) => (entry.FullPath, i)).ToDictionary(pair => pair.FullPath, pair => pair.i) : null;
+            var comparer = new FileEntryComparer(column, ascending, foldersFirst, previous);
+            var expected = entries.OrderBy(entry => entry, Comparer<FileEntry>.Create(comparer.Compare)).ToArray();
+            var keys = entries.Select((entry, i) => FileSortSnapshot.Capture(entry, i, column, preserveTies ? i : null)).ToArray();
+            var result = await FileSortSnapshot.SortAsync(keys, column, ascending, foldersFirst, CancellationToken.None);
+            Require(result.Select(i => entries[i]).SequenceEqual(expected), $"Snapshot order differs: {column}/{ascending}/{foldersFirst}/{preserveTies}");
+        }
+        var snapshot = entries.Select((entry, i) => FileSortSnapshot.Capture(entry, i, "Size", i)).ToArray();
+        var before = await FileSortSnapshot.SortAsync(snapshot, "Size", true, true, CancellationToken.None);
+        foreach (var entry in entries) entry.Size = 999;
+        Require((await FileSortSnapshot.SortAsync(snapshot, "Size", true, true, CancellationToken.None)).SequenceEqual(before), "Worker snapshot read changed metadata.");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        try { await FileSortSnapshot.SortAsync(snapshot, "Size", true, true, cancelled.Token); throw new InvalidOperationException("Cancelled sort completed."); }
+        catch (OperationCanceledException) { }
+    });
+
     await CheckAsync("pane-column-sort-preserves-group-policy", () => RunOnStaAsync(() =>
     {
         var entries = new[] { ("a.txt", 30), ("b.bin", 20), ("c.txt", 10), ("d.bin", 40) }.Select(pair =>

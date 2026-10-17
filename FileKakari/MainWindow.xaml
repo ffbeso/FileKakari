@@ -2265,7 +2265,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Border Padding="6,4"
+                    <Border Padding="6,3"
                             Background="{DynamicResource ControlBackgroundBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,0,0,1">
@@ -2295,15 +2295,20 @@
                                          Margin="4,0,0,0"
                                          IsIndeterminate="True"
                                          Visibility="Collapsed" />
-                            <StackPanel>
+                            <DockPanel LastChildFill="True" VerticalAlignment="Center">
                                 <TextBlock x:Name="PreviewHeaderText"
+                                           DockPanel.Dock="Left"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource TextBrush}" />
                                 <TextBlock x:Name="PreviewTitleText"
-                                           Margin="0,2,0,0"
+                                           VerticalAlignment="Center"
+                                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                            Foreground="{DynamicResource SubtleTextBrush}"
+                                           TextWrapping="NoWrap"
                                            TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
+                            </DockPanel>
                         </DockPanel>
                     </Border>
                     <Grid x:Name="PreviewContentViewport" Grid.Row="1">

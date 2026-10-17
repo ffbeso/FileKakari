@@ -32,12 +32,15 @@ public sealed class ImagePreviewTile : Border, IDisposable
         FilePath = path;
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
         _token = _lifetime.Token;
-        Margin = new Thickness(2);
+        Margin = new Thickness(0);
         ClipToBounds = true;
         BorderThickness = new Thickness(1);
         SetResourceReference(BorderBrushProperty, "BorderBrush");
         SetResourceReference(BackgroundProperty, "PanelBackgroundBrush");
         var layout = new DockPanel();
+        var footer = new Grid();
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
         Button AddButton(string text, string tooltip, Action action)
         {
@@ -51,14 +54,20 @@ public sealed class ImagePreviewTile : Border, IDisposable
         toolbar.Children.Add(_zoomLabel);
         AddButton("+", AppStrings.Get("ImageZoomIn"), () => ZoomAt(ZoomScale * 1.25, new Point(_viewport.ActualWidth / 2, _viewport.ActualHeight / 2)));
         AddButton(AppStrings.Get("ImageZoomFit"), AppStrings.Get("ImageZoomFit"), Fit);
-        DockPanel.SetDock(toolbar, Dock.Bottom);
-        layout.Children.Add(toolbar);
+        Grid.SetColumn(toolbar, 1);
+        footer.Children.Add(toolbar);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        layout.Children.Add(footer);
         if (showName)
         {
-            var title = new TextBlock { Text = System.IO.Path.GetFileName(path), ToolTip = path, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(4, 2, 4, 2) };
+            var title = new TextBlock { Text = System.IO.Path.GetFileName(path), ToolTip = path, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(3, 0, 3, 0) };
             title.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
-            DockPanel.SetDock(title, Dock.Top);
-            layout.Children.Add(title);
+            footer.Children.Add(title);
+        }
+        else
+        {
+            Grid.SetColumn(toolbar, 0);
+            Grid.SetColumnSpan(toolbar, 2);
         }
         _message.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
         _message.Text = AppStrings.Get("ImagePreviewLoading");

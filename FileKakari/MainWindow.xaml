@@ -2389,7 +2389,7 @@
                                  VerticalScrollBarVisibility="Auto"
                                  Visibility="Collapsed" />
                         <Grid x:Name="PreviewImageScrollViewer"
-                              Margin="8"
+                              Margin="0"
                               ClipToBounds="True"
                               Visibility="Collapsed">
                             <Grid x:Name="PreviewImagesGrid" />

@@ -24,6 +24,68 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("group-anchor-early-scroll-and-position-reuse", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "early-anchor");
+        Directory.CreateDirectory(folder);
+        var entries = Enumerable.Range(0, 300).Select(index =>
+        {
+            var path = Path.Combine(folder, $"{index:D4}.txt");
+            File.WriteAllText(path, "row");
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        var state = new FileListState();
+        state.ReplaceItems(folder, entries);
+        state.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
+        var list = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView, Width = 400, Height = 240 };
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+        System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
+        System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
+        System.Windows.Controls.ScrollViewer.SetCanContentScroll(list, true);
+        var host = new System.Windows.Window { Content = list, Width = 420, Height = 280, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            host.Show(); list.UpdateLayout();
+            System.Windows.Controls.ScrollViewer? FindScroll(System.Windows.DependencyObject parent)
+            {
+                if (parent is System.Windows.Controls.ScrollViewer found) return found;
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+                    if (FindScroll(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+                return null;
+            }
+            var scroll = FindScroll(list)!;
+            var service = typeof(FileEntry).Assembly.GetType("FileKakari.AnchorScrollService")!;
+            var capture = service.GetMethod("CaptureAnchorState")!;
+            var restore = service.GetMethod("RestoreAnchorScrollAsync")!;
+            var dispatcher = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+            scroll.ScrollToVerticalOffset(1400); list.UpdateLayout();
+            var anchor = (AnchorScrollState?)capture.Invoke(null, new object[] { list, GroupMode.Extension, scroll.VerticalOffset });
+            Require(anchor is not null && scroll.VerticalOffset > 0, "Grouped fixture did not capture a scrolled anchor.");
+            Task<bool> Restore(bool early, Func<bool>? stale = null, long flowId = 0) => (Task<bool>)restore.Invoke(null,
+                new object?[] { list, anchor, GroupMode.Extension, dispatcher, flowId, stale, early })!;
+            var unchanged = Restore(true);
+            Require(unchanged.IsCompletedSuccessfully && unchanged.Result, "Valid visible anchor was not reused synchronously.");
+            scroll.ScrollToVerticalOffset(0); list.UpdateLayout();
+            var moved = Restore(true);
+            PumpDispatcherUntilComplete(moved);
+            Require(moved.Result, "Early grouped restoration did not converge.");
+            var restored = (AnchorScrollState?)capture.Invoke(null, new object[] { list, GroupMode.Extension, scroll.VerticalOffset });
+            Require(restored?.AnchorPath == anchor!.AnchorPath && Math.Abs(restored.RelativeOffset - anchor.RelativeOffset) <= 0.75,
+                "Early restoration changed anchor or relative position.");
+            var deletion = Restore(true, flowId: 1);
+            Require(!deletion.IsCompleted, "Deletion bypassed its extent stabilization wait.");
+            PumpDispatcherUntilComplete(deletion);
+            Require(deletion.Result, "Conservative deletion restoration failed.");
+            scroll.ScrollToVerticalOffset(0); list.UpdateLayout();
+            var obsolete = false;
+            var cancelled = Restore(true, () => obsolete);
+            dispatcher.BeginInvoke(new Action(() => obsolete = true), System.Windows.Threading.DispatcherPriority.Normal);
+            PumpDispatcherUntilComplete(cancelled);
+            Require(!cancelled.Result && scroll.VerticalOffset == 0, "Obsolete early restore moved the new view.");
+        }
+        finally { host.Close(); }
+    }));
+
     await CheckAsync("anchor-target-single-pass-and-fallback-priority", () =>
     {
         var entries = new[] { "next", "previous", "anchor" }.Select(name =>
@@ -255,7 +317,7 @@ try
             var restore = typeof(FileEntry).Assembly.GetType("FileKakari.AnchorScrollService")!.GetMethod("RestoreAnchorScrollAsync")!;
             var task = (Task<bool>)restore.Invoke(null, new object[] { list,
                 new AnchorScrollState(entries[100].FullPath, 0, null, null, 100), GroupMode.Extension, dispatcher,
-                0L, (Func<bool>)(() => stale) })!;
+                0L, (Func<bool>)(() => stale), false })!;
             dispatcher.BeginInvoke(new Action(() => stale = true), System.Windows.Threading.DispatcherPriority.Input);
             PumpDispatcherUntilComplete(task);
             list.UpdateLayout();

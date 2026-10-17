@@ -102,7 +102,8 @@ internal static class AnchorScrollService
         GroupMode mode,
         Dispatcher dispatcher,
         long deleteFlowId = 0,
-        Func<bool>? isStale = null)
+        Func<bool>? isStale = null,
+        bool allowEarlyScroll = false)
     {
         if (isStale?.Invoke() == true) return false;
         if (listView == null || anchorState == null || mode == GroupMode.None || listView.Items.Count == 0)
@@ -121,9 +122,17 @@ internal static class AnchorScrollService
             return false;
         }
 
+        // Deletion still needs its conservative extent stabilization path.
+        var earlyScroll = allowEarlyScroll && deleteFlowId == 0;
+        if (earlyScroll && IsAnchorPositionCurrent(listView, targetEntry, anchorState.RelativeOffset))
+        {
+            PerfLog.WriteVerbose("anchor-stage stage=already-positioned skipped=true");
+            return true;
+        }
         stageTimer.Restart();
-        await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
-        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
+        if (!earlyScroll)
+            await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
+        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} skipped={earlyScroll}");
         if (isStale?.Invoke() == true) return false;
 
         // Step 1: ScrollIntoView
@@ -132,7 +141,7 @@ internal static class AnchorScrollService
         {
             if (isStale?.Invoke() == true) return;
             listView.ScrollIntoView(targetEntry);
-        }, DispatcherPriority.Send);
+        }, earlyScroll ? DispatcherPriority.Loaded : DispatcherPriority.Send);
         PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
 
         // ScrollIntoView と相対Y補正のどちらでも仮想化コンテナの再配置が起こり得る。
@@ -146,7 +155,29 @@ internal static class AnchorScrollService
             deleteFlowId,
             resolveReason, isStale);
         PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=position-correction elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} restored={restored}");
+        if (!restored && earlyScroll && isStale?.Invoke() != true)
+        {
+            PerfLog.WriteVerbose("anchor-stage stage=conservative-retry reason=early-position-not-stable");
+            return await RestoreAnchorScrollAsync(listView, anchorState, mode, dispatcher, deleteFlowId, isStale);
+        }
         return restored;
+    }
+
+    private static bool IsAnchorPositionCurrent(ListView listView, FileEntry entry, double relativeOffset)
+    {
+        if (!listView.IsMeasureValid || !listView.IsArrangeValid
+            || FindVisualChild<ScrollViewer>(listView) is not { } scroll
+            || !scroll.IsMeasureValid || !scroll.IsArrangeValid
+            || listView.ItemContainerGenerator.ContainerFromItem(entry) is not ListViewItem { IsVisible: true } row
+            || !row.IsMeasureValid || !row.IsArrangeValid)
+            return false;
+        try
+        {
+            var y = row.TransformToAncestor(scroll).Transform(new Point(0, 0)).Y;
+            return y + row.ActualHeight > 0 && y < scroll.ActualHeight
+                && Math.Abs(y - relativeOffset) <= 0.75;
+        }
+        catch (InvalidOperationException) { return false; }
     }
 
     private static async Task WaitForStableExtentAsync(

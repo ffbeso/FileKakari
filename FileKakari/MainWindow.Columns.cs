@@ -377,17 +377,6 @@ public partial class MainWindow
             return;
         }
 
-        // Capture current display order before updating sort properties
-        var currentOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        int index = 0;
-        foreach (var item in ItemsView)
-        {
-            if (item is FileEntry entry)
-            {
-                currentOrder[entry.FullPath] = index++;
-            }
-        }
-
         if (targetState.SortColumn == columnId)
         {
             targetState.SortAscending = !targetState.SortAscending;
@@ -409,6 +398,13 @@ public partial class MainWindow
             }
         }
 
+        if (FindPaneForState(targetState) is { } sortPane
+            && await TrySortColumnAsync(sortPane, targetState, ItemsList)) return;
+
+        var currentOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int index = 0;
+        foreach (var item in ItemsView)
+            if (item is FileEntry entry) currentOrder[entry.FullPath] = index++;
         ApplyTabSort(targetState, currentOrder);
         _workspaceLocalState.MarkDirty("sort");
     }
@@ -432,6 +428,7 @@ public partial class MainWindow
 
     private void ApplyTabSort(WorkspaceTabState targetState, Dictionary<string, int>? currentOrder = null, bool applyFilter = false)
     {
+        _normalListHasMaterializedSort = false;
         using var previewSuppression = SuppressPreviewForProgrammaticSelection("reload");
         if (!_devListPerfOptions.SortEnabled)
         {
@@ -467,6 +464,7 @@ public partial class MainWindow
 
     private void ClearItemsSort()
     {
+        _normalListHasMaterializedSort = false;
         if (!_devListPerfOptions.SortEnabled)
         {
             _performanceLogger.Write($"sort-clear-skip reason=dev-flag loadId={_diagnosticLoadId} isLoading={_isLoading} path=\"{ActiveNavigation?.CurrentPath ?? ""}\"");

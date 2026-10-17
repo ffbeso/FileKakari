@@ -598,17 +598,6 @@ public partial class MainWindow
             return;
         }
 
-        // Capture current display order before updating sort properties
-        var currentOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        int index = 0;
-        foreach (var item in pane.FileList.ItemsView)
-        {
-            if (item is FileEntry entry)
-            {
-                currentOrder[entry.FullPath] = index++;
-            }
-        }
-
         string? columnId = null;
         var headerObj = column.Header;
         if (headerObj is string headerText)
@@ -643,6 +632,13 @@ public partial class MainWindow
             _workspaceLocalState.MarkDirty("sort");
             return;
         }
+
+        if (sender is ListView sortList && await TrySortColumnAsync(pane, targetState, sortList)) return;
+
+        var currentOrder = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int index = 0;
+        foreach (var item in pane.FileList.ItemsView)
+            if (item is FileEntry entry) currentOrder[entry.FullPath] = index++;
 
         using (SuppressPreviewForProgrammaticSelection("reload"))
         {

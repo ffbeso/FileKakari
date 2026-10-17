@@ -178,6 +178,100 @@ try
         return Task.CompletedTask;
     });
 
+    await CheckAsync("async-column-sort-latest-selection-filter-and-owner", () => RunOnStaAsync(() =>
+    {
+        var state = new FileListState();
+        var entries = Enumerable.Range(0, 4096).Select(i => new FileEntry
+        {
+            Name = $"row{i:D5}.txt", FullPath = Path.Combine(fixtures, $"sort{i:D5}.txt"), Kind = "text",
+            IsDirectory = false, Size = i, ModifiedAt = DateTime.MinValue,
+            CreatedAt = DateTime.MinValue, AccessedAt = DateTime.MinValue
+        }).ToArray();
+        state.ReplaceItems(fixtures, entries);
+        var view = (System.Windows.Data.ListCollectionView)state.ItemsView;
+        view.CustomSort = new FileEntryComparer("Name", true, true);
+        var list = new System.Windows.Controls.ListView { ItemsSource = view, Width = 400, Height = 240 };
+        var columns = new System.Windows.Controls.GridView();
+        columns.Columns.Add(new System.Windows.Controls.GridViewColumn { Header = "Name", Width = 340,
+            DisplayMemberBinding = new System.Windows.Data.Binding(nameof(FileEntry.Name)) });
+        list.View = columns;
+        System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
+        var host = new System.Windows.Window { Content = list, Width = 420, Height = 280, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            host.Show(); list.UpdateLayout();
+            var type = typeof(FileEntry).Assembly.GetType("FileKakari.ListViewAsyncSortController")!;
+            var controller = Activator.CreateInstance(type)!;
+            var method = type.GetMethod("SortAsync")!;
+            bool current = true;
+            var resets = 0;
+            ((System.Collections.Specialized.INotifyCollectionChanged)view).CollectionChanged += (_, e) =>
+            {
+                if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++;
+            };
+            Task<bool> Sort(bool ascending) => (Task<bool>)method.Invoke(controller, new object[]
+            {
+                list, state.Items, view, "Size", ascending, true, (Func<bool>)(() => current),
+                (Action<Action>)(update => update()), state
+            })!;
+            var obsolete = Sort(true);
+            var latest = Sort(false);
+            list.SelectedItem = entries[2000];
+            list.ScrollIntoView(entries[2000]); list.UpdateLayout();
+            PumpDispatcherUntilComplete(Task.WhenAll(obsolete, latest));
+            Require(!obsolete.Result && latest.Result, "Latest column click did not supersede old request.");
+            Require(resets == 1 && view.CustomSort is null, "Sort must publish one Reset without a second WPF sort.");
+            Require(view.Cast<FileEntry>().SequenceEqual(entries.Reverse()), "Published order differs from worker result.");
+            Require(ReferenceEquals(list.SelectedItem, entries[2000]), "Sort restored the initial selection instead of the latest input.");
+            var row = list.ItemContainerGenerator.ContainerFromItem(entries[2000]) as System.Windows.Controls.ListViewItem;
+            Require(row is not null && row.TranslatePoint(new System.Windows.Point(), list).Y < list.ActualHeight,
+                "Visible selected anchor was lost after sorting.");
+
+            var filtered = Sort(true);
+            view.Filter = item => ((FileEntry)item).Size % 2 == 0;
+            PumpDispatcherUntilComplete(filtered);
+            Require(filtered.Result && view.Cast<FileEntry>().SequenceEqual(entries.Where(e => e.Size % 2 == 0)),
+                "Filter change during sorting was not retried against current data.");
+            view.Filter = null;
+            Require(view.Cast<FileEntry>().SequenceEqual(entries), "Removing the filter lost hidden rows or sort order.");
+            var movedAway = Sort(false);
+            current = false;
+            PumpDispatcherUntilComplete(movedAway);
+            Require(!movedAway.Result && view.Cast<FileEntry>().SequenceEqual(entries), "Old owner published into a different tab.");
+            current = true;
+            list.SelectedItem = null;
+            list.ScrollIntoView(entries[1000]); list.UpdateLayout();
+            System.Windows.Controls.ScrollViewer? FindSortScroll(System.Windows.DependencyObject parent)
+            {
+                if (parent is System.Windows.Controls.ScrollViewer scroll) return scroll;
+                for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+                    if (FindSortScroll(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+                return null;
+            }
+            var sortScroll = FindSortScroll(list)!;
+            var viewport = (System.Windows.Controls.ScrollContentPresenter)sortScroll.Template.FindName("PART_ScrollContentPresenter", sortScroll);
+            var viewportTop = viewport.TranslatePoint(new System.Windows.Point(), list).Y;
+            var firstVisible = entries.Select(entry => (Entry: entry,
+                Row: list.ItemContainerGenerator.ContainerFromItem(entry) as System.Windows.Controls.ListViewItem))
+                .Where(pair => pair.Row is not null)
+                .Select(pair => (pair.Entry, Top: pair.Row!.TranslatePoint(new System.Windows.Point(), list).Y, Height: pair.Row.ActualHeight))
+                .Where(pair => pair.Top + pair.Height > viewportTop && pair.Top < viewportTop + viewport.ActualHeight)
+                .OrderBy(pair => pair.Top).First();
+            var withoutSelection = Sort(false);
+            PumpDispatcherUntilComplete(withoutSelection);
+            var restoredRow = list.ItemContainerGenerator.ContainerFromItem(firstVisible.Entry) as System.Windows.Controls.ListViewItem;
+            Require(withoutSelection.Result && restoredRow is not null
+                && Math.Abs(restoredRow.TranslatePoint(new System.Windows.Point(), list).Y - firstVisible.Top) < 1,
+                $"Sorting without selection did not keep the top visible row at its relative position: entry={firstVisible.Entry.Name}, before={firstVisible.Top}, after={restoredRow?.TranslatePoint(new System.Windows.Point(), list).Y}, viewport={viewportTop}.");
+            var changedMetadata = Sort(true);
+            entries[0].Size = 99999;
+            PumpDispatcherUntilComplete(changedMetadata);
+            Require(changedMetadata.Result && ReferenceEquals(view.GetItemAt(view.Count - 1), entries[0]),
+                "Metadata change during snapshot construction was not included in the final order.");
+        }
+        finally { host.Close(); }
+    }));
+
     await CheckAsync("snapshot-sort-matches-existing-columns", async () =>
     {
         var entries = Enumerable.Range(0, 257).Select(i => new FileEntry

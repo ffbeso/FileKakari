@@ -7196,6 +7196,13 @@ public partial class MainWindow : Window
 
     private void RefreshItemsView(string reason)
     {
+        // A later metadata/rename refresh must restore value-based ordering.
+        // Materialized column sorts deliberately leave WPF's comparer unset.
+        if (_normalListHasMaterializedSort && ActiveTabState is { } state)
+        {
+            ApplyTabSort(state);
+            return;
+        }
         _itemsViewRefreshCount++;
         IncrementReason(_itemsViewRefreshReasons, reason);
         if (_isLoading)

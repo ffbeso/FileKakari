@@ -332,6 +332,14 @@ public sealed class FileListState : INotifyPropertyChanged
         ApplySort(state.SortColumn, state.SortAscending, sortFoldersFirst, currentOrder, state.GroupMode);
     }
 
+    public void RecordMaterializedSort(string column, bool ascending, bool foldersFirst)
+    {
+        _displaySortColumn = column;
+        _displaySortAscending = ascending;
+        _displaySortFoldersFirst = foldersFirst;
+        InvalidateSimilarNameIndex();
+    }
+
     public void ApplySort(string sortColumn, bool sortAscending, bool sortFoldersFirst, Dictionary<string, int>? currentOrder = null, GroupMode groupMode = GroupMode.None)
     {
         _displaySortColumn = sortColumn;

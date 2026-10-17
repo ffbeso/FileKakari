@@ -103,22 +103,25 @@ public partial class MainWindow
             return;
         }
 
-        var selectedPaths = targetState.SelectedPaths;
-        var offset = targetState.VerticalOffset;
+        var selectedPaths = targetListView.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToArray();
+        var targetPane = targetListView.DataContext as FolderPane ?? FindPaneForState(targetState);
+        var switchGeneration = _workspaceSwitchGeneration;
+        var path = targetState.CurrentPath;
+        bool IsStale() => targetState.GroupMode != mode
+            || _workspaceSwitchGeneration != switchGeneration
+            || !string.Equals(targetState.CurrentPath, path, StringComparison.OrdinalIgnoreCase)
+            || (targetPane is not null && (!ReferenceEquals(targetPane.ActiveTabState, targetState)
+                || !ReferenceEquals(GetFolderPaneListView(targetPane), targetListView)));
 
         targetState.GroupMode = mode;
+        _workspaceLocalState.MarkDirty("group-mode");
 
-        if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath))
+        if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath) && targetPane is not null)
         {
-            var pane = targetListView.DataContext as FolderPane ?? FindPaneForState(targetState);
-            if (pane is not null)
-            {
-                await ReloadFolderPaneAsync(pane);
-                return;
-            }
+            await ReloadFolderPaneAsync(targetPane);
+            if (IsStale()) return;
         }
-
-        if (ReferenceEquals(targetListView, ItemsList))
+        else if (ReferenceEquals(targetListView, ItemsList))
         {
             ApplyTabSort(targetState);
         }
@@ -131,16 +134,26 @@ public partial class MainWindow
 
         if (ReferenceEquals(targetListView, ItemsList))
         {
-            await RestoreScrollOffsetAsync(offset);
             RestoreSelection(selectedPaths);
         }
         else if (targetListView.DataContext is FolderPane pane)
         {
-            await RestoreWorkspacePaneScrollOffsetAsync(pane, offset);
             SelectItemsInPaneByPaths(pane, selectedPaths, focus: false, scrollIntoView: false);
         }
 
-        _workspaceLocalState.MarkDirty("group-mode");
+        // A different grouping has a different layout: neither the old offset nor anchor is meaningful.
+        targetState.SelectedPaths = selectedPaths;
+        targetState.AnchorState = null;
+        targetState.VerticalOffset = 0;
+        if (targetPane is not null)
+        {
+            targetPane.FileList.PendingAnchorScrollState = null;
+            targetPane.ScrollOffset = 0;
+        }
+        var loadGeneration = targetPane?.FileList.LoadGeneration;
+        await RestoreScrollViewerOffsetCoreAsync(
+            () => FindVisualChild<ScrollViewer>(targetListView), 0,
+            () => IsStale() || targetPane?.FileList.LoadGeneration != loadGeneration);
     }
 
     private void CopyPathsToClipboard(IReadOnlyList<FileEntry> entries)

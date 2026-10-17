@@ -5819,6 +5819,7 @@ public partial class MainWindow : Window
 
         targetTab.State.VerticalOffset = verticalOffset;
         targetTab.State.SelectedPaths = selectedPaths;
+        LogRestoredSelectionVisibility(pane, "save-viewstate");
         if (targetTab.State.GroupMode != GroupMode.None)
         {
             targetTab.State.AnchorState = AnchorScrollService.CaptureAnchorState(listView, targetTab.State.GroupMode, verticalOffset);

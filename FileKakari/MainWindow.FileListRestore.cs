@@ -7,6 +7,30 @@ namespace FileKakari;
 
 public partial class MainWindow
 {
+    private void LogRestoredSelectionVisibility(FolderPane pane, string source)
+    {
+        if (!PerfLog.IsVerboseEnabled || GetFolderPaneListView(pane) is not { } listView) return;
+        var scroll = FindVisualChild<ScrollViewer>(listView);
+        var selected = listView.SelectedItems.OfType<FileEntry>().ToList();
+        var realized = 0;
+        var visible = 0;
+        var highlighted = 0;
+        foreach (var entry in selected)
+        {
+            if (listView.ItemContainerGenerator.ContainerFromItem(entry) is not ListViewItem row) continue;
+            realized++;
+            if (row.IsSelected) highlighted++;
+            if (scroll is null) continue;
+            try
+            {
+                var y = row.TransformToAncestor(scroll).Transform(new Point()).Y;
+                if (y + row.ActualHeight > 0 && y < scroll.ActualHeight) visible++;
+            }
+            catch (InvalidOperationException) { }
+        }
+        PerfLog.WriteVerbose($"selection-visibility source={source} paneId={pane.Id} stateId={pane.ActiveTabState?.Id} selected={selected.Count} realized={realized} visible={visible} highlighted={highlighted} offset={scroll?.VerticalOffset} hasAnchor={pane.ActiveTabState?.AnchorState is not null}");
+    }
+
     private IReadOnlyList<FileEntry> SelectItemsInPaneByPaths(
         FolderPane pane,
         IReadOnlyCollection<string> paths,
@@ -1171,6 +1195,7 @@ public partial class MainWindow
             }
 
             ApplyWorkspacePostLoadState(requestedSession, switchId);
+            foreach (var pane in targetPanes) LogRestoredSelectionVisibility(pane, "workspace-restored");
 
             if (!CanApplyWorkspaceSwitch(switchId, requestedSession))
             {

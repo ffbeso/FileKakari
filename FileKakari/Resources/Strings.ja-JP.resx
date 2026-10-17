@@ -334,4 +334,9 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="ImagePreviewFailed" xml:space="preserve"><value>画像を表示できません</value></data>
   <data name="ImagePreviewCount" xml:space="preserve"><value>画像 {0} 枚</value></data>
   <data name="ImagePreviewMore" xml:space="preserve"><value>画像 4 枚（ほか {0} 枚）</value></data>
+  <data name="ImageZoomOut" xml:space="preserve"><value>縮小</value></data>
+  <data name="ImageZoomIn" xml:space="preserve"><value>拡大</value></data>
+  <data name="ImageZoomFit" xml:space="preserve"><value>全体</value></data>
+  <data name="ImageZoomHint" xml:space="preserve"><value>Ctrl＋ホイールで拡大・縮小、ドラッグで移動、ダブルクリックで全体／原寸切り替え</value></data>
+  <data name="ImagePreviewMixedSelection" xml:space="preserve"><value>複数プレビューは画像のみ対応しています。画像だけを選択するか、ファイルを1つ選択してください。</value></data>
 </root>

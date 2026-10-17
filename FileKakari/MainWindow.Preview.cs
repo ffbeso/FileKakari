@@ -132,6 +132,12 @@ public partial class MainWindow
     private void PreviewPane_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
         var hasControl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        if (hasControl && e.OriginalSource is DependencyObject source
+            && FindVisualParent<ImagePreviewTile>(source) is { } tile)
+        {
+            tile.ZoomWheel(e);
+            return;
+        }
         var isTextPreview = PreviewTextBox.Visibility == Visibility.Visible;
         if (!hasControl && isTextPreview)
         {
@@ -1144,7 +1150,7 @@ public partial class MainWindow
             }
             PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"multi-selection\" selectedCount={selectedEntries.Count} generation={generation}");
             PreviewTitleText.Text = "";
-            ReplacePreviewWithMessage(_text.Get("PreviewSingleFileOnly"));
+            ReplacePreviewWithMessage(_text.Get("ImagePreviewMixedSelection"));
             return;
         }
 

@@ -1168,10 +1168,43 @@ try
         Require((long)bounded.Width * bounded.Height <= ImagePreviewSizing.MaxDecodedPixels, "Decoded pixel budget exceeded.");
         return Task.CompletedTask;
     });
+    await CheckAsync("image-zoom-anchor-pan-fit-and-resize", () =>
+    {
+        var transform = new ImageViewportTransform();
+        transform.SetGeometry(2000, 1000, 500, 400);
+        Require(transform.IsFit && Math.Abs(transform.Scale - .25) < .001 && Math.Abs(transform.Y - 75) < .001, "Fit geometry is incorrect.");
+        var imageX = (200 - transform.X) / transform.Scale;
+        var imageY = (150 - transform.Y) / transform.Scale;
+        transform.ZoomAt(1, 200, 150);
+        Require(Math.Abs((200 - transform.X) / transform.Scale - imageX) < .001
+            && Math.Abs((150 - transform.Y) / transform.Scale - imageY) < .001, "Pointer anchor moved during zoom.");
+        transform.Pan(99999, -99999);
+        Require(transform.X == 0 && transform.Y == -600, "Panning exposed space beyond image bounds.");
+        transform.SetGeometry(2000, 1000, 800, 600);
+        Require(transform.Scale == 1 && !transform.IsFit && transform.Y >= -400, "Resize lost zoom or pan bounds.");
+        transform.ZoomAt(999, 400, 300);
+        Require(transform.Scale == 8, "Maximum zoom was not bounded.");
+        transform.Fit();
+        Require(transform.IsFit && Math.Abs(transform.Scale - .4) < .001, "Fit did not reset zoom.");
+        transform.SetGeometry(100, 50, 800, 600);
+        Require(transform.Scale == 1, "Fit enlarged a small original.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("image-tiles-independent-load-and-disposal", () => RunOnStaAsync(() =>
     {
         var path = Path.Combine(fixtures, "tile.png");
-        var bitmap = BitmapSource.Create(800, 400, 96, 96, PixelFormats.Bgra32, null, new byte[800 * 400 * 4], 800 * 4);
+        var pixels = new byte[800 * 400 * 4];
+        for (var y = 0; y < 400; y++)
+        for (var x = 0; x < 800; x++)
+        {
+            var offset = (y * 800 + x) * 4;
+            pixels[offset] = (byte)(x * 255 / 800);
+            pixels[offset + 1] = (byte)(y * 255 / 400);
+            pixels[offset + 2] = (byte)((x / 80 + y / 80) % 2 == 0 ? 210 : 60);
+            pixels[offset + 3] = 255;
+        }
+        var bitmap = BitmapSource.Create(800, 400, 96, 96, PixelFormats.Bgra32, null, pixels, 800 * 4);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using (var file = File.Create(path)) encoder.Save(file);
@@ -1179,12 +1212,34 @@ try
         var tiles = Enumerable.Range(0, 4).Select(i => new ImagePreviewTile(i == 3 ? Path.Combine(fixtures, "absent.png") : path, true, CancellationToken.None)).ToArray();
         foreach (var tile in tiles) grid.Children.Add(tile);
         var host = new System.Windows.Window { Content = grid, Width = 640, Height = 480, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        foreach (var theme in new[] { "ThemeResources.xaml", "LightTheme.xaml" })
+        {
+            using var file = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", theme));
+            host.Resources.MergedDictionaries.Add((System.Windows.ResourceDictionary)System.Windows.Markup.XamlReader.Load(file));
+        }
         try
         {
             host.Show(); grid.UpdateLayout();
             PumpDispatcherUntilComplete(Task.WhenAll(tiles.Select(tile => tile.LoadAsync())));
             Require(tiles.Take(3).All(tile => tile.Result?.ImageSource is { IsFrozen: true, PixelWidth: < 400 }), "Tiles did not decode independently at viewport size.");
             Require(tiles[3].Result is null, "Missing tile should not stop the other images.");
+            var otherZoom = tiles[1].ZoomScale;
+            tiles[0].ZoomAt(1, new System.Windows.Point(100, 80));
+            Require(tiles[0].ZoomScale == 1 && !tiles[0].IsFit && tiles[1].ZoomScale == otherZoom && tiles[1].IsFit,
+                "Zoom affected a different image.");
+            tiles[0].SetActive(true);
+            grid.UpdateLayout();
+            var render = new RenderTargetBitmap((int)grid.ActualWidth, (int)grid.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            render.Render(grid);
+            var screenshot = new PngBitmapEncoder();
+            screenshot.Frames.Add(BitmapFrame.Create(render));
+            using (var file = File.Create(Path.Combine(runDirectory, "image-tiles.png"))) screenshot.Save(file);
+            var wheel = new System.Windows.Input.MouseWheelEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, 120)
+                { RoutedEvent = System.Windows.UIElement.PreviewMouseWheelEvent };
+            tiles[0].ZoomWheel(wheel);
+            Require(wheel.Handled && tiles[0].ZoomScale > 1, "Image zoom wheel was not consumed.");
+            tiles[0].Fit();
+            Require(tiles[0].IsFit && tiles[0].ZoomScale < 1, "Fit button did not restore whole image.");
             tiles[0].Dispose();
             Require(tiles[0].Result is null && tiles[1].Result is not null, "Disposing one tile affected another tile.");
             using var cancelled = new CancellationTokenSource();

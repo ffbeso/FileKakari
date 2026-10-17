@@ -45,6 +45,11 @@ public partial class MainWindow
             for (var i = 0; i < paths.Count; i++)
             {
                 var tile = new ImagePreviewTile(paths[i], paths.Count > 1, token);
+                tile.Activated += selected =>
+                {
+                    foreach (var current in _imageTiles) current.SetActive(ReferenceEquals(current, selected));
+                };
+                tile.SetActive(i == 0);
                 Grid.SetColumn(tile, i % columns);
                 Grid.SetRow(tile, i / columns);
                 PreviewImagesGrid.Children.Add(tile);

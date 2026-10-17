@@ -334,4 +334,9 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="ImagePreviewFailed" xml:space="preserve"><value>Unable to display image</value></data>
   <data name="ImagePreviewCount" xml:space="preserve"><value>{0} images</value></data>
   <data name="ImagePreviewMore" xml:space="preserve"><value>4 images ({0} more)</value></data>
+  <data name="ImageZoomOut" xml:space="preserve"><value>Zoom out</value></data>
+  <data name="ImageZoomIn" xml:space="preserve"><value>Zoom in</value></data>
+  <data name="ImageZoomFit" xml:space="preserve"><value>Fit</value></data>
+  <data name="ImageZoomHint" xml:space="preserve"><value>Ctrl+wheel to zoom, drag to pan, double-click to switch fit/100%</value></data>
+  <data name="ImagePreviewMixedSelection" xml:space="preserve"><value>Multiple previews support images only. Select only images, or select a single file.</value></data>
 </root>

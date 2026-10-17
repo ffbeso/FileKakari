@@ -1482,7 +1482,7 @@
                                                                             <Style.Triggers>
                                                                                 <Trigger Property="IsMouseOver" Value="True">
                                                                                     <Trigger.Setters>
-                                                                                        <Setter Property="Foreground" Value="Red" />
+                                                                                        <Setter Property="Foreground" Value="{DynamicResource SubTabCloseHoverBrush}" />
                                                                                     </Trigger.Setters>
                                                                                 </Trigger>
                                                                                 <DataTrigger Binding="{Binding IsFolderLocked}" Value="True">

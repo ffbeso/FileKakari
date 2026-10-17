@@ -73,4 +73,5 @@
     <SolidColorBrush x:Key="InactivePaneBorderBrush" Color="{DynamicResource InactivePaneBorderColor}" />
     <SolidColorBrush x:Key="ActivePaneAccentBrush" Color="{DynamicResource ActivePaneAccentColor}" />
     <SolidColorBrush x:Key="InactivePaneAccentBrush" Color="{DynamicResource InactivePaneAccentColor}" />
+    <SolidColorBrush x:Key="SubTabCloseHoverBrush" Color="{DynamicResource TextColor}" />
 </ResourceDictionary>

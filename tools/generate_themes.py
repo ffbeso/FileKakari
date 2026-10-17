@@ -109,6 +109,7 @@ def write_theme(name, label, p):
     lines += [f'    <Color x:Key="{key}Color">{value}</Color>' for key, value in p.items()]
     lines += [f'    <Color x:Key="SubTabOverflowFadeTransparentColor">#00{p["PanelBackground"][1:]}</Color>', ""]
     lines += [f'    <SolidColorBrush x:Key="{key}Brush" Color="{{DynamicResource {key}Color}}" />' for key in p]
+    lines += ['    <SolidColorBrush x:Key="SubTabCloseHoverBrush" Color="{DynamicResource TextColor}" />']
     lines += ["</ResourceDictionary>", ""]
     (THEMES / name).write_text("\n".join(lines), encoding="utf-8")
 

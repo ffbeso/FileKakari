@@ -1,6 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:FileKakari;assembly=FileKakari">
+    <!-- Older custom themes inherit their own text color for close-button hover. -->
+    <SolidColorBrush x:Key="SubTabCloseHoverBrush" Color="{DynamicResource TextColor}" />
     <!-- Fallback brushes for active/inactive pane chrome -->
     <SolidColorBrush x:Key="ActivePaneBorderBrush" Color="{DynamicResource SelectionBackgroundColor}" Opacity="0.55" />
     <SolidColorBrush x:Key="InactivePaneBorderBrush" Color="{DynamicResource BorderColor}" />

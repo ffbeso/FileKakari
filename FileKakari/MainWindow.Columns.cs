@@ -453,7 +453,7 @@ public partial class MainWindow
             }
 
             FileGroupHelper.ApplyGroupMode(ItemsList, targetState.GroupMode, groupIndex);
-            if (applyFilter) UpdateItemsFilter(targetState.FilterText);
+            if (applyFilter) UpdateItemsFilter(targetState.FilterText, refreshUnchanged: false);
         }
 
         UpdateNormalPaneColumnHeaders();

@@ -689,7 +689,7 @@ public partial class MainWindow
                     FileGroupHelper.ApplyGroupMode(pane.FileList, targetState.GroupMode, groupIndex);
                 }
                 pane.FileList.ApplySort(targetState.SortColumn, targetState.SortAscending, _settingsService.Settings.SortFoldersFirst, null, targetState.GroupMode);
-                _folderPaneController.ApplyFilter(pane, targetState.FilterText);
+                _folderPaneController.ApplyFilter(pane, targetState.FilterText, refreshUnchanged: false);
             }
             WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), $"viewstate-collection-view-ready-{trigger}", pane);
 

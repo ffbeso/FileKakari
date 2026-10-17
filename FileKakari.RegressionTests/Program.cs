@@ -1008,6 +1008,16 @@ try
             CollectionViewUpdate.SetFilterAndRefresh(state.ItemsView, null, false);
         }
         Require(resets == 3 && state.ItemsView.Cast<FileEntry>().First().Name == "a.txt", "Unchanged null filter refreshed during deferral.");
+        var fresh = new FileListState();
+        fresh.ReplaceItems(folder, entries);
+        var freshResets = 0;
+        fresh.ItemsView.CollectionChanged += (_, _) => freshResets++;
+        using (fresh.ItemsView.DeferRefresh())
+        {
+            fresh.ApplySort("Name", true, true, null, GroupMode.None);
+            CollectionViewUpdate.SetFilterAndRefresh(fresh.ItemsView, null, false);
+        }
+        Require(freshResets == 1 && fresh.ItemsView.Cast<FileEntry>().First().Name == "a.txt", "Deferred restore with unchanged empty filter failed.");
     }));
 
     await CheckAsync("group-representative-order-and-ties", () =>

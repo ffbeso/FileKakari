@@ -58,7 +58,7 @@ public partial class MainWindow
             || entry.Name.Contains(filter, StringComparison.CurrentCultureIgnoreCase);
     }
 
-    private bool UpdateItemsFilter(string filter)
+    private bool UpdateItemsFilter(string filter, bool refreshUnchanged = true)
     {
         filter ??= string.Empty;
         var shouldEnableFilter = !string.IsNullOrWhiteSpace(filter);
@@ -69,7 +69,7 @@ public partial class MainWindow
                 return false;
             }
 
-            CollectionViewUpdate.SetFilterAndRefresh(ItemsView, null);
+            CollectionViewUpdate.SetFilterAndRefresh(ItemsView, null, refreshUnchanged);
             _itemsFilterEnabled = false;
             return true;
         }
@@ -77,7 +77,7 @@ public partial class MainWindow
         // Keep the predicate bound to the tab state supplied by the caller.
         // FilterBox is only the editor for the active pane and must not decide
         // how a reload or watcher update filters its collection.
-        CollectionViewUpdate.SetFilterAndRefresh(ItemsView, item => FilterEntry(item, filter));
+        CollectionViewUpdate.SetFilterAndRefresh(ItemsView, item => FilterEntry(item, filter), refreshUnchanged);
         _itemsFilterEnabled = true;
         return true;
     }

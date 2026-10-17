@@ -330,4 +330,8 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="CopyReparsePointUnsupported" xml:space="preserve">
     <value>リンクまたはジャンクションを含むフォルダのコピーには対応していません: {0}</value>
   </data>
+  <data name="ImagePreviewLoading" xml:space="preserve"><value>読み込み中…</value></data>
+  <data name="ImagePreviewFailed" xml:space="preserve"><value>画像を表示できません</value></data>
+  <data name="ImagePreviewCount" xml:space="preserve"><value>画像 {0} 枚</value></data>
+  <data name="ImagePreviewMore" xml:space="preserve"><value>画像 4 枚（ほか {0} 枚）</value></data>
 </root>

@@ -330,4 +330,8 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="CopyReparsePointUnsupported" xml:space="preserve">
     <value>Copying folders containing links or junctions is not supported: {0}</value>
   </data>
+  <data name="ImagePreviewLoading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="ImagePreviewFailed" xml:space="preserve"><value>Unable to display image</value></data>
+  <data name="ImagePreviewCount" xml:space="preserve"><value>{0} images</value></data>
+  <data name="ImagePreviewMore" xml:space="preserve"><value>4 images ({0} more)</value></data>
 </root>

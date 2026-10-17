@@ -1,14 +1,12 @@
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace FileKakari;
 
 public partial class MainWindow
 {
-    private FilePreviewResult? _displayedImagePreview;
-    private int _displayedImageGeneration;
-    private CancellationTokenSource? _imageResizeCancellation;
-    private readonly BuiltInImagePreviewProvider _resizeImageProvider = new();
+    private readonly List<ImagePreviewTile> _imageTiles = new();
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
@@ -18,46 +16,50 @@ public partial class MainWindow
 
     private void QueueImagePreviewResize()
     {
-        _imageResizeCancellation?.Cancel();
-        _imageResizeCancellation?.Dispose();
-        _imageResizeCancellation = null;
-        if (!IsPreviewPaneActuallyVisible || _displayedImagePreview is not { ImageSource: { } bitmap, FileInfo: { } info } result
-            || _displayedImageGeneration != _previewGeneration) return;
-
-        var dpi = VisualTreeHelper.GetDpi(PreviewContentViewport);
-        var width = Math.Max(1, PreviewContentViewport.ActualWidth - 16);
-        var height = Math.Max(1, PreviewContentViewport.ActualHeight - 16);
-        var originalWidth = result.OriginalPixelWidth;
-        var originalHeight = result.OriginalPixelHeight;
-        if (originalWidth <= 0 || originalHeight <= 0) return;
-        // Original physical pixels, rather than embedded image DPI, define the no-upscale limit.
-        var displayScale = Math.Min(1, Math.Min(width * dpi.DpiScaleX / originalWidth, height * dpi.DpiScaleY / originalHeight));
-        PreviewImage.Width = originalWidth * displayScale / dpi.DpiScaleX;
-        PreviewImage.Height = originalHeight * displayScale / dpi.DpiScaleY;
-        var needed = ImagePreviewSizing.Fit(originalWidth, originalHeight, width * dpi.DpiScaleX, height * dpi.DpiScaleY);
-        if (needed.Width <= bitmap.PixelWidth + 1 && needed.Height <= bitmap.PixelHeight + 1) return;
-
-        _imageResizeCancellation = CancellationTokenSource.CreateLinkedTokenSource(_previewCancellation?.Token ?? CancellationToken.None);
-        _ = RefreshImageSizeAsync(new PreviewRequest(info.FullPath)
-        {
-            TargetWidthDip = width, TargetHeightDip = height,
-            DpiScaleX = dpi.DpiScaleX, DpiScaleY = dpi.DpiScaleY, Generation = _previewGeneration
-        }, _imageResizeCancellation.Token);
+        foreach (var tile in _imageTiles) tile.RefreshSize();
     }
 
-    private async Task RefreshImageSizeAsync(PreviewRequest request, CancellationToken token)
+    private void ClearImageTiles()
+    {
+        foreach (var tile in _imageTiles) tile.Dispose();
+        _imageTiles.Clear();
+        PreviewImagesGrid.Children.Clear();
+    }
+
+    private async Task ShowImageTilesAsync(IReadOnlyList<string> paths, int total, int generation,
+        CancellationToken token, FilePreviewResult? existing = null)
     {
         try
         {
-            await Task.Delay(160, token);
-            var result = await _resizeImageProvider.CreatePreviewAsync(request, token);
+            if (existing is null) await Task.Delay(30, token);
             token.ThrowIfCancellationRequested();
-            if (request.Generation != _previewGeneration || !IsPreviewPaneActuallyVisible
-                || result.Status != FilePreviewStatus.Success || result.ImageSource is null) return;
-            _displayedImagePreview = result;
-            PreviewImage.Source = result.ImageSource;
-            QueueImagePreviewResize();
+            if (generation != _previewGeneration || !IsPreviewPaneActuallyVisible) return;
+            ClearPreviewContent();
+            PreviewImagesGrid.RowDefinitions.Clear();
+            PreviewImagesGrid.ColumnDefinitions.Clear();
+            var columns = paths.Count == 1 ? 1 : 2;
+            var rows = paths.Count <= 2 ? 1 : 2;
+            for (var i = 0; i < columns; i++) PreviewImagesGrid.ColumnDefinitions.Add(new ColumnDefinition());
+            for (var i = 0; i < rows; i++) PreviewImagesGrid.RowDefinitions.Add(new RowDefinition());
+            var tiles = new List<ImagePreviewTile>();
+            for (var i = 0; i < paths.Count; i++)
+            {
+                var tile = new ImagePreviewTile(paths[i], paths.Count > 1, token);
+                Grid.SetColumn(tile, i % columns);
+                Grid.SetRow(tile, i / columns);
+                PreviewImagesGrid.Children.Add(tile);
+                _imageTiles.Add(tile);
+                tiles.Add(tile);
+            }
+            PreviewImageScrollViewer.Visibility = Visibility.Visible;
+            if (total > 1) PreviewTitleText.Text = total > 4
+                ? _text.Format("ImagePreviewMore", total - 4) : _text.Format("ImagePreviewCount", total);
+            await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+            token.ThrowIfCancellationRequested();
+            if (generation != _previewGeneration) return;
+            await Task.WhenAll(tiles.Select(tile => tile.LoadAsync(existing)));
         }
         catch (OperationCanceledException) { }
+        catch (Exception ex) { PreviewDiagnostics.Error("PreviewImage", $"Image tiles failed: {ex.Message}"); }
     }
 }

@@ -1134,6 +1134,14 @@ public partial class MainWindow
         if (selectedEntries.Count != 1)
         {
             _currentPreviewPath = null;
+            var imageProvider = new BuiltInImagePreviewProvider();
+            if (selectedEntries.All(entry => !entry.IsDirectory && imageProvider.CanPreview(entry.FullPath)))
+            {
+                _previewCancellation = new CancellationTokenSource();
+                _ = ShowImageTilesAsync(selectedEntries.Take(4).Select(entry => entry.FullPath).ToArray(),
+                    selectedEntries.Count, generation, _previewCancellation.Token);
+                return;
+            }
             PreviewDiagnostics.Info("Preview", $"SchedulePreview no-load requestId=\"{requestId}\" source=\"{source}\" reason=\"multi-selection\" selectedCount={selectedEntries.Count} generation={generation}");
             PreviewTitleText.Text = "";
             ReplacePreviewWithMessage(_text.Get("PreviewSingleFileOnly"));
@@ -1427,12 +1435,8 @@ public partial class MainWindow
 
     private void ReplacePreviewWithImage(FilePreviewResult result)
     {
-        ClearPreviewContent();
-        _displayedImagePreview = result;
-        _displayedImageGeneration = _previewGeneration;
-        PreviewImage.Source = result.ImageSource;
-        PreviewImageScrollViewer.Visibility = Visibility.Visible;
-        QueueImagePreviewResize();
+        _ = ShowImageTilesAsync(new[] { result.FileInfo!.FullPath }, 1, _previewGeneration,
+            _previewCancellation?.Token ?? CancellationToken.None, result);
     }
 
 
@@ -2068,12 +2072,10 @@ public partial class MainWindow
 
     private void ClearNonVideoPreviewContent()
     {
-        _displayedImagePreview = null;
-        _imageResizeCancellation?.Cancel();
+        ClearImageTiles();
         PreviewDiagnostics.Info("Preview", $"ClearNonVideoPreviewContent requestId=\"{_activePreviewRequestId}\" generation={_previewGeneration}");
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
-        PreviewImage.Source = null;
         PreviewImageScrollViewer.Visibility = Visibility.Collapsed;
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;
@@ -2102,11 +2104,9 @@ public partial class MainWindow
 
     private void ClearBuiltInPreviewContent(bool keepWebView = false)
     {
-        _displayedImagePreview = null;
-        _imageResizeCancellation?.Cancel();
+        ClearImageTiles();
         PreviewTextBox.Text = "";
         PreviewTextBox.Visibility = Visibility.Collapsed;
-        PreviewImage.Source = null;
         PreviewImageScrollViewer.Visibility = Visibility.Collapsed;
         PreviewUnsupportedCard.Visibility = Visibility.Collapsed;
         PreviewMessageText.Visibility = Visibility.Collapsed;

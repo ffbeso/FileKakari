@@ -1168,6 +1168,35 @@ try
         Require((long)bounded.Width * bounded.Height <= ImagePreviewSizing.MaxDecodedPixels, "Decoded pixel budget exceeded.");
         return Task.CompletedTask;
     });
+    await CheckAsync("image-tiles-independent-load-and-disposal", () => RunOnStaAsync(() =>
+    {
+        var path = Path.Combine(fixtures, "tile.png");
+        var bitmap = BitmapSource.Create(800, 400, 96, 96, PixelFormats.Bgra32, null, new byte[800 * 400 * 4], 800 * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var file = File.Create(path)) encoder.Save(file);
+        var grid = new System.Windows.Controls.Primitives.UniformGrid { Rows = 2, Columns = 2 };
+        var tiles = Enumerable.Range(0, 4).Select(i => new ImagePreviewTile(i == 3 ? Path.Combine(fixtures, "absent.png") : path, true, CancellationToken.None)).ToArray();
+        foreach (var tile in tiles) grid.Children.Add(tile);
+        var host = new System.Windows.Window { Content = grid, Width = 640, Height = 480, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            host.Show(); grid.UpdateLayout();
+            PumpDispatcherUntilComplete(Task.WhenAll(tiles.Select(tile => tile.LoadAsync())));
+            Require(tiles.Take(3).All(tile => tile.Result?.ImageSource is { IsFrozen: true, PixelWidth: < 400 }), "Tiles did not decode independently at viewport size.");
+            Require(tiles[3].Result is null, "Missing tile should not stop the other images.");
+            tiles[0].Dispose();
+            Require(tiles[0].Result is null && tiles[1].Result is not null, "Disposing one tile affected another tile.");
+            using var cancelled = new CancellationTokenSource();
+            var obsolete = new ImagePreviewTile(path, false, cancelled.Token);
+            cancelled.Cancel();
+            PumpDispatcherUntilComplete(obsolete.LoadAsync());
+            Require(obsolete.Result is null, "Cancelled tile displayed a stale result.");
+            obsolete.Dispose();
+        }
+        finally { foreach (var tile in tiles) tile.Dispose(); host.Close(); }
+    }));
+
     await CheckAsync("image-portrait-cache-and-invalidation", async () =>
     {
         var path = Path.Combine(fixtures, "portrait.png");

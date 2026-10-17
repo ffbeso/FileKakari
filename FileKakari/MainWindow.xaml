@@ -2387,11 +2387,7 @@
                               Margin="8"
                               ClipToBounds="True"
                               Visibility="Collapsed">
-                            <Image x:Name="PreviewImage"
-                                   Stretch="Uniform"
-                                   StretchDirection="Both"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
+                            <Grid x:Name="PreviewImagesGrid" />
                         </Grid>
                     </Grid>
                 </Grid>

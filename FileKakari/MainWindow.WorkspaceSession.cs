@@ -969,6 +969,7 @@ public partial class MainWindow
 
     private void ClearWorkspacePaneRangeSelection()
     {
+        _workspaceRangeSelectionSession?.Dispose();
         if (_workspaceRangeSelectionSession?.ListView?.IsMouseCaptured == true)
         {
             _workspaceRangeSelectionSession.ListView.ReleaseMouseCapture();

@@ -1456,7 +1456,6 @@ public partial class MainWindow : Window
             _scrollChangedCount++;
         }
 #endif
-        _selectionInteraction.HandleScrollChanged(e);
         if (GetNormalFolderPane() is { } pane)
         {
             pane.ScrollOffset = e.VerticalOffset;
@@ -3200,7 +3199,8 @@ public partial class MainWindow : Window
     {
         ClearFileDragStart();
         _workspaceRangeSelectionPane = pane;
-        _workspaceRangeSelectionSession = new ListViewRangeSelectionSession(listView, startPoint, additive);
+        _workspaceRangeSelectionSession = new ListViewRangeSelectionSession(listView, startPoint, additive,
+            rect => DrawWorkspacePaneRangeSelection(listView, rect));
 
         listView.Focus();
         EnsureWorkspaceRangeSelectionAdorner(listView);
@@ -3257,8 +3257,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(_workspaceRangeSelectionSession.StartPoint, currentPoint);
-        DrawWorkspacePaneRangeSelection(listView, selectionRect);
         _workspaceRangeSelectionSession.ApplySelection(currentPoint);
         return true;
     }

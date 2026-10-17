@@ -24,6 +24,64 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("rectangle-selection-edge-scroll-and-reversal", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "rectangle-scroll");
+        Directory.CreateDirectory(folder);
+        var entries = Enumerable.Range(0, 300).Select(index =>
+        {
+            var path = Path.Combine(folder, $"{index:D4}.txt");
+            File.WriteAllText(path, "row");
+            return FileEntry.FromFileBasic(new FileInfo(path));
+        }).ToArray();
+        foreach (var grouped in new[] { false, true })
+        {
+            var state = new FileListState();
+            state.ReplaceItems(folder, entries);
+            if (grouped) state.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
+            var list = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView, Width = 400, Height = 240,
+                SelectionMode = System.Windows.Controls.SelectionMode.Extended };
+            System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+            System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
+            System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
+            System.Windows.Controls.ScrollViewer.SetCanContentScroll(list, true);
+            var host = new System.Windows.Window { Content = list, Width = 420, Height = 280, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+            try
+            {
+                host.Show(); list.UpdateLayout();
+                System.Windows.Controls.ScrollViewer? FindScroll(System.Windows.DependencyObject parent)
+                {
+                    if (parent is System.Windows.Controls.ScrollViewer found) return found;
+                    for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+                        if (FindScroll(VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+                    return null;
+                }
+                var scroll = FindScroll(list)!;
+                list.SelectedItems.Add(entries[^1]);
+                var type = typeof(FileEntry).Assembly.GetType("FileKakari.ListViewRangeSelectionSession")!;
+                using var session = (IDisposable)Activator.CreateInstance(type, list, new System.Windows.Point(390, 60), true, null)!;
+                var apply = type.GetMethod("ApplySelection")!;
+                var advance = type.GetMethod("AdvanceAtEdge", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                var bottom = new System.Windows.Point(0, 260);
+                type.GetMethod("CheckMove")!.Invoke(session, new object[] { bottom });
+                apply.Invoke(session, new object[] { bottom });
+                var initial = list.SelectedItems.Cast<FileEntry>().ToHashSet();
+                Require(initial.Count > 1, "Rectangle fixture did not select visible rows.");
+                for (var i = 0; i < 80; i++) advance.Invoke(session, new object[] { bottom });
+                var expanded = list.SelectedItems.Count;
+                Require(scroll.VerticalOffset > 500 && expanded > initial.Count, $"Bottom edge did not scroll and extend selection (grouped={grouped}).");
+                Require(initial.All(item => list.SelectedItems.Contains(item)), "Recycling discarded selected rows above the viewport.");
+                for (var i = 0; i < 100; i++) advance.Invoke(session, new object[] { new System.Windows.Point(0, -20) });
+                Require(scroll.VerticalOffset == 0 && list.SelectedItems.Count < expanded, "Reversing at the top did not shrink selection.");
+                Require(list.SelectedItems.Contains(entries[^1]), "Ctrl rectangle lost its original offscreen selection.");
+                session.Dispose();
+                advance.Invoke(session, new object[] { bottom });
+                Require(scroll.VerticalOffset == 0, "Finished rectangle still auto-scrolled.");
+            }
+            finally { host.Close(); }
+        }
+    }));
+
     await CheckAsync("group-anchor-early-scroll-and-position-reuse", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "early-anchor");

@@ -77,7 +77,7 @@ internal static class FileListRangeSelectionHelper
         }
     }
 
-    private static IEnumerable<ListViewItem> EnumerateRealizedRows(DependencyObject parent)
+    internal static IEnumerable<ListViewItem> EnumerateRealizedRows(DependencyObject parent)
     {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {

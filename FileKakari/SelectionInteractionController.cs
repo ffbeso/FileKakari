@@ -1,7 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace FileKakari;
@@ -15,11 +14,6 @@ public sealed class SelectionInteractionController
     private readonly Action _clearFileDragStart;
     private readonly Action _updateSelectedItemStatus;
     private ListViewRangeSelectionSession? _session;
-    private bool _isRestoringScroll;
-    private Rect? _pendingRect;
-    private ScrollViewer? _scrollViewer;
-    private double _horizontalOffset;
-    private double _verticalOffset;
 
     public SelectionInteractionController(
         ListView itemsList,
@@ -48,14 +42,8 @@ public sealed class SelectionInteractionController
 
         _clearFileDragStart();
         IsSelecting = true;
-        _session = new ListViewRangeSelectionSession(_itemsList, startPoint, additive);
-
-        _scrollViewer = FindVisualChild<ScrollViewer>(_itemsList);
-        if (_scrollViewer is not null)
-        {
-            _horizontalOffset = _scrollViewer.HorizontalOffset;
-            _verticalOffset = _scrollViewer.VerticalOffset;
-        }
+        _session?.Dispose();
+        _session = new ListViewRangeSelectionSession(_itemsList, startPoint, additive, DrawSelectionRect);
 
         _overlay.Width = _itemsList.ActualWidth;
         _overlay.Height = _itemsList.ActualHeight;
@@ -89,37 +77,6 @@ public sealed class SelectionInteractionController
 
         e.Handled = true;
         return true;
-    }
-
-    public void HandleScrollChanged(ScrollChangedEventArgs e)
-    {
-        if (!IsSelecting || _isRestoringScroll)
-        {
-            return;
-        }
-
-        var scrollViewer = e.OriginalSource as ScrollViewer ?? _scrollViewer;
-        if (scrollViewer is null)
-        {
-            return;
-        }
-
-        if (Math.Abs(scrollViewer.VerticalOffset - _verticalOffset) < 0.1
-            && Math.Abs(scrollViewer.HorizontalOffset - _horizontalOffset) < 0.1)
-        {
-            return;
-        }
-
-        _isRestoringScroll = true;
-        try
-        {
-            scrollViewer.ScrollToHorizontalOffset(_horizontalOffset);
-            scrollViewer.ScrollToVerticalOffset(_verticalOffset);
-        }
-        finally
-        {
-            _isRestoringScroll = false;
-        }
     }
 
     public void HandleLostMouseCapture()
@@ -179,9 +136,6 @@ public sealed class SelectionInteractionController
             return;
         }
 
-        var selectionRect = FileListRangeSelectionHelper.CreateSelectionRect(_session.StartPoint, currentPoint);
-        _pendingRect = selectionRect;
-        DrawSelectionRect(selectionRect);
         _session.ApplySelection(currentPoint);
     }
 
@@ -209,9 +163,9 @@ public sealed class SelectionInteractionController
     {
         if (_session is not null)
         {
-            if (_session.Moved && _pendingRect is { } selectionRect)
+            if (_session.Moved)
             {
-                FileListRangeSelectionHelper.SelectItemsInRange(_itemsList, selectionRect, _session.Additive, _session.BaseSelection);
+                _session.ApplySelection(Mouse.GetPosition(_itemsList));
             }
 
             if (!_session.Moved && !_session.Additive)
@@ -227,12 +181,8 @@ public sealed class SelectionInteractionController
     private void Clear()
     {
         IsSelecting = false;
+        _session?.Dispose();
         _session = null;
-        _pendingRect = null;
-        _scrollViewer = null;
-        _horizontalOffset = 0;
-        _verticalOffset = 0;
-        _isRestoringScroll = false;
         _overlay.Visibility = Visibility.Collapsed;
         _overlay.IsHitTestVisible = false;
         if (_overlay.IsMouseCaptured)
@@ -255,24 +205,4 @@ public sealed class SelectionInteractionController
         _selectionRectangle.Height = rect.Height;
     }
 
-    private static T? FindVisualChild<T>(DependencyObject parent)
-        where T : DependencyObject
-    {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T typedChild)
-            {
-                return typedChild;
-            }
-
-            var nested = FindVisualChild<T>(child);
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
-    }
 }

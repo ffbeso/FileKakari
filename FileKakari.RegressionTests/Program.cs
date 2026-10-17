@@ -35,12 +35,17 @@ try
             return FileEntry.FromFileBasic(new FileInfo(path));
         }).ToArray();
         foreach (var grouped in new[] { false, true })
+        foreach (var details in new[] { false, true })
         {
             var state = new FileListState();
             state.ReplaceItems(folder, entries);
             if (grouped) state.ItemsView.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(FileEntry.Extension)));
             var list = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView, Width = 400, Height = 240,
                 SelectionMode = System.Windows.Controls.SelectionMode.Extended };
+            var gridView = new System.Windows.Controls.GridView();
+            gridView.Columns.Add(new System.Windows.Controls.GridViewColumn { Header = "Name", Width = 350,
+                DisplayMemberBinding = new System.Windows.Data.Binding(nameof(FileEntry.Name)) });
+            if (details) list.View = gridView;
             System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
             System.Windows.Controls.VirtualizingPanel.SetVirtualizationMode(list, System.Windows.Controls.VirtualizationMode.Recycling);
             System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
@@ -59,9 +64,14 @@ try
                 var scroll = FindScroll(list)!;
                 list.SelectedItems.Add(entries[^1]);
                 var type = typeof(FileEntry).Assembly.GetType("FileKakari.ListViewRangeSelectionSession")!;
-                using var session = (IDisposable)Activator.CreateInstance(type, list, new System.Windows.Point(390, 60), true, null)!;
+                var drawn = System.Windows.Rect.Empty;
+                Action<System.Windows.Rect> draw = rect => drawn = rect;
+                using var session = (IDisposable)Activator.CreateInstance(type, list, new System.Windows.Point(390, 60), true, draw)!;
                 var apply = type.GetMethod("ApplySelection")!;
                 var advance = type.GetMethod("AdvanceAtEdge", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+                apply.Invoke(session, new object[] { new System.Windows.Point(100, 180) });
+                Require(!drawn.IsEmpty && Math.Abs(drawn.Left - 100) < 0.1 && Math.Abs(drawn.Bottom - 180) < 0.1,
+                    $"Rectangle does not reach the pointer below the column header (grouped={grouped}, drawn={drawn}).");
                 var bottom = new System.Windows.Point(0, 260);
                 type.GetMethod("CheckMove")!.Invoke(session, new object[] { bottom });
                 apply.Invoke(session, new object[] { bottom });

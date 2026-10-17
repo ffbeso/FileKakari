@@ -117,7 +117,9 @@ internal sealed class ListViewRangeSelectionSession : IDisposable
 
     private Rect GetViewport()
     {
-        if (_scroll is not null && FindVisual<ScrollContentPresenter>(_scroll) is { } presenter)
+        // GridView's header contains a nested ScrollViewer. A recursive search
+        // can return its presenter instead of the file rows' viewport.
+        if (_scroll?.Template?.FindName("PART_ScrollContentPresenter", _scroll) is ScrollContentPresenter presenter)
             return new Rect(presenter.TranslatePoint(new Point(), _listView), new Size(presenter.ActualWidth, presenter.ActualHeight));
         return new Rect(0, 0, _listView.ActualWidth, _listView.ActualHeight);
     }

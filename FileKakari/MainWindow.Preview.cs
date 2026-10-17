@@ -1706,7 +1706,32 @@ public partial class MainWindow
                 PreviewDiagnostics.Info("PreviewHost", $"[req=\"{requestId}\" gen={currentGen}] Executing delayed layout correction (delay={delayMs:F1}ms).");
                 await _previewHostControl.RequestResizeAsync(isCorrection: true, requestId: requestId, generation: currentGen).ConfigureAwait(true);
             }, System.Windows.Threading.DispatcherPriority.Loaded);
+            if (IsExcelPreviewExtension(evt.FilePath) && _previewHostControl is { } host)
+                await CorrectExcelPreviewLayoutAsync(requestId, currentGen, host);
         });
+    }
+
+    private async Task CorrectExcelPreviewLayoutAsync(string requestId, int generation, PreviewHostControl host)
+    {
+        // DoPreview returning does not mean Excel has finished laying out its children.
+        // Give its message loop time to finish, then reproduce a real resize, twice at most.
+        foreach (var delay in new[] { 250, 750 })
+        {
+            await Task.Delay(delay);
+            if (generation != _previewGeneration || requestId != _activePreviewRequestId ||
+                !IsPreviewPaneActuallyVisible || !ReferenceEquals(host, _previewHostControl) ||
+                !host.IsAttached || !host.ProcessManager.IsConnected)
+                return;
+            try
+            {
+                await host.ProcessManager.SendMessageAsync(new RefreshExcelLayoutCommand { RequestId = requestId });
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                PreviewDiagnostics.Error("PreviewHost", $"Excel layout correction failed requestId={requestId}: {ex.Message}");
+                return;
+            }
+        }
     }
 
     private void OnPreviewHostPreviewFailed(PreviewFailedEvent evt)

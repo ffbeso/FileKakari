@@ -80,6 +80,11 @@ public sealed class ResizeCommand : IpcMessageBase
     public double DpiY { get; set; } = 1.0;
 }
 
+public sealed class RefreshExcelLayoutCommand : IpcMessageBase
+{
+    public RefreshExcelLayoutCommand() { Type = "RefreshExcelLayout"; }
+}
+
 public sealed class ShowCommand : IpcMessageBase
 {
     public ShowCommand() { Type = "Show"; }

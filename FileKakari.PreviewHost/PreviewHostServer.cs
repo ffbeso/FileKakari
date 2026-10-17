@@ -32,6 +32,7 @@ public sealed class PreviewHostServer : IDisposable
     private uint _staThreadId;
     private int _shutdownState = 0; // 0: Running, 1: ShutdownRequested, 2: ShutdownCompleted
     private string _activeRequestId = "";
+    private string _loadedRequestId = "";
 
     public int ShutdownState => Volatile.Read(ref _shutdownState);
 
@@ -271,6 +272,10 @@ public sealed class PreviewHostServer : IDisposable
                     });
                     break;
 
+                case "RefreshExcelLayout":
+                    EnqueueStaAction(() => RefreshExcelLayout(requestId));
+                    break;
+
                 case "LoadPreview":
                     var loadPaneId = root.GetProperty("paneId").GetString() ?? "";
                     var filePath = root.GetProperty("filePath").GetString() ?? "";
@@ -305,6 +310,7 @@ public sealed class PreviewHostServer : IDisposable
                             return;
                         }
 
+                        _loadedRequestId = "";
                         var (clientWidthPx, clientHeightPx) = GetHostClientSize(loadWPx, loadHPx);
                         HostPerfLog.Write($"[Server.StaAction] LoadPreview executing req=\"{captureReqId}\" threadId={Environment.CurrentManagedThreadId}");
                         var res = _previewSession.Load(captureReqId, filePath, clsid, _hostHwnd, clientWidthPx, clientHeightPx);
@@ -317,6 +323,7 @@ public sealed class PreviewHostServer : IDisposable
 
                         if (res.Success)
                         {
+                            _loadedRequestId = captureReqId;
                             HostPerfLog.Write($"[Server.SendMessage] PreviewLoaded req=\"{captureReqId}\" elapsedMs={res.ElapsedMs}");
                             _ = SendMessageAsync(new PreviewLoadedEventMessage
                             {
@@ -412,6 +419,32 @@ public sealed class PreviewHostServer : IDisposable
         }
     }
 
+
+    private void RefreshExcelLayout(string requestId)
+    {
+        // Validate on the STA too: the UI's request can become stale while queued in IPC.
+        if (string.IsNullOrEmpty(requestId) || requestId != _activeRequestId ||
+            requestId != _loadedRequestId || !_previewSession.HasActiveSession ||
+            _hostHwnd == IntPtr.Zero || !NativeMethods.IsWindowVisible(_hostHwnd))
+            return;
+        var extension = Path.GetExtension(_previewSession.CurrentFilePath).ToLowerInvariant();
+        if (extension is not (".xls" or ".xlsx" or ".xlsm" or ".xlsb" or ".ods")) return;
+
+        // Read the current bounds, never a size captured before a user resize.
+        var (width, height) = GetHostClientSize(_currentWidth, _currentHeight);
+        if (width <= 1 || height <= 1) return;
+        HostPerfLog.Write($"[Excel.LayoutRefresh] req={requestId} size={width}x{height}");
+        try
+        {
+            ResizeHost(width - 1, height - 1, _currentDpiX, _currentDpiY);
+            _previewSession.Resize(width - 1, height - 1);
+        }
+        finally
+        {
+            ResizeHost(width, height, _currentDpiX, _currentDpiY);
+            _previewSession.Resize(width, height);
+        }
+    }
 
     private void AttachToParent(IntPtr parentHwnd, int widthPx, int heightPx, double dpiX, double dpiY)
     {

@@ -313,14 +313,14 @@ public partial class MainWindow
         else if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
         {
             pane.FileList.PendingAnchorScrollState = null;
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher, isStale: isStale, allowEarlyScroll: true))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }
         }
         else if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
         {
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher, isStale: isStale, allowEarlyScroll: true))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }

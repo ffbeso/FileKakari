@@ -6,6 +6,7 @@ internal static class FileListSelectionHelper
 {
     public static void ApplySingleSelection(ListView listView, FileEntry entry)
     {
+        using var batch = SelectionUpdateBatch.Begin(listView);
         listView.SelectedItems.Clear();
         listView.SelectedItems.Add(entry);
         listView.SelectedItem = entry;
@@ -81,6 +82,7 @@ internal static class FileListSelectionHelper
 
     private static void AddTargetFallback(ListView listView, FileEntry target, bool additive)
     {
+        using var batch = SelectionUpdateBatch.Begin(listView);
         if (!additive)
         {
             listView.SelectedItems.Clear();

@@ -24,6 +24,41 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("selection-followup-batch-isolation-and-lifetime", () => RunOnStaAsync(() =>
+    {
+        var left = new System.Windows.Controls.ListView();
+        var right = new System.Windows.Controls.ListView();
+        var leftUpdates = 0;
+        var rightUpdates = 0;
+        var last = 0;
+        var outer = SelectionUpdateBatch.Begin(left);
+        using (SelectionUpdateBatch.Begin(left))
+        {
+            for (var i = 0; i < 100; i++)
+            {
+                var value = i;
+                SelectionUpdateBatch.RunOrDefer(left, () => { leftUpdates++; last = value; });
+            }
+            SelectionUpdateBatch.RunOrDefer(right, () => rightUpdates++);
+        }
+        Require(leftUpdates == 0 && rightUpdates == 1, "Nested batching delayed another pane or flushed too early.");
+        outer.Dispose();
+        outer.Dispose();
+        Require(leftUpdates == 1 && last == 99, "Final update was lost, duplicated, or used intermediate state.");
+        using (SelectionUpdateBatch.Begin(left)) { }
+        Require(leftUpdates == 1, "No-op selection repeated a pending update.");
+        try
+        {
+            using var failing = SelectionUpdateBatch.Begin(left);
+            SelectionUpdateBatch.RunOrDefer(left, () => leftUpdates++);
+            throw new InvalidOperationException("test operation failure");
+        }
+        catch (InvalidOperationException) { }
+        Require(leftUpdates == 2, "Partial selection was not committed on scope exit.");
+        SelectionUpdateBatch.RunOrDefer(left, () => leftUpdates++);
+        Require(leftUpdates == 3, "Failed operation left selection updates suppressed.");
+    }));
+
     await CheckAsync("preview-host-parent-dpi-and-native-resize", () => RunOnStaAsync(PreviewHostDpiChecks.Run));
 
     await CheckAsync("pane-viewstate-capture-isolation-and-transient-guard", () => RunOnStaAsync(() =>
@@ -127,15 +162,26 @@ try
         var added = 0;
         var removed = 0;
         list.SelectionChanged += (_, e) => { added += e.AddedItems.Count; removed += e.RemovedItems.Count; };
+        var followups = 0;
+        var finalSelection = new HashSet<FileEntry>();
+        list.SelectionChanged += (_, _) => SelectionUpdateBatch.RunOrDefer(list, () =>
+        {
+            followups++;
+            finalSelection = list.SelectedItems.Cast<FileEntry>().ToHashSet();
+        });
         Shift(entries[0], entries[199]);
         Expect(entries.Take(200));
+        Require(followups == 1 && finalSelection.SetEquals(entries.Take(200)), "Large Shift selection did not publish one complete final state synchronously.");
         added = removed = 0;
         Shift(entries[0], entries[199]);
         Require(added == 0 && removed == 0, "Unchanged Shift range reselected rows.");
+        Require(followups == 1, "Unchanged range repeated follow-up work.");
         Shift(entries[0], entries[209]);
         Require(added == 10 && removed == 0, "Growing range changed retained selections.");
+        Require(followups == 2 && finalSelection.Count == 210, "Growing range ran per-item follow-ups.");
         Shift(entries[29], entries[10]);
         Expect(entries.Skip(10).Take(20));
+        Require(followups == 3 && finalSelection.SetEquals(entries.Skip(10).Take(20)), "Shrinking range exposed intermediate selection.");
         Shift(entries[99], entries[90], true);
         Expect(entries.Skip(10).Take(20).Concat(entries.Skip(90).Take(10)));
         Shift(null, entries[299]);

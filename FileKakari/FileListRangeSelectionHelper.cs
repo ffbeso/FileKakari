@@ -48,6 +48,7 @@ internal static class FileListRangeSelectionHelper
 
     public static void ApplySelection(ListView listView, IReadOnlySet<FileEntry> targetSelection)
     {
+        using var batch = SelectionUpdateBatch.Begin(listView);
         var selectedItems = listView.SelectedItems;
         var retained = new HashSet<FileEntry>();
         for (var i = selectedItems.Count - 1; i >= 0; i--)

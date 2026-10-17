@@ -54,9 +54,16 @@ public partial class MainWindow
 
     private void WorkspacePaneFileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (sender is ListView listView)
+        {
+            SelectionUpdateBatch.RunOrDefer(listView, () => ProcessWorkspacePaneSelectionChanged(listView));
+        }
+    }
+
+    private void ProcessWorkspacePaneSelectionChanged(ListView listView)
+    {
         if (WorkspaceSplitGrid.Visibility != Visibility.Visible
             || InternalPageHost.Visibility == Visibility.Visible
-            || sender is not ListView listView
             || listView.DataContext is not FolderPane pane)
         {
             return;
@@ -170,6 +177,11 @@ public partial class MainWindow
     }
 
     private void ItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        SelectionUpdateBatch.RunOrDefer(ItemsList, ProcessNormalPaneSelectionChanged);
+    }
+
+    private void ProcessNormalPaneSelectionChanged()
     {
         _fileListInput.HandleSelectionChanged();
         if (!_listViewRestore.IsRestoring && !_suppressSelectionStatusUpdates)

@@ -1181,6 +1181,27 @@ try
         Require(first.ImageSource is { PixelWidth: 12, PixelHeight: 120 }, "Portrait decoded beyond viewport bounds.");
         var second = await provider.CreatePreviewAsync(request, CancellationToken.None);
         Require(ReferenceEquals(first.ImageSource, second.ImageSource), "Unchanged image was not reused.");
+        var decodeGate = (SemaphoreSlim)typeof(BuiltInImagePreviewProvider)
+            .GetField("DecodeGate", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
+        await decodeGate.WaitAsync();
+        try
+        {
+            using var resizeCancellation = new CancellationTokenSource();
+            var resize = provider.CreatePreviewAsync(request with { TargetHeightDip = 480 }, resizeCancellation.Token);
+            var hits = await Task.WhenAll(Enumerable.Range(0, 16)
+                .Select(_ => provider.CreatePreviewAsync(request, CancellationToken.None))).WaitAsync(TimeSpan.FromSeconds(5));
+            Require(hits.All(hit => ReferenceEquals(hit.ImageSource, first.ImageSource)),
+                "Cached image waited for the decoder or was evicted by a pending resize.");
+            Require(!resize.IsCompleted, "An uncached larger image bypassed the decode concurrency limit.");
+            resizeCancellation.Cancel();
+            try { await resize; throw new InvalidOperationException("Cancelled resize completed."); }
+            catch (OperationCanceledException) { }
+            using var cancelledHit = new CancellationTokenSource();
+            cancelledHit.Cancel();
+            try { await provider.CreatePreviewAsync(request, cancelledHit.Token); throw new InvalidOperationException("Cancelled cache hit completed."); }
+            catch (OperationCanceledException) { }
+        }
+        finally { decodeGate.Release(); }
         var highDpi = await provider.CreatePreviewAsync(request with { DpiScaleX = 2, DpiScaleY = 2 }, CancellationToken.None);
         Require(highDpi.ImageSource is { PixelWidth: 24, PixelHeight: 240 }, "DPI scaling did not update decode size.");
         var larger = await provider.CreatePreviewAsync(request with { TargetHeightDip = 480 }, CancellationToken.None);

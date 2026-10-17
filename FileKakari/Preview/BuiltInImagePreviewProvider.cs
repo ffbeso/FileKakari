@@ -27,6 +27,11 @@ public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
 
     public async Task<FilePreviewResult> CreatePreviewAsync(PreviewRequest request, CancellationToken cancellationToken)
     {
+        // Metadata access stays off the UI thread. Frozen cached images do not
+        // need to wait for a different image's non-cancellable codec operation.
+        var cached = await Task.Run(() => TryGetCachedPreview(request, cancellationToken), cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (cached is not null) return cached;
         await DecodeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -35,6 +40,35 @@ public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
         finally
         {
             DecodeGate.Release();
+        }
+    }
+
+    private static (int Width, int Height) GetTargetSize(PreviewRequest request) => (
+        request.TargetWidthDip > 0 ? Math.Max(1, (int)Math.Ceiling(request.TargetWidthDip * request.DpiScaleX)) : 1920,
+        request.TargetHeightDip > 0 ? Math.Max(1, (int)Math.Ceiling(request.TargetHeightDip * request.DpiScaleY)) : 1080);
+
+    private static FilePreviewResult? TryGetCachedPreview(PreviewRequest request, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        try
+        {
+            var file = new FileInfo(request.FilePath);
+            lock (CacheLock)
+            {
+                // Cold images take the normal path without an extra metadata read.
+                if (!ImageCache.Any(item => string.Equals(item.Result.FileInfo!.FullPath, file.FullName, StringComparison.OrdinalIgnoreCase)))
+                    return null;
+            }
+            if (!file.Exists || file.Length > MaxImageBytes) return null;
+            var info = new FilePreviewInfo(file.Name, file.FullName, file.Extension, file.Length, file.LastWriteTime);
+            var target = GetTargetSize(request);
+            token.ThrowIfCancellationRequested();
+            return FindCachedImage(info, target.Width, target.Height);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // The normal load path reports missing/failed status consistently.
+            return null;
         }
     }
 
@@ -61,16 +95,7 @@ public sealed partial class BuiltInImagePreviewProvider : IFilePreviewProvider
                 return new FilePreviewResult(FilePreviewStatus.TooLarge, FilePreviewKind.Image, SizeLimit: MaxImageBytes, FileInfo: fileInfoResult);
             }
 
-            var scaleFactor = 1.0;
-            var targetWidthPx = request.TargetWidthDip > 0
-                ? (int)Math.Ceiling(request.TargetWidthDip * request.DpiScaleX * scaleFactor)
-                : 1920;
-            var targetHeightPx = request.TargetHeightDip > 0
-                ? (int)Math.Ceiling(request.TargetHeightDip * request.DpiScaleY * scaleFactor)
-                : 1080;
-
-            targetWidthPx = Math.Max(1, targetWidthPx);
-            targetHeightPx = Math.Max(1, targetHeightPx);
+            var (targetWidthPx, targetHeightPx) = GetTargetSize(request);
 
             cancellationToken.ThrowIfCancellationRequested();
 

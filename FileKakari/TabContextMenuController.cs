@@ -25,6 +25,7 @@ internal sealed class TabContextMenuController
     private readonly Action<WorkspaceSession> _openWorkspaceFolder;
     private readonly Func<WorkspaceSession, bool> _isWorkspaceTab;
     private readonly Func<bool> _hasClosedTab;
+    private readonly Func<bool> _canToggleWorkspaceLock;
 
     public TabContextMenuController(
         LocalizationService text,
@@ -44,7 +45,8 @@ internal sealed class TabContextMenuController
         Action<WorkspaceSession> openWorkspaceJson,
         Action<WorkspaceSession> openWorkspaceFolder,
         Func<WorkspaceSession, bool> isWorkspaceTab,
-        Func<bool> hasClosedTab)
+        Func<bool> hasClosedTab,
+        Func<bool> canToggleWorkspaceLock)
     {
         _text = text;
         _performanceLogger = performanceLogger;
@@ -64,6 +66,7 @@ internal sealed class TabContextMenuController
         _openWorkspaceFolder = openWorkspaceFolder;
         _isWorkspaceTab = isWorkspaceTab;
         _hasClosedTab = hasClosedTab;
+        _canToggleWorkspaceLock = canToggleWorkspaceLock;
     }
 
     public void ShowTabBarContextMenu(ItemsControl placementTarget, ObservableCollection<WorkspaceSession> sessions)
@@ -135,7 +138,7 @@ internal sealed class TabContextMenuController
             Header = isLocked
                 ? _text.Get("UnlockFolderTabMenu")
                 : _text.Get("LockFolderTabMenu"),
-            IsEnabled = true
+            IsEnabled = _canToggleWorkspaceLock()
         };
         lockTabItem.Click += (_, _) => _toggleWorkspaceLock(session);
 

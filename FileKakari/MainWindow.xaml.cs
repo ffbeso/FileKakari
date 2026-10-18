@@ -483,7 +483,8 @@ public partial class MainWindow : Window
             OpenWorkspaceJsonMenuItem_Click,
             OpenWorkspaceFolderMenuItem_Click,
             session => GetMainTabItem(session)?.IsWorkspace == true,
-            () => _lastClosedKind != LastClosedKind.None);
+            () => _lastClosedKind != LastClosedKind.None,
+            () => _displayedWorkspaceSessionIds.Count <= 1);
         _folderWatchTabTracker = new FolderWatchTabTracker(
             EnumerateAllFolderTabs,
             _folderWatchService,
@@ -5104,8 +5105,16 @@ public partial class MainWindow : Window
         };
     }
 
+    private bool _suppressWorkspaceLockForClickSequence;
+
     private async void TabsControl_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        // Remember the state before the first click can collapse the multi-view.
+        if (e.ChangedButton == MouseButton.Left && e.ClickCount == 1)
+        {
+            _suppressWorkspaceLockForClickSequence = _displayedWorkspaceSessionIds.Count > 1
+                || (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        }
         var source = e.OriginalSource as DependencyObject;
         var mainTab = FindVisualParent<TabItem>(source)?.DataContext as MainTabItem;
         if (e.ChangedButton != MouseButton.Left)
@@ -5159,7 +5168,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
+        if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2
+            && !_suppressWorkspaceLockForClickSequence
+            && (Keyboard.Modifiers & ModifierKeys.Control) == 0)
         {
             e.Handled = true;
             ToggleWorkspaceLock(session);

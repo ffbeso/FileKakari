@@ -19,16 +19,16 @@ public partial class MainWindow
             return;
         }
 
+        var isCtrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         if (IsWorkspaceRenameTextBoxTarget(source)
             || IsMainTabCommandTarget(source)
-            || e.ClickCount != 1
+            || (e.ClickCount != 1 && !isCtrlPressed)
             || GetWorkspaceSession(tabItem?.DataContext) is not { } session)
         {
             ClearTabDragState();
             return;
         }
 
-        var isCtrlPressed = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var wasAlreadySingleDisplayed = _displayedWorkspaceSessionIds.Count == 1 && _displayedWorkspaceSessionIds.Contains(session.Id);
         var wasAlreadyActiveSession = IsSameWorkspaceSession(_activeWorkspaceSession, session);
         var isEligibleForRenameBeforeClick = !isCtrlPressed && wasAlreadySingleDisplayed && wasAlreadyActiveSession;

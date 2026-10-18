@@ -443,7 +443,7 @@ public partial class MainWindow
 
     private void ToggleWorkspaceLock(WorkspaceSession session)
     {
-        if (session is null)
+        if (session is null || _displayedWorkspaceSessionIds.Count > 1)
         {
             return;
         }

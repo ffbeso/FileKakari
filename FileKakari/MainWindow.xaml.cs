@@ -1946,6 +1946,17 @@ public partial class MainWindow : Window
             }
         }
 
+        if (e.Key is Key.Left or Key.Right
+            && !hasControl
+            && !hasAlt
+            && !hasShift
+            && Keyboard.Modifiers == ModifierKeys.None
+            && await TrySwitchPaneFocusByHorizontalDirectionAsync(e.Key == Key.Left ? -1 : 1))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F2)
         {
             e.Handled = true;
@@ -1985,14 +1996,16 @@ public partial class MainWindow : Window
     {
         if (GetActivePreviewListView() is { IsVisible: true, IsEnabled: true } listView)
         {
-            if (listView.SelectedItem is not null)
+            listView.UpdateLayout();
+            var targetItem = listView.SelectedItem ?? (listView.Items.Count > 0 ? listView.Items[0] : null);
+            if (targetItem is not null
+                && listView.ItemContainerGenerator.ContainerFromItem(targetItem) is ListViewItem container)
             {
-                var container = listView.ItemContainerGenerator.ContainerFromItem(listView.SelectedItem) as ListViewItem;
-                if (container is not null)
-                {
-                    container.Focus();
-                }
+                container.Focus();
+                return;
             }
+
+            listView.Focus();
         }
     }
 

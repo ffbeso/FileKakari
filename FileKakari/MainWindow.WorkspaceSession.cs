@@ -2423,8 +2423,8 @@ public partial class MainWindow
             return;
         }
 
-        var panes = _workspaceDisplayPanes;
-        if (panes is null || panes.Count <= 1)
+        var panes = GetDisplayedWorkspacePanes().ToList();
+        if (panes.Count <= 1)
         {
             return;
         }
@@ -2445,13 +2445,160 @@ public partial class MainWindow
 
         if (IsDiagLogEnabled) WriteDiagLog($"SwitchPaneFocusByOffsetAsync index={currentIndex}->{nextIndex} paneId={targetPane.Id}");
 
-        // 既存のペインアクティブ化処理を通す
-        await ActivateWorkspacePaneFromSenderAsync(targetPane);
+        await ActivateAndFocusWorkspacePaneAsync(targetPane);
+    }
 
-        // アクティブ表示更新
+    private async Task<bool> TrySwitchPaneFocusByHorizontalDirectionAsync(int direction)
+    {
+        if (direction == 0 || WorkspaceSplitGrid.Visibility != Visibility.Visible)
+        {
+            return false;
+        }
+
+        var panes = GetDisplayedWorkspacePanes().ToList();
+        if (panes.Count <= 1)
+        {
+            return false;
+        }
+
+        if (Keyboard.FocusedElement is not DependencyObject focusedElement
+            || !IsInsideItemsList(focusedElement)
+            || FindVisualParent<GridViewColumnHeader>(focusedElement) is not null)
+        {
+            return false;
+        }
+
+        var currentPane = GetWorkspacePaneFromSender(focusedElement) ?? GetActiveFolderPane();
+        if (currentPane is null)
+        {
+            return false;
+        }
+
+        var currentIndex = panes.IndexOf(currentPane);
+        if (currentIndex < 0)
+        {
+            return false;
+        }
+
+        var targetPane = FindAdjacentWorkspacePaneHorizontally(panes, currentPane, direction);
+        if (targetPane is null)
+        {
+            var fallbackIndex = currentIndex + (direction < 0 ? -1 : 1);
+            if (fallbackIndex >= 0 && fallbackIndex < panes.Count)
+            {
+                targetPane = panes[fallbackIndex];
+            }
+        }
+
+        if (targetPane is null || ReferenceEquals(targetPane, currentPane))
+        {
+            return true;
+        }
+
+        if (IsDiagLogEnabled) WriteDiagLog($"TrySwitchPaneFocusByHorizontalDirectionAsync dir={direction} paneId={currentPane.Id}->{targetPane.Id}");
+
+        await ActivateAndFocusWorkspacePaneAsync(targetPane);
+        return true;
+    }
+
+    private FolderPane? FindAdjacentWorkspacePaneHorizontally(
+        IReadOnlyList<FolderPane> panes,
+        FolderPane currentPane,
+        int direction)
+    {
+        if (GetFolderPaneListView(currentPane) is not { IsVisible: true, ActualWidth: > 0, ActualHeight: > 0 } currentListView)
+        {
+            return null;
+        }
+
+        Rect currentRect;
+        try
+        {
+            currentRect = currentListView.TransformToAncestor(WorkspaceSplitGrid)
+                .TransformBounds(new Rect(0, 0, currentListView.ActualWidth, currentListView.ActualHeight));
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+
+        var currentCenterX = currentRect.Left + currentRect.Width * 0.5;
+        var currentCenterY = currentRect.Top + currentRect.Height * 0.5;
+
+        FolderPane? bestPane = null;
+        var bestOverlapsVertically = false;
+        var bestHorizontalDistance = double.MaxValue;
+        var bestVerticalDistance = double.MaxValue;
+
+        foreach (var candidate in panes)
+        {
+            if (ReferenceEquals(candidate, currentPane)
+                || GetFolderPaneListView(candidate) is not { IsVisible: true, ActualWidth: > 0, ActualHeight: > 0 } candidateListView)
+            {
+                continue;
+            }
+
+            Rect candidateRect;
+            try
+            {
+                candidateRect = candidateListView.TransformToAncestor(WorkspaceSplitGrid)
+                    .TransformBounds(new Rect(0, 0, candidateListView.ActualWidth, candidateListView.ActualHeight));
+            }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+
+            var candidateCenterX = candidateRect.Left + candidateRect.Width * 0.5;
+            if (direction > 0 && candidateCenterX <= currentCenterX + 4.0)
+            {
+                continue;
+            }
+
+            if (direction < 0 && candidateCenterX >= currentCenterX - 4.0)
+            {
+                continue;
+            }
+
+            var overlapsVertically = Math.Min(currentRect.Bottom, candidateRect.Bottom) > Math.Max(currentRect.Top, candidateRect.Top);
+            var horizontalDistance = direction > 0
+                ? Math.Max(0.0, candidateRect.Left - currentRect.Right)
+                : Math.Max(0.0, currentRect.Left - candidateRect.Right);
+            var candidateCenterY = candidateRect.Top + candidateRect.Height * 0.5;
+            var verticalDistance = Math.Abs(candidateCenterY - currentCenterY);
+
+            if (bestPane is null
+                || (overlapsVertically && !bestOverlapsVertically)
+                || (overlapsVertically == bestOverlapsVertically
+                    && (horizontalDistance < bestHorizontalDistance - 1.0
+                        || (Math.Abs(horizontalDistance - bestHorizontalDistance) <= 1.0 && verticalDistance < bestVerticalDistance))))
+            {
+                bestPane = candidate;
+                bestOverlapsVertically = overlapsVertically;
+                bestHorizontalDistance = horizontalDistance;
+                bestVerticalDistance = verticalDistance;
+            }
+        }
+
+        return bestPane;
+    }
+
+    private async Task ActivateAndFocusWorkspacePaneAsync(FolderPane targetPane)
+    {
+        var targetSession = ResolveActivePaneOwner(targetPane).Session;
+        if (targetSession is not null
+            && _displayedWorkspaceSessionIds.Contains(targetSession.Id)
+            && !IsSameWorkspaceSession(targetSession, _activeWorkspaceSession))
+        {
+            await ActivateDisplayedWorkspaceSessionAsync(
+                targetSession,
+                "pane-focus-switch",
+                FocusRestoreStrategy.None);
+        }
+
+        var targetListView = GetFolderPaneListView(targetPane);
+        await ActivateWorkspacePaneFromSenderAsync(targetListView ?? (object)targetPane);
         UpdateWorkspacePaneActiveStates();
-
-        // リストビューにフォーカスを当て、選択項目へフォーカスを復元する
         FocusActiveFileList();
         FocusSelectedListViewItemOfActivePane();
     }

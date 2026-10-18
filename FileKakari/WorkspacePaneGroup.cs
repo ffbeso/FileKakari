@@ -264,11 +264,29 @@ public sealed class FileListState : INotifyPropertyChanged
     public bool HasCurrentLoadFailure(string stateId, string path) =>
         _failedLoadGeneration == _loadGeneration && IsLoadCurrent(_loadGeneration, stateId, path);
 
-    public void ClearItemsAfterLoadFailure(string path)
+    private bool _isPathMissing;
+
+    public bool IsPathMissing
+    {
+        get => _isPathMissing;
+        set
+        {
+            if (_isPathMissing == value)
+            {
+                return;
+            }
+
+            _isPathMissing = value;
+            OnPropertyChanged(nameof(IsPathMissing));
+        }
+    }
+
+    public void ClearItemsAfterLoadFailure(string path, bool isPathMissing = true)
     {
         Items.Clear();
         ItemsView.Refresh();
         CurrentPath = path;
+        IsPathMissing = isPathMissing;
         LastLoadedAt = null;
         LoadedPath = null;
         LoadedStateId = null;
@@ -283,6 +301,7 @@ public sealed class FileListState : INotifyPropertyChanged
         InvalidateSimilarNameIndex();
         Items.ReplaceAll(items);
         CurrentPath = path;
+        IsPathMissing = false;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;
         LoadedPath = path;
         LoadedStateId = loadedStateId;
@@ -293,6 +312,7 @@ public sealed class FileListState : INotifyPropertyChanged
         InvalidateSimilarNameIndex();
         LastLoadedAt = null;
         CurrentPath = path;
+        IsPathMissing = false;
         LoadedPath = path;
         LoadedStateId = stateId;
         Items.Clear();
@@ -964,6 +984,7 @@ public class FolderPane : INotifyPropertyChanged
     private void SyncFileListPath()
     {
         FileList.CurrentPath = ActiveTabState?.CurrentPath ?? RootPath;
+        FileList.IsPathMissing = ActiveTabState?.IsPathMissing ?? false;
         ReplaceBreadcrumbSegments(BreadcrumbSegments, FileList.CurrentPath);
     }
 

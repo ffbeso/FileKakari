@@ -1424,7 +1424,7 @@
                                                     </ListBox.ItemContainerStyle>
                                                     <ListBox.ItemTemplate>
                                                         <DataTemplate DataType="{x:Type local:FolderTab}">
-                                                            <Grid>
+                                                            <Grid ToolTip="{Binding SubTabToolTip}">
                                                                 <Grid.Style>
                                                                     <Style TargetType="Grid">
                                                                         <Setter Property="MinWidth" Value="52" />
@@ -1442,28 +1442,48 @@
                                                                     </Style>
                                                                 </Grid.Style>
                                                                 <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
                                                                     <ColumnDefinition Width="*" MinWidth="0" />
                                                                     <ColumnDefinition Width="Auto" />
                                                                 </Grid.ColumnDefinitions>
                                                                 <TextBlock Grid.Column="0"
+                                                                           Text="⚠"
+                                                                           Margin="0,0,3,0"
+                                                                           Foreground="{DynamicResource SubtleTextBrush}"
+                                                                           VerticalAlignment="Center">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsPathMissing}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                                <TextBlock Grid.Column="1"
                                                                            Text="{Binding Header}"
-                                                                           Foreground="{DynamicResource TextBrush}"
                                                                            Margin="0,0,3,0"
                                                                            TextTrimming="CharacterEllipsis"
                                                                            VerticalAlignment="Center">
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
+                                                                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                                                                             <Setter Property="MinWidth" Value="0" />
                                                                             <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding DataContext.SubTabIsVertical, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
                                                                                     <Setter Property="HorizontalAlignment" Value="Stretch" />
                                                                                 </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding IsPathMissing}" Value="True">
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+                                                                                </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
                                                                     </TextBlock.Style>
                                                                 </TextBlock>
-                                                                <Button Grid.Column="1"
+                                                                <Button Grid.Column="2"
                                                                         Width="18"
                                                                         Height="18"
                                                                         Padding="0"
@@ -2136,6 +2156,82 @@
                                             </GridView>
                                         </ListView.View>
                                     </ListView>
+                                    <Border Grid.Column="1"
+                                            Grid.Row="2"
+                                            Background="{DynamicResource PanelBackgroundBrush}"
+                                            Padding="24">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <MultiDataTrigger>
+                                                        <MultiDataTrigger.Conditions>
+                                                            <Condition Binding="{Binding FileList.IsPathMissing}" Value="True" />
+                                                            <Condition Binding="{Binding FileList.IsLoading}" Value="False" />
+                                                        </MultiDataTrigger.Conditions>
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </MultiDataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Border MaxWidth="460"
+                                                Padding="20,16"
+                                                CornerRadius="4"
+                                                Background="{DynamicResource ControlBackgroundBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <TextBlock Text="⚠"
+                                                               FontSize="15"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource SubtleTextBrush}" />
+                                                    <TextBlock Text="{x:Static local:MainWindow.MissingPathTitleText}"
+                                                               FontSize="14"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextBrush}" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding FileList.CurrentPath}"
+                                                           Foreground="{DynamicResource SubtleTextBrush}"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,0,0,6" />
+                                                <TextBlock Text="{x:Static local:MainWindow.MissingPathHintText}"
+                                                           Foreground="{DynamicResource SubtleTextBrush}"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,0,0,14" />
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Content="{x:Static local:MainWindow.MissingPathNavigateParentText}"
+                                                            Padding="10,4"
+                                                            Margin="0,0,8,4"
+                                                            Style="{StaticResource FileKakariButtonStyle}"
+                                                            Click="WorkspacePaneMissingPathNavigateParentButton_Click" />
+                                                    <Button Content="{x:Static local:MainWindow.MissingPathRetryText}"
+                                                            Padding="10,4"
+                                                            Margin="0,0,8,4"
+                                                            Style="{StaticResource FileKakariButtonStyle}"
+                                                            Click="WorkspacePaneRefreshButton_Click" />
+                                                    <Button Content="{x:Static local:MainWindow.MissingPathCloseTabText}"
+                                                            Padding="10,4"
+                                                            Margin="0,0,0,4"
+                                                            Click="WorkspacePaneMissingPathCloseTabButton_Click">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource FileKakariButtonStyle}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ActiveTab.IsFolderLocked}" Value="True">
+                                                                        <Setter Property="IsEnabled" Value="False" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                </WrapPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </Border>
                                     <Border Grid.Column="1"
                                             Grid.Row="4"
                                             MinHeight="22"

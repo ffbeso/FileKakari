@@ -106,9 +106,12 @@ sealed class FolderPaneController
         var requestedPath = targetState.CurrentPath;
         var loadGeneration = pane.FileList.BeginLoad(targetState.Id, requestedPath);
         var enumerationCompleted = false;
+        _ = VerifyInactiveTabPathsAsync(pane);
 
         if (SpecialLocationService.IsSpecialUri(targetState.CurrentPath))
         {
+            targetState.SetPathMissing(false);
+            pane.FileList.IsPathMissing = false;
             await LoadSpecialLocationItemsAsync(pane, targetState, cancellationToken, loadGeneration);
             return;
         }
@@ -119,6 +122,8 @@ sealed class FolderPaneController
         if (CanRestorePaneCache(pane, targetState)
             && targetState.CachedItems is { } cachedItems)
         {
+            targetState.SetPathMissing(false);
+            pane.FileList.IsPathMissing = false;
             var cachedSortFoldersFirst = _sortFoldersFirst();
             if (CanReuseDisplayedItems(pane, targetState, cachedItems, cachedSortFoldersFirst))
             {
@@ -129,6 +134,7 @@ sealed class FolderPaneController
                 PerfLog.WriteVerbose(
                     $"folder-pane-display-reuse paneId={pane.Id} stateId={targetState.Id} " +
                     $"path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count}");
+                _ = VerifyCachedDirectoryExistsAsync(pane, targetState, requestedPath, loadGeneration);
                 return;
             }
 
@@ -148,6 +154,7 @@ sealed class FolderPaneController
             pane.RefreshDisplay();
             MainWindow.SyncPaneGroupCollapseState(pane);
             _performanceLogger.Write($"folder-pane-cache-restore paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\" lastExternalChange=\"{FormatTimestamp(pane.FileList.LastExternalChangeAt)}\"");
+            _ = VerifyCachedDirectoryExistsAsync(pane, targetState, requestedPath, loadGeneration);
             return;
         }
 
@@ -165,6 +172,8 @@ sealed class FolderPaneController
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration)) return;
+        targetState.SetPathMissing(false);
+        pane.FileList.IsPathMissing = false;
         pane.IsLoading = true;
         try
         {
@@ -292,7 +301,9 @@ sealed class FolderPaneController
             return;
         }
 
-        pane.FileList.ClearItemsAfterLoadFailure(path);
+        var isPathMissing = exception is null or DirectoryNotFoundException or DriveNotFoundException;
+        state.SetPathMissing(isPathMissing);
+        pane.FileList.ClearItemsAfterLoadFailure(path, isPathMissing);
         state.ClearItems();
         state.ClearPendingExternalChange();
         pane.RefreshDisplay();
@@ -331,6 +342,13 @@ sealed class FolderPaneController
 
     internal void UpdateStatus(FolderPane pane)
     {
+        if (pane.FileList.IsPathMissing || pane.ActiveTabState?.IsPathMissing == true)
+        {
+            var missingPath = pane.ActiveTabState?.CurrentPath ?? pane.FileList.CurrentPath;
+            pane.FileList.StatusText = _text.Format("PathNotFound", missingPath);
+            return;
+        }
+
         var currentSummary = BuildCurrentViewSummary(pane);
         pane.FileList.StatusText = _statusSummary.BuildStatusSummary(
             currentSummary,
@@ -342,6 +360,12 @@ sealed class FolderPaneController
     internal async void UpdateStatusAsync(FolderPane pane, IReadOnlyList<FileEntry> selectedEntries)
     {
         var version = Interlocked.Increment(ref _statusVersion);
+        if (pane.FileList.IsPathMissing || pane.ActiveTabState?.IsPathMissing == true)
+        {
+            var missingPath = pane.ActiveTabState?.CurrentPath ?? pane.FileList.CurrentPath;
+            pane.FileList.StatusText = _text.Format("PathNotFound", missingPath);
+            return;
+        }
         var currentSummary = BuildCurrentViewSummary(pane);
         pane.FileList.StatusText = _statusSummary.BuildStatusSummary(
             currentSummary,
@@ -501,9 +525,53 @@ sealed class FolderPaneController
         }
     }
 
+    private async Task VerifyCachedDirectoryExistsAsync(FolderPane pane, WorkspaceTabState targetState, string requestedPath, long loadGeneration)
+    {
+        if (string.IsNullOrWhiteSpace(requestedPath) || SpecialLocationService.IsSpecialUri(requestedPath))
+        {
+            return;
+        }
+
+        if (await _driveAvailabilityService.DirectoryExistsAsync(requestedPath))
+        {
+            return;
+        }
+
+        ClearPaneAfterLoadFailure(pane, targetState, requestedPath, loadGeneration, "cached-directory-not-found", null);
+    }
+
+    private async Task VerifyInactiveTabPathsAsync(FolderPane pane)
+    {
+        var activeState = pane.ActiveTabState;
+        var inactiveTabs = pane.Tabs.Where(t => !ReferenceEquals(t.State, activeState)).ToList();
+        foreach (var tab in inactiveTabs)
+        {
+            var path = tab.Navigation.CurrentPath;
+            if (string.IsNullOrWhiteSpace(path) || SpecialLocationService.IsSpecialUri(path))
+            {
+                tab.SetPathMissing(false);
+                continue;
+            }
+
+            var exists = await _driveAvailabilityService.DirectoryExistsAsync(path);
+            if (!string.Equals(tab.Navigation.CurrentPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!exists)
+            {
+                tab.State.ClearItems();
+            }
+
+            tab.SetPathMissing(!exists);
+        }
+    }
+
     private static bool CanRestorePaneCache(FolderPane pane, WorkspaceTabState targetState)
     {
         return targetState.CachedItems is not null
+            && !targetState.IsPathMissing
             && !targetState.HasPendingExternalChange
             && string.Equals(targetState.CachedPath, targetState.CurrentPath, StringComparison.OrdinalIgnoreCase)
             && (pane.FileList.LastExternalChangeAt is null

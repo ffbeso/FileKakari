@@ -1661,6 +1661,34 @@ try
         Require(new SessionStateService().Load(path).Status == SessionStateLoadStatus.InvalidJson, "Invalid JSON was not reported.");
         return Task.CompletedTask;
     });
+    await CheckAsync("missing-folder-subtab-state-and-recovery", () =>
+    {
+        var missingPath = Path.Combine(fixtures, "deleted-subtab-folder");
+        var existingPath = fixtures;
+        var missingTab = new FolderTab(missingPath, "tab-missing");
+        var validTab = new FolderTab(existingPath, "tab-valid");
+        var pane = new FolderPane("pane-test", new System.Collections.ObjectModel.ObservableCollection<FolderTab> { missingTab, validTab }, missingPath);
+        var notified = new List<string?>();
+        missingTab.PropertyChanged += (_, e) => notified.Add(e.PropertyName);
+
+        missingTab.SetPathMissing(true);
+        pane.FileList.ClearItemsAfterLoadFailure(missingPath, isPathMissing: true);
+        Require(missingTab.IsPathMissing && missingTab.State.IsPathMissing, "Missing tab state was not marked missing.");
+        Require(pane.FileList.IsPathMissing, "Pane file list was not marked missing after load failure.");
+        Require(notified.Contains(nameof(FolderTab.IsPathMissing)) && notified.Contains(nameof(FolderTab.SubTabToolTip)),
+            "FolderTab did not notify IsPathMissing and SubTabToolTip.");
+        Require(missingTab.SubTabToolTip.Contains(missingPath, StringComparison.Ordinal), "Missing tab tooltip did not include the path.");
+
+        pane.SelectedTabId = validTab.Id;
+        Require(!pane.FileList.IsPathMissing, "Switching to a valid subtab kept the missing-path overlay state.");
+        pane.SelectedTabId = missingTab.Id;
+        Require(pane.FileList.IsPathMissing, "Switching back to a missing subtab lost the missing-path overlay state.");
+
+        missingTab.State.StoreItems(missingPath, []);
+        pane.FileList.ReplaceItems(missingPath, []);
+        Require(!missingTab.IsPathMissing && !pane.FileList.IsPathMissing, "Restoring folder items did not clear IsPathMissing.");
+        return Task.CompletedTask;
+    });
 }
 catch (Exception ex)
 {

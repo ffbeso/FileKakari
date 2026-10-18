@@ -339,4 +339,9 @@ Word / Excel / PowerPointで一度開き、「編集を有効にする」また�
   <data name="ImageZoomFit" xml:space="preserve"><value>全体</value></data>
   <data name="ImageZoomHint" xml:space="preserve"><value>Ctrl＋ホイールで拡大・縮小、ドラッグで移動、ダブルクリックで全体／原寸切り替え</value></data>
   <data name="ImagePreviewMixedSelection" xml:space="preserve"><value>複数プレビューは画像のみ対応しています。画像だけを選択するか、ファイルを1つ選択してください。</value></data>
+  <data name="MissingPathTitle" xml:space="preserve"><value>フォルダが見つかりません</value></data>
+  <data name="MissingPathHint" xml:space="preserve"><value>フォルダが削除・移動されたか、ドライブが切断されている可能性があります。</value></data>
+  <data name="MissingPathNavigateParent" xml:space="preserve"><value>親フォルダへ移動</value></data>
+  <data name="MissingPathRetry" xml:space="preserve"><value>再読み込み</value></data>
+  <data name="MissingPathCloseTab" xml:space="preserve"><value>タブを閉じる</value></data>
 </root>

@@ -339,4 +339,9 @@ Open it once in Word, Excel, or PowerPoint and enable editing, or unblock the fi
   <data name="ImageZoomFit" xml:space="preserve"><value>Fit</value></data>
   <data name="ImageZoomHint" xml:space="preserve"><value>Ctrl+wheel to zoom, drag to pan, double-click to switch fit/100%</value></data>
   <data name="ImagePreviewMixedSelection" xml:space="preserve"><value>Multiple previews support images only. Select only images, or select a single file.</value></data>
+  <data name="MissingPathTitle" xml:space="preserve"><value>Folder not found</value></data>
+  <data name="MissingPathHint" xml:space="preserve"><value>The folder may have been deleted or moved, or the drive may be disconnected.</value></data>
+  <data name="MissingPathNavigateParent" xml:space="preserve"><value>Go to Parent Folder</value></data>
+  <data name="MissingPathRetry" xml:space="preserve"><value>Retry</value></data>
+  <data name="MissingPathCloseTab" xml:space="preserve"><value>Close Tab</value></data>
 </root>

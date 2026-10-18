@@ -12,6 +12,7 @@ public sealed class FolderTab : INotifyPropertyChanged
         WorkspaceTabState? state = null)
     {
         State = state ?? new WorkspaceTabState(path, id, viewMode);
+        State.PropertyChanged += OnStatePropertyChanged;
         Navigation = new NavigationState(path);
         if (state is null)
         {
@@ -20,6 +21,15 @@ public sealed class FolderTab : INotifyPropertyChanged
         else if (string.IsNullOrWhiteSpace(State.CurrentPath))
         {
             State.CurrentPath = path;
+        }
+    }
+
+    private void OnStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(WorkspaceTabState.IsPathMissing), StringComparison.Ordinal))
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsPathMissing)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SubTabToolTip)));
         }
     }
 
@@ -85,6 +95,13 @@ public sealed class FolderTab : INotifyPropertyChanged
 
     public bool IsDisconnected { get; private set; }
 
+    public bool IsPathMissing => State.IsPathMissing;
+
+    public string SubTabToolTip =>
+        IsPathMissing
+            ? AppStrings.Format("PathNotFound", Navigation.CurrentPath)
+            : Navigation.CurrentPath;
+
     public bool IsFolderLocked { get; private set; }
 
     public string? HeaderOverride { get; private set; }
@@ -116,6 +133,12 @@ public sealed class FolderTab : INotifyPropertyChanged
     public void RefreshHeader()
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Header)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SubTabToolTip)));
+    }
+
+    public void SetPathMissing(bool isMissing)
+    {
+        State.SetPathMissing(isMissing);
     }
 
     public void SetHeaderOverride(string? header)

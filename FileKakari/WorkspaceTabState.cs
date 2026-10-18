@@ -51,8 +51,27 @@ public sealed class WorkspaceTabState : INotifyPropertyChanged
 
     private string _currentPath = "";
     private GroupMode _groupMode = GroupMode.None;
+    private bool _isPathMissing;
 
     public HashSet<string> CollapsedGroupKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool IsPathMissing
+    {
+        get => _isPathMissing;
+        private set
+        {
+            if (_isPathMissing != value)
+            {
+                _isPathMissing = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public void SetPathMissing(bool isMissing)
+    {
+        IsPathMissing = isMissing;
+    }
 
     public string CurrentPath
     {
@@ -62,6 +81,7 @@ public sealed class WorkspaceTabState : INotifyPropertyChanged
             if (!IsSamePath(_currentPath, value))
             {
                 _currentPath = value;
+                IsPathMissing = false;
                 CollapsedGroupKeys.Clear();
                 NotifyGroupCollapseChanged();
             }
@@ -193,6 +213,7 @@ public sealed class WorkspaceTabState : INotifyPropertyChanged
     public void StoreItems(string path, IReadOnlyList<FileEntry> items)
     {
         CurrentPath = path;
+        IsPathMissing = false;
         CachedPath = path;
         CachedItems = items;
         LastLoadedAt = DateTimeOffset.UtcNow;

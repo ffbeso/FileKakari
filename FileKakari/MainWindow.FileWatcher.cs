@@ -48,6 +48,15 @@ public partial class MainWindow
     private void FolderWatchService_WatchError(string path, Exception? exception)
     {
         _performanceLogger.Write($"folder-watch-error path=\"{path}\" error=\"{exception?.Message ?? ""}\"");
+        _ = Dispatcher.InvokeAsync(
+            async () =>
+            {
+                if (!await _driveAvailabilityService.DirectoryExistsAsync(path))
+                {
+                    await RequestFolderWatchRefreshAsync(path);
+                }
+            },
+            DispatcherPriority.Background);
     }
 
     private async Task RequestFolderWatchRefreshAsync(string changedPath)
@@ -799,6 +808,14 @@ public partial class MainWindow
 
             if (!CanRefreshWorkspacePaneFromFolderWatch(pane, out var skipReason))
             {
+                if (string.Equals(skipReason, "path-missing", StringComparison.Ordinal))
+                {
+                    _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
+                    await ClearWorkspacePaneAfterFolderLoadFailureAsync(pane, state.CurrentPath, "folder-watch-path-missing");
+                    UpdateFolderWatchForWorkspacePanes();
+                    return true;
+                }
+
                 _performanceLogger.Write($"folder-pane-watch-refresh-skipped reason={skipReason} paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full uiApply=false");
                 return false;
             }

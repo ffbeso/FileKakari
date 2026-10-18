@@ -29,6 +29,71 @@ public partial class MainWindow
         private set => SetValue(WorkspaceDisplayLayoutRootProperty, value);
     }
 
+    public static string MissingPathTitleText => AppStrings.Get("MissingPathTitle");
+    public static string MissingPathHintText => AppStrings.Get("MissingPathHint");
+    public static string MissingPathNavigateParentText => AppStrings.Get("MissingPathNavigateParent");
+    public static string MissingPathRetryText => AppStrings.Get("MissingPathRetry");
+    public static string MissingPathCloseTabText => AppStrings.Get("MissingPathCloseTab");
+
+    private async void WorkspacePaneMissingPathNavigateParentButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is not { } pane)
+        {
+            return;
+        }
+
+        var currentPath = pane.ActiveTab?.Navigation.CurrentPath ?? pane.CurrentPath;
+        var targetPath = await ResolveNearestExistingParentPathAsync(currentPath);
+        await NavigateWorkspacePaneToFolderAsync(pane, targetPath, NavigationKind.Up);
+    }
+
+    private async void WorkspacePaneMissingPathCloseTabButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ActivateWorkspacePaneFromSenderAsync(sender);
+        if (GetWorkspacePaneFromSender(sender) is { } pane && pane.ActiveTab is { } activeTab)
+        {
+            var listBox = FindWorkspacePaneSubTabListBox(pane);
+            await CloseWorkspacePaneSubTabAsync(pane, activeTab, listBox);
+        }
+    }
+
+    private async Task<string> ResolveNearestExistingParentPathAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || SpecialLocationService.IsSpecialUri(path))
+        {
+            return SpecialLocationService.ThisPcUri;
+        }
+
+        var current = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        for (int i = 0; i < 64 && !string.IsNullOrWhiteSpace(current); i++)
+        {
+            string? parent;
+            try
+            {
+                parent = Path.GetDirectoryName(current);
+            }
+            catch (Exception ex) when (ex is ArgumentException or PathTooLongException)
+            {
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(parent))
+            {
+                break;
+            }
+
+            if (await _driveAvailabilityService.DirectoryExistsAsync(parent))
+            {
+                return parent;
+            }
+
+            current = parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        return SpecialLocationService.ThisPcUri;
+    }
+
     private async Task<bool> OpenWorkspaceFileAsync(string workspaceFilePath, bool forceReplaceCurrentSession = false)
     {
         var workspace = _workspaceService.LoadFromFile(workspaceFilePath);
@@ -1589,7 +1654,9 @@ public partial class MainWindow
             return;
         }
 
-        pane.FileList.ClearItemsAfterLoadFailure(requestedPath);
+        var isPathMissing = exception is null or DirectoryNotFoundException or DriveNotFoundException;
+        state.SetPathMissing(isPathMissing);
+        pane.FileList.ClearItemsAfterLoadFailure(requestedPath, isPathMissing);
         pane.FileList.StatusText = exception?.Message ?? _text.Format("PathNotFound", requestedPath);
         pane.FileList.IsLoading = false;
         state.ClearItems();

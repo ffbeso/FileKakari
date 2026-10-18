@@ -704,12 +704,7 @@ public partial class MainWindow
 
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "rundll32.exe",
-                Arguments = $"shell32.dll,OpenAs_RunDLL \"{entry.FullPath}\"",
-                UseShellExecute = true
-            });
+            ShellItemActions.ShowOpenWithDialog(this, entry.FullPath);
         }
         catch (Exception ex)
         {

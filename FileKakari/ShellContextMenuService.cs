@@ -41,6 +41,58 @@ public static class ShellItemActions
         }
     }
 
+    public static void ShowOpenWithDialog(Window owner, string path)
+    {
+        var hwnd = new WindowInteropHelper(owner).Handle;
+        var info = new OPENASINFO
+        {
+            pcszFile = path,
+            pcszClass = null,
+            oaifInFlags = OPENASINFOFLAGS.OAIF_ALLOW_REGISTRATION | OPENASINFOFLAGS.OAIF_EXEC
+        };
+
+        int hr = SHOpenWithDialog(hwnd, ref info);
+        if (hr != 0 && hr != unchecked((int)0x800704C7))
+        {
+            var execInfo = new ShellExecuteInfo
+            {
+                cbSize = Marshal.SizeOf<ShellExecuteInfo>(),
+                hwnd = hwnd,
+                lpVerb = "openas",
+                lpFile = path,
+                nShow = SwShow
+            };
+            if (!ShellExecuteEx(ref execInfo))
+            {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+        }
+    }
+
+    [DllImport("shell32.dll", EntryPoint = "SHOpenWithDialog", CharSet = CharSet.Unicode)]
+    private static extern int SHOpenWithDialog(IntPtr hwndParent, ref OPENASINFO poainfo);
+
+    [Flags]
+    private enum OPENASINFOFLAGS
+    {
+        OAIF_ALLOW_REGISTRATION = 0x00000001,
+        OAIF_REGISTER_EXT       = 0x00000002,
+        OAIF_EXEC               = 0x00000004,
+        OAIF_FORCE_REGISTRATION = 0x00000008,
+        OAIF_HIDE_REGISTRATION  = 0x00000020,
+        OAIF_URL_PROTOCOL       = 0x00000040,
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct OPENASINFO
+    {
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string pcszFile;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? pcszClass;
+        public OPENASINFOFLAGS oaifInFlags;
+    }
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool ShellExecuteEx(ref ShellExecuteInfo lpExecInfo);
 

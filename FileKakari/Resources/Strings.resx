@@ -203,6 +203,8 @@ Items: {1:N0}</value></data>
   <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>Bottom</value></data>
   <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>Auto-play videos</value></data>
   <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>Muted during auto-play. Can be unmuted manually after playback starts.</value></data>
+  <data name="SettingsLoopVideoPreview" xml:space="preserve"><value>Loop video playback</value></data>
+  <data name="SettingsLoopVideoPreviewDescription" xml:space="preserve"><value>Automatically restart video playback from the beginning when it ends.</value></data>
   <data name="SettingsAutoPlayAudioPreview" xml:space="preserve"><value>Auto-play audio</value></data>
   <data name="SettingsAutoPlayAudioPreviewDescription" xml:space="preserve"><value>Automatically start playback when an audio file is selected.</value></data>
   <data name="SettingsFontFamily" xml:space="preserve"><value>Font family</value></data>

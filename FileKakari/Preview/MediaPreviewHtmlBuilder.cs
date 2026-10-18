@@ -8,7 +8,8 @@ public sealed record MediaPreviewDocument(
     string Html,
     string MediaType,
     bool EffectiveAutoPlay,
-    bool EffectiveMuted);
+    bool EffectiveMuted,
+    bool EffectiveLoop = false);
 
 public static class MediaPreviewHtmlBuilder
 {
@@ -16,19 +17,23 @@ public static class MediaPreviewHtmlBuilder
         string mediaPath,
         bool isVideo,
         bool isAudio,
-        bool autoPlayVideoSetting)
+        bool autoPlayVideoSetting,
+        bool loopVideoSetting = false)
     {
         var autoPlay = isVideo && autoPlayVideoSetting;
         var muted = isVideo && autoPlay;
+        var loop = isVideo && loopVideoSetting;
         var mediaType = isVideo ? "video" : isAudio ? "audio" : "media";
         var autoplayAttr = autoPlay ? "autoplay" : "";
         var mutedAttr = muted ? "muted" : "";
+        var loopAttr = loop ? "loop" : "";
         var mediaFileUri = WebUtility.HtmlEncode(new Uri(Path.GetFullPath(mediaPath)).AbsoluteUri);
         var mediaTag = isVideo
-            ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} src=\"{mediaFileUri}\"></video>"
+            ? $"<video id=\"media\" controls {autoplayAttr} {mutedAttr} {loopAttr} src=\"{mediaFileUri}\"></video>"
             : $"<audio id=\"media\" controls {autoplayAttr} src=\"{mediaFileUri}\"></audio>";
         var autoplayJs = autoPlay ? "true" : "false";
         var mutedJs = muted ? "true" : "false";
+        var loopJs = loop ? "true" : "false";
         var isVideoJs = isVideo ? "true" : "false";
 
         var html = $@"<!DOCTYPE html>
@@ -89,6 +94,7 @@ public static class MediaPreviewHtmlBuilder
             if (media) {{
                 if ({isVideoJs}) {{
                     media.muted = {mutedJs};
+                    media.loop = {loopJs};
                 }}
                 if ({autoplayJs}) {{
                     if (media.readyState >= 2) {{
@@ -103,6 +109,6 @@ public static class MediaPreviewHtmlBuilder
 </body>
 </html>";
 
-        return new MediaPreviewDocument(html, mediaType, autoPlay, muted);
+        return new MediaPreviewDocument(html, mediaType, autoPlay, muted, loop);
     }
 }

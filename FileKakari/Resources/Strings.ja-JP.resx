@@ -203,6 +203,8 @@
   <data name="SettingsPreviewPanePlacementBottom" xml:space="preserve"><value>下側</value></data>
   <data name="SettingsAutoPlayVideoPreview" xml:space="preserve"><value>動画を自動再生する</value></data>
   <data name="SettingsAutoPlayVideoPreviewDescription" xml:space="preserve"><value>自動再生時はミュートされます。再生後に手動で解除できます。</value></data>
+  <data name="SettingsLoopVideoPreview" xml:space="preserve"><value>動画をループ再生する</value></data>
+  <data name="SettingsLoopVideoPreviewDescription" xml:space="preserve"><value>動画の再生が終了したときに先頭から繰り返し再生します。</value></data>
   <data name="SettingsAutoPlayAudioPreview" xml:space="preserve"><value>音声を自動再生する</value></data>
   <data name="SettingsAutoPlayAudioPreviewDescription" xml:space="preserve"><value>音声ファイルを選択したときに自動で再生します。</value></data>
   <data name="SettingsFontFamily" xml:space="preserve"><value>フォント ファミリー</value></data>

@@ -104,6 +104,11 @@
                            Margin="24,4,0,0"
                            TextWrapping="Wrap"
                            Foreground="{DynamicResource SubtleTextBrush}" />
+                <CheckBox x:Name="LoopVideoPreviewCheckBox" Margin="0,10,0,0" />
+                <TextBlock x:Name="LoopVideoPreviewDescriptionText"
+                           Margin="24,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
             </StackPanel>
 
             <StackPanel Grid.Row="13" Grid.Column="1" Orientation="Horizontal"

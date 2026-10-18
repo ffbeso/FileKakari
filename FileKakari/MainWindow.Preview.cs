@@ -2211,11 +2211,13 @@ public partial class MainWindow
                 var isVideo = IsVideoPreviewPath(path);
                 var isAudio = IsAudioPreviewPath(path);
                 var autoPlayVideoSetting = _settingsService.Settings.AutoPlayVideoPreview;
+                var loopVideoSetting = _settingsService.Settings.LoopVideoPreview;
                 var document = MediaPreviewHtmlBuilder.Build(
                     path,
                     isVideo,
                     isAudio,
-                    autoPlayVideoSetting);
+                    autoPlayVideoSetting,
+                    loopVideoSetting);
 
                 try
                 {

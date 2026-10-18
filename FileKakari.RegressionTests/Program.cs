@@ -1689,6 +1689,23 @@ try
         Require(!missingTab.IsPathMissing && !pane.FileList.IsPathMissing, "Restoring folder items did not clear IsPathMissing.");
         return Task.CompletedTask;
     });
+    await CheckAsync("video-loop-playback-setting", () =>
+    {
+        var settings = new AppSettings { AutoPlayVideoPreview = true, LoopVideoPreview = true };
+        var cloned = settings.Clone();
+        Require(cloned.LoopVideoPreview, "AppSettings.Clone did not preserve LoopVideoPreview.");
+
+        var videoPath = Path.Combine(fixtures, "sample.mp4");
+        var loopedDoc = MediaPreviewHtmlBuilder.Build(videoPath, isVideo: true, isAudio: false, autoPlayVideoSetting: true, loopVideoSetting: true);
+        Require(loopedDoc.EffectiveLoop, "MediaPreviewHtmlBuilder did not enable EffectiveLoop for video when loopVideoSetting is true.");
+        Require(loopedDoc.Html.Contains("loop", StringComparison.Ordinal) && loopedDoc.Html.Contains("media.loop = true;", StringComparison.Ordinal),
+            "MediaPreviewHtmlBuilder did not output loop attribute/script for video.");
+
+        var nonLoopedDoc = MediaPreviewHtmlBuilder.Build(videoPath, isVideo: true, isAudio: false, autoPlayVideoSetting: true, loopVideoSetting: false);
+        Require(!nonLoopedDoc.EffectiveLoop && nonLoopedDoc.Html.Contains("media.loop = false;", StringComparison.Ordinal),
+            "MediaPreviewHtmlBuilder enabled loop when loopVideoSetting is false.");
+        return Task.CompletedTask;
+    });
 }
 catch (Exception ex)
 {

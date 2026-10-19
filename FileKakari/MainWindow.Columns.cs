@@ -11,7 +11,6 @@ namespace FileKakari;
 public partial class MainWindow
 {
     private bool _isApplyingColumnWidths;
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<GridView, object> InitializedWorkspaceColumns = new();
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<GridViewColumn, EventHandler> _hookedColumns = new();
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<ListView, SizeChangedEventHandler> _hookedWorkspaceListViewSizes = new();
     private readonly Dictionary<GridViewColumn, double> _lastObservedColumnWidths = [];
@@ -555,23 +554,16 @@ public partial class MainWindow
                 otherColumnsWidth += w;
             }
 
-            var columnIds = ColumnLayoutService.ColumnOrder.Where(visibleColumns.Contains).ToArray();
-            var previousColumns = gridView.Columns.ToArray();
-            if (EnsureWorkspaceColumns(gridView, columnIds, CreateWorkspacePaneColumn))
-                foreach (var oldColumn in previousColumns)
+            gridView.Columns.Clear();
+
+            foreach (var columnId in ColumnLayoutService.ColumnOrder)
+            {
+                if (!visibleColumns.Contains(columnId))
                 {
-                    if (_hookedColumns.TryGetValue(oldColumn, out var handler))
-                    {
-                        DependencyPropertyDescriptor.FromProperty(GridViewColumn.WidthProperty, typeof(GridViewColumn))
-                            .RemoveValueChanged(oldColumn, handler);
-                        _hookedColumns.Remove(oldColumn);
-                    }
-                    _lastObservedColumnWidths.Remove(oldColumn);
+                    continue;
                 }
 
-            foreach (var column in gridView.Columns)
-            {
-                var columnId = GetColumnId(column);
+                var column = CreateWorkspacePaneColumn(columnId);
                 var width = _columnLayout.GetColumnWidth(columnId, path, targetSession, pane.Id, tabStateId);
                 if (width <= 0)
                 {
@@ -593,6 +585,7 @@ public partial class MainWindow
                 }
 
                 column.Width = width;
+                gridView.Columns.Add(column);
                 _lastObservedColumnWidths[column] = GetObservedColumnWidth(column);
             }
 
@@ -606,22 +599,6 @@ public partial class MainWindow
         {
             _isApplyingColumnWidths = false;
         }
-    }
-
-    private static bool EnsureWorkspaceColumns(
-        GridView gridView, string[] columnIds, Func<string, GridViewColumn> createColumn)
-    {
-        // Initialize XAML columns once so their templates match the configured columns.
-        // Afterwards preserve column/cell identity when only the tab state changes.
-        if (InitializedWorkspaceColumns.TryGetValue(gridView, out _)
-            && gridView.Columns.Select(GetColumnId).SequenceEqual(columnIds))
-            return false;
-
-        var columns = columnIds.Select(createColumn).ToArray();
-        gridView.Columns.Clear();
-        foreach (var column in columns) gridView.Columns.Add(column);
-        InitializedWorkspaceColumns.GetValue(gridView, static _ => new object());
-        return true;
     }
 
     private sealed class ColumnMetadata

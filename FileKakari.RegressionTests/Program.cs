@@ -24,31 +24,6 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
-    await CheckAsync("workspace-columns-reuse-identical-layout", () => RunOnStaAsync(() =>
-    {
-        var grid = new System.Windows.Controls.GridView();
-        var ensure = typeof(MainWindow).GetMethod("EnsureWorkspaceColumns",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        var created = 0;
-        Func<string, System.Windows.Controls.GridViewColumn> factory = id =>
-        {
-            created++;
-            return new() { Header = new System.Windows.Controls.TextBlock { Tag = id }, Width = 123 };
-        };
-        bool Apply(params string[] ids) => (bool)ensure.Invoke(null, new object[] { grid, ids, factory })!;
-        Require(Apply("Name", "Size"), "Initial columns were not configured.");
-        var name = grid.Columns[0];
-        name.Width = 456;
-        var changes = 0;
-        ((System.Collections.Specialized.INotifyCollectionChanged)grid.Columns).CollectionChanged += (_, _) => changes++;
-        Require(!Apply("Name", "Size") && created == 2 && changes == 0
-            && ReferenceEquals(grid.Columns[0], name) && name.Width == 456,
-            "Identical layout recreated columns or changed their state.");
-        Require(Apply("Size", "Name") && !ReferenceEquals(grid.Columns[1], name), "Column order change was ignored.");
-        Require(Apply("Name") && grid.Columns.Count == 1, "Hidden column was retained.");
-        Require(Apply("Name", "ModifiedAt") && grid.Columns.Count == 2, "New visible column was not added.");
-    }));
-
     await CheckAsync("timing-buffer-bounded-recording-and-explicit-save", () =>
     {
         var output = Path.Combine(fixtures, "timing-buffer.log");

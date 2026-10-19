@@ -130,10 +130,18 @@ internal static class AnchorScrollService
             return true;
         }
         stageTimer.Restart();
+        var positionAlreadyStable = false;
         if (!earlyScroll)
-            await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
+            positionAlreadyStable = await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId,
+                "before-scroll-into-view", isStale,
+                deleteFlowId == 0 && resolveReason == "exact-anchor" ? targetEntry : null, anchorState.RelativeOffset);
         PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} skipped={earlyScroll}");
         if (isStale?.Invoke() == true) return false;
+        if (positionAlreadyStable)
+        {
+            PerfLog.WriteVerbose("anchor-stage stage=already-positioned-stable skipped=true samples=3");
+            return true;
+        }
 
         // Step 1: ScrollIntoView
         stageTimer.Restart();
@@ -180,12 +188,14 @@ internal static class AnchorScrollService
         catch (InvalidOperationException) { return false; }
     }
 
-    private static async Task WaitForStableExtentAsync(
+    private static async Task<bool> WaitForStableExtentAsync(
         ListView listView,
         Dispatcher dispatcher,
         long deleteFlowId,
         string stage,
-        Func<bool>? isStale)
+        Func<bool>? isStale,
+        FileEntry? positionTarget,
+        double relativeOffset)
     {
         const int requiredStableTransitions = 2;
         const int maxLayoutPasses = 10;
@@ -194,21 +204,30 @@ internal static class AnchorScrollService
         double? previousScrollableHeight = null;
         var stableTransitions = 0;
         var samples = new List<double>(maxLayoutPasses);
+        double? previousOffset = null;
+        var matchingPositions = 0;
 
         for (var pass = 0; pass < maxLayoutPasses; pass++)
         {
             var sample = await dispatcher.InvokeAsync(() =>
             {
-                if (isStale?.Invoke() == true) return -1d;
+                if (isStale?.Invoke() == true) return (Extent: -1d, Offset: -1d, Matched: false);
                 listView.UpdateLayout();
-                return FindVisualChild<ScrollViewer>(listView)?.ScrollableHeight ?? -1;
+                var scroll = FindVisualChild<ScrollViewer>(listView);
+                return (Extent: scroll?.ScrollableHeight ?? -1, Offset: scroll?.VerticalOffset ?? -1,
+                    Matched: positionTarget is not null && IsAnchorPositionCurrent(listView, positionTarget, relativeOffset));
             }, DispatcherPriority.ContextIdle);
 
-            if (isStale?.Invoke() == true) return;
-            samples.Add(sample);
-            if (sample >= 0
+            if (isStale?.Invoke() == true) return false;
+            samples.Add(sample.Extent);
+            var extentStable = sample.Extent >= 0
                 && previousScrollableHeight is { } previous
-                && Math.Abs(sample - previous) <= tolerance)
+                && Math.Abs(sample.Extent - previous) <= tolerance;
+            matchingPositions = sample.Matched
+                ? (extentStable && previousOffset is { } offset && Math.Abs(sample.Offset - offset) <= tolerance
+                    ? matchingPositions + 1 : 1)
+                : 0;
+            if (extentStable)
             {
                 stableTransitions++;
                 if (stableTransitions >= requiredStableTransitions)
@@ -221,12 +240,14 @@ internal static class AnchorScrollService
                 stableTransitions = 0;
             }
 
-            previousScrollableHeight = sample;
+            previousScrollableHeight = sample.Extent;
+            previousOffset = sample.Offset;
         }
 
         PerfLog.WriteVerbose(
             $"anchor-extent-stability flowId={deleteFlowId} stage={stage} stable={stableTransitions >= requiredStableTransitions} " +
             $"stableTransitions={stableTransitions} samples=[{string.Join(',', samples.Select(value => value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))}]");
+        return stableTransitions >= requiredStableTransitions && matchingPositions >= 3;
     }
 
     private static async Task<bool> RestoreAnchorRelativePositionUntilStableAsync(

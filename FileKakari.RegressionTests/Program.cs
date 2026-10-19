@@ -242,8 +242,23 @@ try
                 new object?[] { list, anchor, GroupMode.Extension, dispatcher, flowId, stale, early })!;
             var unchanged = Restore(true);
             Require(unchanged.IsCompletedSuccessfully && unchanged.Result, "Valid visible anchor was not reused synchronously.");
+            var waitForStable = service.GetMethod("WaitForStableExtentAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            Task<bool> CheckPosition(double offset) => (Task<bool>)waitForStable.Invoke(null,
+                new object?[] { list, dispatcher, 0L, "regression", null,
+                    entries.First(entry => entry.FullPath == anchor!.AnchorPath), offset })!;
+            var stablePosition = CheckPosition(anchor!.RelativeOffset);
+            PumpDispatcherUntilComplete(stablePosition);
+            Require(stablePosition.Result, "Stable visible anchor was not recognized across layout passes.");
+            var wrongPosition = CheckPosition(anchor.RelativeOffset + 50);
+            PumpDispatcherUntilComplete(wrongPosition);
+            Require(!wrongPosition.Result, "Stable extent incorrectly accepted a mismatched anchor position.");
+            var offsetBeforeReuse = scroll.VerticalOffset;
+            var conservativeUnchanged = Restore(false);
+            PumpDispatcherUntilComplete(conservativeUnchanged);
+            Require(conservativeUnchanged.Result && Math.Abs(scroll.VerticalOffset - offsetBeforeReuse) <= 0.5,
+                "Conservative reuse moved an already positioned anchor.");
             scroll.ScrollToVerticalOffset(0); list.UpdateLayout();
-            var moved = Restore(true);
+            var moved = Restore(false);
             PumpDispatcherUntilComplete(moved);
             Require(moved.Result, "Early grouped restoration did not converge.");
             var restored = (AnchorScrollState?)capture.Invoke(null, new object[] { list, GroupMode.Extension, scroll.VerticalOffset });

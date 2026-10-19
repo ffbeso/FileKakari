@@ -253,12 +253,6 @@ internal static class AnchorScrollService
         for (var pass = 0; pass < maxLayoutPasses; pass++)
         {
             var passTimer = measurePasses ? System.Diagnostics.Stopwatch.StartNew() : null;
-            // Correct the visible position before idle maintenance, but still yield to
-            // input/rendering. Later samples retain the idle boundary for stabilization.
-            // Deletion keeps its existing conservative scheduling throughout.
-            var priority = pass == 0 && deleteFlowId == 0
-                ? DispatcherPriority.Background
-                : DispatcherPriority.ContextIdle;
             double queueMs = 0, uiMs = 0, layoutMs = 0;
             var layoutCalls = 0;
             var scrollRequests = 0;
@@ -322,11 +316,10 @@ internal static class AnchorScrollService
                 {
                     uiMs = (passTimer?.Elapsed.TotalMilliseconds ?? 0) - queueMs;
                 }
-            }, priority);
+            }, DispatcherPriority.ContextIdle);
 
             if (measurePasses)
                 PerfLog.WriteTiming($"anchor-pass list={listView.GetHashCode()} flowId={deleteFlowId} pass={pass} " +
-                    $"priority={priority} " +
                     $"queueMs={queueMs:F2} uiMs={uiMs:F2} layoutMs={layoutMs:F2} layoutCalls={layoutCalls} scrollRequests={scrollRequests} " +
                     $"extent={sample.ScrollableHeight:F1} offset={sample.VerticalOffset:F1} relativeY={sample.RelativeY:F1} targetY={anchorState.RelativeOffset:F1}");
             if (isStale?.Invoke() == true) return false;

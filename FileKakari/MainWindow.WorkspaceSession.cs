@@ -1696,6 +1696,7 @@ public partial class MainWindow
         }
 
         var requestedState = pane.ActiveTabState;
+        using var loadTiming = PaneLoadTiming.Start(pane, restoreTrigger);
         using var loadInteraction = new PaneLoadInteractionTracker(GetFolderPaneListView(pane), pane.FileList);
         var viewStateSuppression = pane.FileList.ViewStateSyncSuppression.Enter();
         try
@@ -1704,6 +1705,8 @@ public partial class MainWindow
             var paneLoadTask = _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
             var requestedGeneration = pane.FileList.LoadGeneration;
             await paneLoadTask;
+            loadTiming?.Mark("loadComplete");
+            loadTiming?.ObserveNextRender();
 
             if (pane.FileList.LoadGeneration != requestedGeneration)
             {
@@ -1737,6 +1740,7 @@ public partial class MainWindow
                 return;
             }
 
+            loadTiming?.Mark("restoreStart");
             if (loadInteraction.HasInteracted && GetFolderPaneListView(pane) is { } interactedList)
             {
                 // Keep explicit input made against the progressively displayed rows.
@@ -1757,6 +1761,7 @@ public partial class MainWindow
             }
             if (pane.FileList.LoadGeneration != requestedGeneration
                 || !ReferenceEquals(pane.ActiveTabState, requestedState)) return;
+            loadTiming?.Mark("restoreComplete");
         }
         finally
         {
@@ -1784,6 +1789,7 @@ public partial class MainWindow
 
             SynchronizeWorkspacePaneSelectionAfterLoad(pane);
         }
+        loadTiming?.Complete();
     }
 
     private void SynchronizeWorkspacePaneSelectionAfterLoad(FolderPane pane)
@@ -2920,11 +2926,13 @@ public partial class MainWindow
                 return;
             }
 
+            using var switchTiming = PaneLoadTiming.Start(pane, "subtab-click-total");
             if (e.RemovedItems.OfType<FolderTab>().FirstOrDefault() is { } previousTab)
             {
                 SaveWorkspacePaneColumnWidthsForTab(pane, previousTab);
                 SaveWorkspacePaneNavigationViewState(pane, previousTab);
             }
+            switchTiming?.Mark("previousStateSaved");
 
             if (pane.ActiveTab is { } activeTab)
             {
@@ -2944,6 +2952,7 @@ public partial class MainWindow
                 UpdateWindowTitle();
                 ScheduleSessionSave("subtab-selection-changed");
             }
+            switchTiming?.Complete();
         }
     }
 

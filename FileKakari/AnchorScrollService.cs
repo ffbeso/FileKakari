@@ -248,54 +248,80 @@ internal static class AnchorScrollService
         var stableTransitions = 0;
         var lastPositionMatched = false;
         var samples = new List<string>(maxLayoutPasses);
+        var measurePasses = PerfLog.IsTimingEnabled;
 
         for (var pass = 0; pass < maxLayoutPasses; pass++)
         {
+            var passTimer = measurePasses ? System.Diagnostics.Stopwatch.StartNew() : null;
+            double queueMs = 0, uiMs = 0, layoutMs = 0;
+            var layoutCalls = 0;
+            var scrollRequests = 0;
+            void UpdateMeasuredLayout()
+            {
+                var before = passTimer?.Elapsed.TotalMilliseconds ?? 0;
+                listView.UpdateLayout();
+                layoutMs += (passTimer?.Elapsed.TotalMilliseconds ?? 0) - before;
+                layoutCalls++;
+            }
             var sample = await dispatcher.InvokeAsync(() =>
             {
-                if (isStale?.Invoke() == true)
-                    return (Valid: false, ScrollableHeight: -1d, VerticalOffset: -1d, RelativeY: double.NaN);
-                listView.UpdateLayout();
-                var scrollViewer = FindVisualChild<ScrollViewer>(listView);
-                if (scrollViewer == null)
-                {
-                    return (Valid: false, ScrollableHeight: -1d, VerticalOffset: -1d, RelativeY: double.NaN);
-                }
-
-                var container = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) as ListViewItem;
-                if (container == null)
-                {
-                    listView.ScrollIntoView(targetEntry);
-                    listView.UpdateLayout();
-                    container = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) as ListViewItem;
-                }
-
-                if (container == null)
-                {
-                    return (Valid: false, scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: double.NaN);
-                }
-
+                queueMs = passTimer?.Elapsed.TotalMilliseconds ?? 0;
                 try
                 {
-                    var relativeY = container.TransformToAncestor(scrollViewer).Transform(new Point(0, 0)).Y;
-                    var diff = relativeY - anchorState.RelativeOffset;
-                    if (Math.Abs(diff) > positionTolerance)
+                    if (isStale?.Invoke() == true)
+                        return (Valid: false, ScrollableHeight: -1d, VerticalOffset: -1d, RelativeY: double.NaN);
+                    UpdateMeasuredLayout();
+                    var scrollViewer = FindVisualChild<ScrollViewer>(listView);
+                    if (scrollViewer == null)
                     {
-                        scrollViewer.ScrollToVerticalOffset(Math.Clamp(scrollViewer.VerticalOffset + diff, 0, scrollViewer.ScrollableHeight));
-                        listView.UpdateLayout();
+                        return (Valid: false, ScrollableHeight: -1d, VerticalOffset: -1d, RelativeY: double.NaN);
                     }
 
-                    var adjustedRelativeY = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) is ListViewItem adjustedContainer
-                        ? adjustedContainer.TransformToAncestor(scrollViewer).Transform(new Point(0, 0)).Y
-                        : double.NaN;
-                    return (Valid: !double.IsNaN(adjustedRelativeY), scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: adjustedRelativeY);
+                    var container = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) as ListViewItem;
+                    if (container == null)
+                    {
+                        scrollRequests++;
+                        listView.ScrollIntoView(targetEntry);
+                        UpdateMeasuredLayout();
+                        container = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) as ListViewItem;
+                    }
+
+                    if (container == null)
+                    {
+                        return (Valid: false, scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: double.NaN);
+                    }
+
+                    try
+                    {
+                        var relativeY = container.TransformToAncestor(scrollViewer).Transform(new Point(0, 0)).Y;
+                        var diff = relativeY - anchorState.RelativeOffset;
+                        if (Math.Abs(diff) > positionTolerance)
+                        {
+                            scrollRequests++;
+                            scrollViewer.ScrollToVerticalOffset(Math.Clamp(scrollViewer.VerticalOffset + diff, 0, scrollViewer.ScrollableHeight));
+                            UpdateMeasuredLayout();
+                        }
+
+                        var adjustedRelativeY = listView.ItemContainerGenerator.ContainerFromItem(targetEntry) is ListViewItem adjustedContainer
+                            ? adjustedContainer.TransformToAncestor(scrollViewer).Transform(new Point(0, 0)).Y
+                            : double.NaN;
+                        return (Valid: !double.IsNaN(adjustedRelativeY), scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: adjustedRelativeY);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return (Valid: false, scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: double.NaN);
+                    }
                 }
-                catch (InvalidOperationException)
+                finally
                 {
-                    return (Valid: false, scrollViewer.ScrollableHeight, scrollViewer.VerticalOffset, RelativeY: double.NaN);
+                    uiMs = (passTimer?.Elapsed.TotalMilliseconds ?? 0) - queueMs;
                 }
             }, DispatcherPriority.ContextIdle);
 
+            if (measurePasses)
+                PerfLog.WriteTiming($"anchor-pass list={listView.GetHashCode()} flowId={deleteFlowId} pass={pass} " +
+                    $"queueMs={queueMs:F2} uiMs={uiMs:F2} layoutMs={layoutMs:F2} layoutCalls={layoutCalls} scrollRequests={scrollRequests} " +
+                    $"extent={sample.ScrollableHeight:F1} offset={sample.VerticalOffset:F1} relativeY={sample.RelativeY:F1} targetY={anchorState.RelativeOffset:F1}");
             if (isStale?.Invoke() == true) return false;
             samples.Add(
                 $"{sample.ScrollableHeight.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}/" +

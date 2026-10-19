@@ -269,6 +269,16 @@ try
             var restored = (AnchorScrollState?)capture.Invoke(null, new object[] { list, GroupMode.Extension, scroll.VerticalOffset });
             Require(restored?.AnchorPath == anchor!.AnchorPath && Math.Abs(restored.RelativeOffset - anchor.RelativeOffset) <= 0.75,
                 "Early restoration changed anchor or relative position.");
+            // Production uses the normal extent wait followed by the first correction
+            // at Background priority. Exercise it after the grouped source is rebuilt.
+            state.ReplaceItems(folder, entries);
+            scroll.ScrollToVerticalOffset(0); list.UpdateLayout();
+            var normal = Restore(false);
+            PumpDispatcherUntilComplete(normal);
+            var normalAnchor = (AnchorScrollState?)capture.Invoke(null, new object[] { list, GroupMode.Extension, scroll.VerticalOffset });
+            Require(normal.Result && normalAnchor?.AnchorPath == anchor.AnchorPath
+                && Math.Abs(normalAnchor.RelativeOffset - anchor.RelativeOffset) <= 0.75,
+                "Normal restoration after rebuilding the grouped source changed anchor or relative position.");
             var deletion = Restore(true, flowId: 1);
             Require(!deletion.IsCompleted, "Deletion bypassed its extent stabilization wait.");
             PumpDispatcherUntilComplete(deletion);

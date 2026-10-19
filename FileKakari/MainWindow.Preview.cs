@@ -150,29 +150,12 @@ public partial class MainWindow
 
     private bool MoveActivePreviewSelection(int delta)
     {
-        if (!IsPreviewPaneActuallyVisible || delta == 0 || GetActivePreviewListView() is not { } listView || listView.Items.Count == 0)
+        if (!IsPreviewPaneActuallyVisible || GetActivePreviewListView() is not { } listView)
         {
             return false;
         }
 
-        var currentIndex = listView.SelectedIndex;
-        if (currentIndex < 0)
-        {
-            currentIndex = delta > 0 ? -1 : listView.Items.Count;
-        }
-
-        var targetIndex = Math.Clamp(currentIndex + delta, 0, listView.Items.Count - 1);
-        if (targetIndex == currentIndex)
-        {
-            return false;
-        }
-
-        var targetItem = listView.Items[targetIndex];
-        listView.SelectedItems.Clear();
-        listView.SelectedItem = targetItem;
-        listView.ScrollIntoView(targetItem);
-        listView.Focus();
-        return true;
+        return FileListKeyboardNavigation.MoveSelection(listView, delta);
     }
 
     private bool MoveActivePreviewSelectionPage(int delta)

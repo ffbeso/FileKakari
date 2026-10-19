@@ -786,6 +786,7 @@
                     </Grid>
                 </Border>
             <ListView x:Name="ItemsList"
+                      KeyboardNavigation.DirectionalNavigation="Contained"
                       Grid.Row="1"
                       ItemsSource="{Binding ItemsView}"
                       SelectionMode="Extended"
@@ -2056,6 +2057,7 @@
                                         </Grid>
                                     </Border>
                                      <ListView ItemsSource="{Binding FileList.ItemsView}"
+                                               KeyboardNavigation.DirectionalNavigation="Contained"
                                                local:PaneSelection.IsActive="{Binding IsActive}"
                                                Grid.Row="2"
                                               Grid.Column="1"

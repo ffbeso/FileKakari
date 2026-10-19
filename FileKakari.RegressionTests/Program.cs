@@ -24,6 +24,32 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("file-list-boundary-navigation-consumes-key-without-selection-change", () => RunOnStaAsync(() =>
+    {
+        var list = new System.Windows.Controls.ListView
+        {
+            SelectionMode = System.Windows.Controls.SelectionMode.Extended
+        };
+        list.Items.Add("first"); list.Items.Add("middle"); list.Items.Add("last");
+        foreach (var (index, delta) in new[] { (0, -1), (0, -20), (2, 1), (2, 20) })
+        {
+            list.SelectedItems.Clear();
+            list.SelectedItem = list.Items[index];
+            list.SelectedItems.Add(list.Items[1]);
+            var changes = 0;
+            System.Windows.Controls.SelectionChangedEventHandler handler = (_, _) => changes++;
+            list.SelectionChanged += handler;
+            for (var repeat = 0; repeat < 10; repeat++)
+                Require(FileListKeyboardNavigation.MoveSelection(list, delta), "Boundary key escaped to WPF focus navigation.");
+            list.SelectionChanged -= handler;
+            Require(changes == 0 && list.SelectedItems.Count == 2 && list.SelectedIndex == index,
+                "Boundary navigation modified selection.");
+        }
+        list.Items.Clear();
+        Require(FileListKeyboardNavigation.MoveSelection(list, 1), "Empty list leaked navigation key.");
+        Require(!FileListKeyboardNavigation.MoveSelection(list, 0), "Zero delta was treated as navigation.");
+    }));
+
     await CheckAsync("prepared-row-columns-do-not-depend-on-visual-parent", () => RunOnStaAsync(() =>
     {
         using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Themes", "ThemeResources.xaml"));

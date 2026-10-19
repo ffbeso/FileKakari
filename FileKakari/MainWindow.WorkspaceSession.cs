@@ -600,6 +600,7 @@ public partial class MainWindow
     {
         if (sender is ListView listView)
         {
+            FileListScrollDiagnostics.Attach(listView);
             try
             {
                 WriteWorkspaceListViewDiagnostics("workspace-listview-loaded", listView);

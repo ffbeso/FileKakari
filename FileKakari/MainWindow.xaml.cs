@@ -524,6 +524,7 @@ public partial class MainWindow : Window
         ItemsList.AddHandler(Mouse.PreviewMouseWheelEvent, new MouseWheelEventHandler(ItemsList_PreviewMouseWheelDuringRangeSelection), true);
         ItemsList.AddHandler(FrameworkElement.RequestBringIntoViewEvent, new RequestBringIntoViewEventHandler(ItemsList_RequestBringIntoView), true);
         ItemsList.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(ItemsList_ScrollChanged), true);
+        FileListScrollDiagnostics.Attach(ItemsList);
         ItemsList.LostMouseCapture += ItemsList_LostMouseCapture;
         RangeSelectionOverlay.LostMouseCapture += RangeSelectionOverlay_LostMouseCapture;
         _primaryPaneTabs.CollectionChanged += Tabs_CollectionChanged;

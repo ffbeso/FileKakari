@@ -115,7 +115,7 @@ internal static class AnchorScrollService
         var resolved = AnchorTargetResolver.Find(listView.Items.OfType<FileEntry>(), anchorState);
         var targetEntry = resolved.Entry;
         var resolveReason = resolved.Reason;
-        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=lookup elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} visited={resolved.Visited} reason={resolveReason}");
+        PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=lookup elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} visited={resolved.Visited} reason={resolveReason}");
         // Anchor / Next / Previous 3件すべて不在の場合 ➔ 既存 VerticalOffset fallback
         if (targetEntry == null)
         {
@@ -126,13 +126,13 @@ internal static class AnchorScrollService
         var earlyScroll = allowEarlyScroll && deleteFlowId == 0;
         if (earlyScroll && IsAnchorPositionCurrent(listView, targetEntry, anchorState.RelativeOffset))
         {
-            PerfLog.WriteVerbose("anchor-stage stage=already-positioned skipped=true");
+            PerfLog.WriteTiming("anchor-stage stage=already-positioned skipped=true");
             return true;
         }
         stageTimer.Restart();
         if (!earlyScroll)
             await WaitForStableExtentAsync(listView, dispatcher, deleteFlowId, "before-scroll-into-view", isStale);
-        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} skipped={earlyScroll}");
+        PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} skipped={earlyScroll}");
         if (isStale?.Invoke() == true) return false;
 
         // Step 1: ScrollIntoView
@@ -142,7 +142,7 @@ internal static class AnchorScrollService
             if (isStale?.Invoke() == true) return;
             listView.ScrollIntoView(targetEntry);
         }, earlyScroll ? DispatcherPriority.Loaded : DispatcherPriority.Send);
-        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
+        PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
 
         // ScrollIntoView と相対Y補正のどちらでも仮想化コンテナの再配置が起こり得る。
         // Extent・VerticalOffset・相対Yが同時に安定するまで、低優先度のレイアウト周期ごとに再補正する。
@@ -154,10 +154,10 @@ internal static class AnchorScrollService
             dispatcher,
             deleteFlowId,
             resolveReason, isStale);
-        PerfLog.WriteVerbose($"anchor-stage flowId={deleteFlowId} stage=position-correction elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} restored={restored}");
+        PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=position-correction elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} restored={restored}");
         if (!restored && earlyScroll && isStale?.Invoke() != true)
         {
-            PerfLog.WriteVerbose("anchor-stage stage=conservative-retry reason=early-position-not-stable");
+            PerfLog.WriteTiming("anchor-stage stage=conservative-retry reason=early-position-not-stable");
             return await RestoreAnchorScrollAsync(listView, anchorState, mode, dispatcher, deleteFlowId, isStale);
         }
         return restored;

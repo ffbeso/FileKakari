@@ -49,6 +49,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        PerfLog.FlushTiming();
         try
         {
             PreviewTemporaryFileManager.CleanupCurrentProcessMediaPreviewFiles();

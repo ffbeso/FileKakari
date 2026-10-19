@@ -145,7 +145,7 @@ sealed class FolderPaneController
                 pane.FileList.ReplaceItems(targetState.CurrentPath, cachedItems, targetState.LastLoadedAt, targetState.Id, reuseGroupCache: true);
                 ApplyViewStateToPane(pane, targetState, cachedSortFoldersFirst);
             }
-            PerfLog.WriteVerbose($"pane-cache-publish pane={pane.Id} state={targetState.Id} generation={loadGeneration} count={cachedItems.Count} elapsedMs={cachePublishTimer.Elapsed.TotalMilliseconds:F2} includesDeferredRefresh=true");
+            PerfLog.WriteTiming($"pane-cache-publish pane={pane.Id} state={targetState.Id} generation={loadGeneration} count={cachedItems.Count} elapsedMs={cachePublishTimer.Elapsed.TotalMilliseconds:F2} includesDeferredRefresh=true");
             MainWindow.WriteDiagLog(BuildReplaceCompleteLog(pane, targetState));
             stopwatch.Stop();
             if (targetState.LastLoadElapsedMs is null)

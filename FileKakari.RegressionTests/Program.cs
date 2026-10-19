@@ -24,6 +24,26 @@ try
     AppStrings.Configure(AppLanguageMode.Japanese);
     var textProvider = new BuiltInTextPreviewProvider();
 
+    await CheckAsync("timing-buffer-bounded-recording-and-explicit-save", () =>
+    {
+        var output = Path.Combine(fixtures, "timing-buffer.log");
+        var buffer = new TimingLogBuffer(2);
+        buffer.Record("discarded"); buffer.Record("retained-a"); buffer.Record("retained-b");
+        Require(!File.Exists(output), "Recording unexpectedly wrote a log file.");
+        buffer.SaveSnapshot(output);
+        var lines = File.ReadAllLines(output);
+        Require(lines.Length == 3 && lines[0].Contains("retained=2 dropped=1")
+            && lines[1].EndsWith("retained-a") && lines[2].EndsWith("retained-b"),
+            "Buffer did not retain newest records in order with a dropped count.");
+        var concurrent = new TimingLogBuffer(32);
+        Parallel.For(0, 1000, i => concurrent.Record($"sample-{i}"));
+        concurrent.SaveSnapshot(output);
+        lines = File.ReadAllLines(output);
+        Require(lines.Length == 33 && lines[0].Contains("retained=32 dropped=968"),
+            "Concurrent recording exceeded the bound or lost accounting.");
+        return Task.CompletedTask;
+    });
+
     await CheckAsync("file-list-boundary-navigation-consumes-key-without-selection-change", () => RunOnStaAsync(() =>
     {
         var list = new System.Windows.Controls.ListView

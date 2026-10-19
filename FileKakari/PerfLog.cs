@@ -7,6 +7,23 @@ public static class PerfLog
 {
     private static readonly object Gate = new();
     private static readonly string? LogPath = Environment.GetEnvironmentVariable("FILEKAKARI_PERF_LOG");
+    private static readonly string? TimingPath = Environment.GetEnvironmentVariable("FILEKAKARI_TIMING_LOG");
+    private static readonly TimingLogBuffer? TimingBuffer = string.IsNullOrWhiteSpace(TimingPath) ? null : new();
+
+    public static bool IsTimingEnabled => TimingBuffer is not null || IsVerboseEnabled;
+
+    public static void WriteTiming(string message)
+    {
+        if (TimingBuffer is not null) TimingBuffer.Record(message);
+        else WriteVerbose(message);
+    }
+
+    public static void FlushTiming()
+    {
+        if (TimingBuffer is null || string.IsNullOrWhiteSpace(TimingPath)) return;
+        try { TimingBuffer.SaveSnapshot(TimingPath); }
+        catch (Exception ex) { Debug.WriteLine($"Timing log save failed: {ex.Message}"); }
+    }
 
     public static string? ConfiguredLogPath
     {

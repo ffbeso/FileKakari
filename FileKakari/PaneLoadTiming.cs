@@ -18,7 +18,7 @@ internal sealed class PaneLoadTiming : IDisposable
     }
 
     public static PaneLoadTiming? Start(FolderPane pane, string trigger) =>
-        PerfLog.IsVerboseEnabled ? new PaneLoadTiming(pane, trigger) : null;
+        PerfLog.IsTimingEnabled ? new PaneLoadTiming(pane, trigger) : null;
 
     public void Mark(string stage) => _samples.Add($"{stage}={_timer.Elapsed.TotalMilliseconds:F2}");
 
@@ -48,6 +48,6 @@ internal sealed class PaneLoadTiming : IDisposable
     {
         StopObserving();
         Mark("end");
-        PerfLog.WriteVerbose($"pane-load-timing {_context} completed={_completed} elapsedMs=[{string.Join(' ', _samples)}]");
+        PerfLog.WriteTiming($"pane-load-timing {_context} completed={_completed} elapsedMs=[{string.Join(' ', _samples)}]");
     }
 }

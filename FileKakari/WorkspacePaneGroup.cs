@@ -385,10 +385,10 @@ public sealed class FileListState : INotifyPropertyChanged
             GroupRepresentativeIndex? repIndex = groupMode != GroupMode.None ? _groupCache.EnsureRepresentatives(Items, groupMode, sortColumn, sortAscending, sortFoldersFirst) : null;
             SimilarNameGroupIndex? groupIndex = groupMode == GroupMode.SimilarName ? SimilarNameIndex : null;
             if (groupMode == GroupMode.None) _groupCache.Clear();
-            PerfLog.WriteVerbose($"pane-sort-stage stage=group-preparation mode={groupMode} count={Items.Count} cacheHit={_groupCache.LastRepresentativeCacheHit} elapsedMs={timer.Elapsed.TotalMilliseconds:F2}");
+            PerfLog.WriteTiming($"pane-sort-stage stage=group-preparation mode={groupMode} count={Items.Count} cacheHit={_groupCache.LastRepresentativeCacheHit} elapsedMs={timer.Elapsed.TotalMilliseconds:F2}");
             timer.Restart();
             listView.CustomSort = new FileEntryComparer(sortColumn, sortAscending, sortFoldersFirst, currentOrder, groupMode, groupIndex, repIndex);
-            PerfLog.WriteVerbose($"pane-sort-stage stage=view-sort-assignment mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2} refreshMayBeDeferred=true");
+            PerfLog.WriteTiming($"pane-sort-stage stage=view-sort-assignment mode={groupMode} count={Items.Count} elapsedMs={timer.Elapsed.TotalMilliseconds:F2} refreshMayBeDeferred=true");
         }
         else
         {

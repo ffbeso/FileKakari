@@ -17,6 +17,8 @@ public sealed class FileListGroupCache
         LastRepresentativeCacheHit = false;
     }
 
+    internal void ValidateForReuse(IReadOnlyList<FileEntry> entries) => Validate(entries);
+
     private void Validate(IReadOnlyList<FileEntry> entries)
     {
         if (_snapshot is { } snapshot && snapshot.Length == entries.Count)

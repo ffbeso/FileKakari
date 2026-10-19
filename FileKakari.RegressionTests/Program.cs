@@ -1165,6 +1165,36 @@ try
         Require(resets == 4 && CollectionViewUpdate.Count(view) == 2, "Collection replacement did not update the view once.");
     }));
 
+    await CheckAsync("subtab-group-cache-reuse-isolation-and-invalidation", () => RunOnStaAsync(() =>
+    {
+        var path = Path.Combine(fixtures, "retained-group.txt");
+        File.WriteAllText(path, "x");
+        var entry = FileEntry.FromFileBasic(new FileInfo(path));
+        var entries = new[] { entry };
+        var state = new FileListState();
+        state.ReplaceItems(fixtures, entries, loadedStateId: "a");
+        var a = state.EnsureSimilarNameIndex();
+        state.ReplaceItems(fixtures, entries, loadedStateId: "b", reuseGroupCache: true);
+        var b = state.EnsureSimilarNameIndex();
+        Require(!ReferenceEquals(a, b), "Same-folder tabs shared preparation.");
+        state.ReplaceItems(fixtures, entries, loadedStateId: "a", reuseGroupCache: true);
+        Require(ReferenceEquals(a, state.EnsureSimilarNameIndex()), "Tab return rebuilt unchanged classification.");
+        state.ReplaceItems(fixtures, entries, loadedStateId: "b", reuseGroupCache: true);
+        Require(ReferenceEquals(b, state.EnsureSimilarNameIndex()), "Second tab lost its classification.");
+        entry.Name = "renamed.txt";
+        state.ReplaceItems(fixtures, entries, loadedStateId: "a", reuseGroupCache: true);
+        Require(!ReferenceEquals(a, state.EnsureSimilarNameIndex()), "Changed metadata reused stale classification.");
+        var refreshed = state.EnsureSimilarNameIndex();
+        state.ReplaceItems(fixtures, entries, loadedStateId: "a");
+        Require(!ReferenceEquals(refreshed, state.EnsureSimilarNameIndex()), "Explicit refresh reused classification.");
+        state.ReplaceItems(fixtures, entries, loadedStateId: "c");
+        state.EnsureSimilarNameIndex();
+        state.ReplaceItems(fixtures, entries, loadedStateId: "b", reuseGroupCache: true);
+        Require(!ReferenceEquals(b, state.EnsureSimilarNameIndex()), "Evicted tab retained classification.");
+        state.Items.Clear();
+        Require(state.SimilarNameIndex is null, "Direct mutation did not invalidate active cache.");
+    }));
+
     await CheckAsync("wpf-pane-replace-preserves-sort-filter", () => RunOnStaAsync(() =>
     {
         var path = Path.Combine(fixtures, "view-a.txt");

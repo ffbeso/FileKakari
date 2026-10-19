@@ -27,7 +27,9 @@ public sealed class FileListState : INotifyPropertyChanged
     private string? _loadStateId;
     private string? _loadPath;
 
-    private readonly FileListGroupCache _groupCache = new();
+    private FileListGroupCache _groupCache = new();
+    // At most one inactive tab, capped by item count; no retained WPF views.
+    private (string StateId, string Path, FileListGroupCache Cache)? _previousGroupCache;
 
     public SimilarNameGroupIndex? SimilarNameIndex => _groupCache.SimilarNameIndex;
     public AnchorScrollState? PendingAnchorScrollState { get; set; }
@@ -296,10 +298,29 @@ public sealed class FileListState : INotifyPropertyChanged
         _failedLoadGeneration = _loadGeneration;
     }
 
-    public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null, string? loadedStateId = null)
+    public void ReplaceItems(string path, IReadOnlyList<FileEntry> items, DateTimeOffset? loadedAt = null, string? loadedStateId = null,
+        bool reuseGroupCache = false)
     {
-        InvalidateSimilarNameIndex();
+        var previous = _previousGroupCache;
+        var switchingTab = !string.IsNullOrEmpty(loadedStateId)
+            && !string.IsNullOrEmpty(LoadedStateId)
+            && !string.Equals(loadedStateId, LoadedStateId, StringComparison.Ordinal);
+        if (switchingTab)
+        {
+            _previousGroupCache = Items.Count <= 20_000
+                ? (LoadedStateId!, LoadedPath ?? CurrentPath, _groupCache) : null;
+        }
+        // ReplaceAll invalidates the active cache through CollectionChanged.
+        // Detach it first so the inactive tab's preparation remains reusable.
+        _groupCache = new FileListGroupCache();
         Items.ReplaceAll(items);
+        if (switchingTab && reuseGroupCache && previous is { } saved
+            && string.Equals(saved.StateId, loadedStateId, StringComparison.Ordinal)
+            && string.Equals(saved.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _groupCache = saved.Cache;
+            _groupCache.ValidateForReuse(Items);
+        }
         CurrentPath = path;
         IsPathMissing = false;
         LastLoadedAt = loadedAt ?? DateTimeOffset.UtcNow;

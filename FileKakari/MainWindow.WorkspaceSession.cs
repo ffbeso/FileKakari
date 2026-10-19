@@ -2448,8 +2448,9 @@ public partial class MainWindow
         await ActivateAndFocusWorkspacePaneAsync(targetPane);
     }
 
-    private async Task<bool> TrySwitchPaneFocusByHorizontalDirectionAsync(int direction)
+    private bool TryGetHorizontalPaneFocusTarget(int direction, out FolderPane? targetPane)
     {
+        targetPane = null;
         if (direction == 0 || WorkspaceSplitGrid.Visibility != Visibility.Visible)
         {
             return false;
@@ -2462,14 +2463,14 @@ public partial class MainWindow
         }
 
         if (Keyboard.FocusedElement is not DependencyObject focusedElement
-            || !IsInsideItemsList(focusedElement)
+            || FindVisualParent<ListView>(focusedElement) is not { } focusedList
             || FindVisualParent<GridViewColumnHeader>(focusedElement) is not null)
         {
             return false;
         }
 
-        var currentPane = GetWorkspacePaneFromSender(focusedElement) ?? GetActiveFolderPane();
-        if (currentPane is null)
+        var currentPane = GetWorkspacePaneFromSender(focusedList);
+        if (currentPane is null || !ReferenceEquals(GetFolderPaneListView(currentPane), focusedList))
         {
             return false;
         }
@@ -2480,7 +2481,7 @@ public partial class MainWindow
             return false;
         }
 
-        var targetPane = FindAdjacentWorkspacePaneHorizontally(panes, currentPane, direction);
+        targetPane = FindAdjacentWorkspacePaneHorizontally(panes, currentPane, direction);
         if (targetPane is null)
         {
             var fallbackIndex = currentIndex + (direction < 0 ? -1 : 1);
@@ -2497,7 +2498,6 @@ public partial class MainWindow
 
         if (IsDiagLogEnabled) WriteDiagLog($"TrySwitchPaneFocusByHorizontalDirectionAsync dir={direction} paneId={currentPane.Id}->{targetPane.Id}");
 
-        await ActivateAndFocusWorkspacePaneAsync(targetPane);
         return true;
     }
 

@@ -1951,9 +1951,14 @@ public partial class MainWindow : Window
             && !hasAlt
             && !hasShift
             && Keyboard.Modifiers == ModifierKeys.None
-            && await TrySwitchPaneFocusByHorizontalDirectionAsync(e.Key == Key.Left ? -1 : 1))
+            && TryGetHorizontalPaneFocusTarget(e.Key == Key.Left ? -1 : 1, out var targetPane))
         {
+            // Consume the routed key before yielding to activation/loading.
             e.Handled = true;
+            if (targetPane is not null)
+            {
+                await ActivateAndFocusWorkspacePaneAsync(targetPane);
+            }
             return;
         }
 

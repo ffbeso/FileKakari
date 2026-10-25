@@ -134,6 +134,11 @@ public partial class MainWindow
     {
         var isInternalPage = tab?.IsInternalPage == true;
         var isSettingsPage = tab?.InternalPageKind == InternalPageKind.Settings;
+        if (isInternalPage)
+        {
+            _ = CancelAndClearPreviewAsync("internal-page-shown");
+        }
+
         if (isSettingsPage)
         {
             HidePreviewPaneForSettingsPage();
@@ -146,11 +151,7 @@ public partial class MainWindow
         InternalPageHost.Content = isInternalPage ? tab!.Content : null;
         InternalPageHost.Visibility = isInternalPage ? Visibility.Visible : Visibility.Collapsed;
         NormalPanePreviewButton.IsEnabled = !isInternalPage;
-        if (isInternalPage)
-        {
-            _ = CancelAndClearPreviewAsync("internal-page-shown");
-        }
-        else
+        if (!isInternalPage)
         {
             RefreshPreviewForActiveSelection("internal-page-hidden");
         }
@@ -203,16 +204,23 @@ public partial class MainWindow
         }
 
         var wasSelected = ReferenceEquals(TabsControl.SelectedItem, tab);
-        if (wasSelected && tab.InternalPageKind == InternalPageKind.Settings)
+        if (wasSelected && _mainTabs.Count > 1)
         {
-            RestorePreviewPaneAfterSettingsPage();
+            var nextSelectedTab = _activeWorkspaceSession is not null ? GetMainTabItem(_activeWorkspaceSession) : null;
+            if (nextSelectedTab is null || ReferenceEquals(nextSelectedTab, tab))
+            {
+                var nextIndex = index > 0 ? index - 1 : 1;
+                nextSelectedTab = _mainTabs[nextIndex];
+            }
+
+            TabsControl.SelectedItem = nextSelectedTab;
         }
 
         _mainTabs.RemoveAt(index);
         tab.Dispose();
-        if (wasSelected && _mainTabs.Count > 0)
+        if (wasSelected && _mainTabs.Count == 0 && tab.InternalPageKind == InternalPageKind.Settings)
         {
-            TabsControl.SelectedItem = _mainTabs[Math.Min(index, _mainTabs.Count - 1)];
+            RestorePreviewPaneAfterSettingsPage();
         }
     }
 }

@@ -256,10 +256,24 @@ public static class ThemeManager
         return TryLoadThemeDictionary(filePath, out _);
     }
 
+    private static AppThemeMode? _appliedThemeMode;
+    private static string? _appliedThemeDictionary;
+    private static string? _appliedCustomThemeName;
+    private static DateTime _appliedCustomThemeWriteTimeUtc;
+
     public static string? Apply(Window window, AppThemeMode themeMode, string? customThemeName = null)
     {
+        var previousMode = _appliedThemeMode;
+        var previousDict = _appliedThemeDictionary;
+        var previousCustom = _appliedCustomThemeName;
+        var previousWriteTime = _appliedCustomThemeWriteTimeUtc;
+
         var result = Apply(themeMode, customThemeName);
-        if (result == null && window != null)
+        var changed = previousMode != _appliedThemeMode
+            || !string.Equals(previousDict, _appliedThemeDictionary, StringComparison.Ordinal)
+            || !string.Equals(previousCustom, _appliedCustomThemeName, StringComparison.OrdinalIgnoreCase)
+            || previousWriteTime != _appliedCustomThemeWriteTimeUtc;
+        if (result == null && window != null && changed)
         {
             UpdateWindowTitleBar(window);
         }
@@ -289,6 +303,16 @@ public static class ThemeManager
             var filePath = Path.Combine(AppPaths.ThemesDirectory, customThemeName!);
             try
             {
+                var lastWriteTimeUtc = File.GetLastWriteTimeUtc(filePath);
+                var systemFallback = ResolveSystemThemeDictionary();
+                if (_appliedThemeMode == AppThemeMode.Custom
+                    && string.Equals(_appliedCustomThemeName, customThemeName, StringComparison.OrdinalIgnoreCase)
+                    && _appliedCustomThemeWriteTimeUtc == lastWriteTimeUtc
+                    && string.Equals(_appliedThemeDictionary, systemFallback, StringComparison.Ordinal))
+                {
+                    return null;
+                }
+
                 var loadError = TryLoadThemeDictionary(filePath, out var customDict);
                 if (loadError is not null || customDict is null)
                 {
@@ -298,7 +322,7 @@ public static class ThemeManager
                 customDict[ThemeSentinelKey] = true;
                 var fallbackDict = new ResourceDictionary
                 {
-                    Source = new Uri(ResolveSystemThemeDictionary(), UriKind.Relative)
+                    Source = new Uri(systemFallback, UriKind.Relative)
                 };
 
                 var dictionaries = Application.Current.Resources.MergedDictionaries;
@@ -312,6 +336,10 @@ public static class ThemeManager
                         dictionaries.RemoveAt(i);
                     }
                 }
+                _appliedThemeMode = AppThemeMode.Custom;
+                _appliedCustomThemeName = customThemeName;
+                _appliedCustomThemeWriteTimeUtc = lastWriteTimeUtc;
+                _appliedThemeDictionary = systemFallback;
                 PerfLog.Write($"theme-applied mode=custom file=\"{customThemeName}\"");
                 return null;
             }
@@ -325,7 +353,19 @@ public static class ThemeManager
 
         // Apply built-in theme
         var themeDictionary = ResolveThemeDictionary(themeMode);
+        if (_appliedThemeMode.HasValue
+            && _appliedThemeMode != AppThemeMode.Custom
+            && string.Equals(_appliedThemeDictionary, themeDictionary, StringComparison.Ordinal))
+        {
+            _appliedThemeMode = themeMode;
+            return null;
+        }
+
         ApplyBuiltInTheme(themeDictionary);
+        _appliedThemeMode = themeMode;
+        _appliedThemeDictionary = themeDictionary;
+        _appliedCustomThemeName = null;
+        _appliedCustomThemeWriteTimeUtc = default;
         PerfLog.Write($"theme-applied mode={themeMode} dictionary=\"{themeDictionary}\"");
         return null;
     }

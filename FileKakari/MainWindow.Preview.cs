@@ -283,6 +283,7 @@ public partial class MainWindow
         }
 
         RememberPreviewPaneSize();
+        PreviewShellHostContainer.Visibility = Visibility.Collapsed;
         PreviewPane.Visibility = Visibility.Collapsed;
         PreviewGridSplitter.Visibility = Visibility.Collapsed;
         if (!_isPreviewMaximized)
@@ -290,8 +291,6 @@ public partial class MainWindow
             ApplyPreviewPanePlacement(isVisible: false);
         }
 
-        PreviewShellHostContainer.UpdateLayout();
-        PreviewWebView.UpdateLayout();
         PerfLog.Write("[MainWindow.Preview] Preview pane temporarily hidden for settings page");
     }
 
@@ -311,6 +310,7 @@ public partial class MainWindow
             return;
         }
 
+        PreviewShellHostContainer.Visibility = Visibility.Collapsed;
         PreviewPane.Visibility = Visibility.Visible;
         PreviewGridSplitter.Visibility = _isPreviewMaximized
             ? Visibility.Collapsed
@@ -320,8 +320,6 @@ public partial class MainWindow
             ApplyPreviewPanePlacement(isVisible: true);
         }
 
-        PreviewShellHostContainer.UpdateLayout();
-        PreviewWebView.UpdateLayout();
         PerfLog.Write("[MainWindow.Preview] Preview pane restored after settings page");
     }
 

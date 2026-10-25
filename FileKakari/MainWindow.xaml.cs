@@ -717,12 +717,24 @@ public partial class MainWindow : Window
         ApplyDisplayMode();
     }
 
+    private static string? _lastResolvedFontFamilyInput;
+    private static string? _lastResolvedFontFamilyName;
+
     private static string ResolveFontFamilyName(string fontFamily)
     {
         var requested = string.IsNullOrWhiteSpace(fontFamily)
             ? AppSettings.DefaultFontFamily
             : fontFamily.Trim();
-        return IsInstalledFontFamily(requested) ? requested : AppSettings.DefaultFontFamily;
+        if (string.Equals(_lastResolvedFontFamilyInput, requested, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(_lastResolvedFontFamilyName))
+        {
+            return _lastResolvedFontFamilyName;
+        }
+
+        var resolved = IsInstalledFontFamily(requested) ? requested : AppSettings.DefaultFontFamily;
+        _lastResolvedFontFamilyInput = requested;
+        _lastResolvedFontFamilyName = resolved;
+        return resolved;
     }
 
     private static bool IsInstalledFontFamily(string fontFamily)
@@ -2900,39 +2912,69 @@ public partial class MainWindow : Window
         SaveColumnWidths();
         RememberPreviewPaneSize();
         SyncPreviewPaneSizeToSettings(settings);
-        var previousTheme = _settingsService.Settings.Theme;
-        var previousCustomThemeName = _settingsService.Settings.CustomThemeName;
+
+        var prev = _settingsService.Settings;
+        var previousTheme = prev.Theme;
+        var previousCustomThemeName = prev.CustomThemeName;
+
+        bool themeChanged = prev.Theme != settings.Theme
+            || !string.Equals(prev.CustomThemeName, settings.CustomThemeName, StringComparison.OrdinalIgnoreCase);
+        bool languageChanged = prev.Language != settings.Language;
+        bool fontChanged = !string.Equals(prev.FontFamily, settings.FontFamily, StringComparison.OrdinalIgnoreCase)
+            || Math.Abs(prev.FontSize - settings.FontSize) > 0.001;
+        bool displayModeChanged = prev.DisplayMode != settings.DisplayMode;
+        bool columnsChanged = !prev.VisibleColumns.SequenceEqual(settings.VisibleColumns, StringComparer.OrdinalIgnoreCase);
+        bool sortFoldersFirstChanged = prev.SortFoldersFirst != settings.SortFoldersFirst;
+        bool previewPlacementChanged = AppSettings.NormalizePreviewPanePlacement(prev.PreviewPanePlacement)
+            != AppSettings.NormalizePreviewPanePlacement(settings.PreviewPanePlacement);
+
         var themeError = ThemeManager.Apply(this, settings.Theme, settings.CustomThemeName);
         if (themeError != null)
         {
             settings.Theme = previousTheme;
             settings.CustomThemeName = previousCustomThemeName;
+            themeChanged = false;
         }
 
         // Check if we transition from not needing extra columns to needing extra columns
-        bool prevRequiresExtra = _settingsService.Settings.VisibleColumns.Any(ColumnLayoutService.RequiresExtraColumnMetadata);
+        bool prevRequiresExtra = prev.VisibleColumns.Any(ColumnLayoutService.RequiresExtraColumnMetadata);
         bool newRequiresExtra = settings.VisibleColumns.Any(ColumnLayoutService.RequiresExtraColumnMetadata);
         bool transitionToExtra = !prevRequiresExtra && newRequiresExtra;
 
-        bool needsReload = _settingsService.Settings.ShowHiddenFiles != settings.ShowHiddenFiles
-            || _settingsService.Settings.ShowSystemFiles != settings.ShowSystemFiles
-            || _settingsService.Settings.Language != settings.Language
+        bool needsReload = prev.ShowHiddenFiles != settings.ShowHiddenFiles
+            || prev.ShowSystemFiles != settings.ShowSystemFiles
+            || languageChanged
             || transitionToExtra;
 
         await _settingsService.SaveAsync(settings);
         CurrentSubTabPlacement = _settingsService.Settings.SubTabPlacement;
         _columnLayout.UpdateSettings(_settingsService.Settings);
-        AppStrings.Configure(_settingsService.Settings.Language);
-        ApplyFontSettings();
-        ApplyLocalizedText();
-        ApplyPreviewPanePlacement();
-        ApplyColumnSettings();
+        if (languageChanged)
+        {
+            AppStrings.Configure(_settingsService.Settings.Language);
+            ApplyLocalizedText();
+        }
+        if (fontChanged || displayModeChanged)
+        {
+            ApplyFontSettings();
+        }
+        if (previewPlacementChanged && !IsPreviewPaneTemporarilySuppressed)
+        {
+            ApplyPreviewPanePlacement();
+        }
+        if (columnsChanged || languageChanged)
+        {
+            ApplyColumnSettings();
+        }
 
-        if (WorkspaceSplitGrid.Visibility == Visibility.Visible)
+        if (WorkspaceSplitGrid.Visibility == Visibility.Visible && (columnsChanged || languageChanged || needsReload))
         {
             foreach (var pane in GetDisplayedWorkspacePanes())
             {
-                ApplyColumnSettingsToWorkspacePane(pane);
+                if (columnsChanged || languageChanged)
+                {
+                    ApplyColumnSettingsToWorkspacePane(pane);
+                }
                 if (needsReload)
                 {
                     await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
@@ -2945,7 +2987,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        ApplyTabSort(activeTab);
+        if (sortFoldersFirstChanged || languageChanged)
+        {
+            ApplyTabSort(activeTab);
+        }
         SetNormalStatusText(themeError ?? _text.Get("SettingsSaved"));
 
         if (needsReload)
@@ -2960,7 +3005,7 @@ public partial class MainWindow : Window
             await RefreshItemsViewLayoutAsync();
             _performanceLogger.Write($"settings-apply-updates afterReload updates={GetUpdateDiagnosticsStatus()}");
         }
-        else
+        else if (themeChanged || fontChanged || displayModeChanged || columnsChanged || sortFoldersFirstChanged || languageChanged)
         {
             await RefreshItemsViewLayoutAsync();
         }

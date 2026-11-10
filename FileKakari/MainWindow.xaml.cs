@@ -6984,6 +6984,17 @@ public partial class MainWindow : Window
         }
         else
         {
+            foreach (var pane in workspaceSession.PaneGroups.ToList())
+            {
+                if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
+                {
+                    WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");
+                    return;
+                }
+
+                ApplyColumnSettingsToWorkspacePane(pane);
+            }
+
             if (!CanApplyWorkspaceSwitch(switchId, workspaceSession))
             {
                 WriteWorkspaceSwitchLog("workspace-switch-discard", switchId, workspaceSession.Id, "stale-switch");

@@ -393,6 +393,8 @@ public partial class MainWindow
             if (pane is not null)
             {
                 await ReloadFolderPaneAsync(pane);
+                UpdateNormalPaneColumnHeaders();
+                UpdateWorkspacePaneColumnHeadersForPane(pane);
                 _workspaceLocalState.MarkDirty("sort");
                 return;
             }

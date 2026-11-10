@@ -695,6 +695,15 @@ public partial class MainWindow
         if (!FolderWatchService.CanWatchFolder(targetState.CurrentPath))
         {
             await ReloadFolderPaneAsync(pane);
+            if (sender is ListView reloadListView)
+            {
+                UpdateWorkspacePaneColumnHeaders(reloadListView, pane);
+            }
+            else
+            {
+                UpdateWorkspacePaneColumnHeadersForPane(pane);
+            }
+
             _workspaceLocalState.MarkDirty("sort");
             return;
         }
@@ -1702,6 +1711,7 @@ public partial class MainWindow
         try
         {
             ApplyColumnWidthsToWorkspacePane(pane);
+            UpdateWorkspacePaneColumnHeadersForPane(pane);
             var paneLoadTask = _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
             var requestedGeneration = pane.FileList.LoadGeneration;
             await paneLoadTask;

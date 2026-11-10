@@ -24,26 +24,33 @@ internal static class FileListSelectionHelper
         }
     }
 
-    public static void PerformShiftSelection(ListView listView, FileEntry? anchor, FileEntry target, bool additive)
+    public static FileEntry? PerformShiftSelection(ListView listView, FileEntry? anchor, FileEntry target, bool additive)
     {
         if (listView.Items.Count == 0)
         {
-            return;
+            return anchor;
         }
 
-        var anchorEntry = anchor ?? listView.SelectedItem as FileEntry;
-        if (anchorEntry is null)
-        {
-            AddTargetFallback(listView, target, additive);
-            return;
-        }
-
-        var anchorIndex = listView.Items.IndexOf(anchorEntry);
         var targetIndex = listView.Items.IndexOf(target);
-        if (anchorIndex < 0 || targetIndex < 0)
+        if (targetIndex < 0)
         {
             AddTargetFallback(listView, target, additive);
-            return;
+            return target;
+        }
+
+        var anchorEntry = anchor;
+        var anchorIndex = anchorEntry is not null ? listView.Items.IndexOf(anchorEntry) : -1;
+        if (anchorIndex < 0)
+        {
+            anchorEntry = listView.SelectedItem as FileEntry
+                ?? listView.SelectedItems.OfType<FileEntry>().FirstOrDefault();
+            anchorIndex = anchorEntry is not null ? listView.Items.IndexOf(anchorEntry) : -1;
+        }
+
+        if (anchorIndex < 0 || anchorEntry is null)
+        {
+            AddTargetFallback(listView, target, additive);
+            return target;
         }
 
         var start = Math.Min(anchorIndex, targetIndex);
@@ -62,6 +69,7 @@ internal static class FileListSelectionHelper
         }
 
         FileListRangeSelectionHelper.ApplySelection(listView, targetSelection);
+        return anchorEntry;
     }
 
     public static bool PrepareRightClickSelection(ListView listView, FileEntry? clickedEntry)
@@ -91,6 +99,11 @@ internal static class FileListSelectionHelper
         if (!listView.SelectedItems.Contains(target))
         {
             listView.SelectedItems.Add(target);
+        }
+
+        if (!additive || listView.SelectedItem is null)
+        {
+            listView.SelectedItem = target;
         }
     }
 }

@@ -223,6 +223,8 @@ public sealed class FileListState : INotifyPropertyChanged
         }
     }
 
+    public FileEntry? SelectionAnchorEntry { get; set; }
+
     public string? StatusMessagePrefix
     {
         get => _statusMessagePrefix;
@@ -250,6 +252,7 @@ public sealed class FileListState : INotifyPropertyChanged
         IsPublishingItems = false;
         HasPublicationInteraction = false;
         PendingAnchorScrollState = null;
+        SelectionAnchorEntry = null;
         _loadGeneration++;
         _loadStateId = stateId;
         _loadPath = path;
@@ -294,6 +297,7 @@ public sealed class FileListState : INotifyPropertyChanged
         LoadedStateId = null;
         LastExternalChangeAt = null;
         SelectedPaths = [];
+        SelectionAnchorEntry = null;
         ScrollOffset = 0;
         _failedLoadGeneration = _loadGeneration;
     }
@@ -310,6 +314,7 @@ public sealed class FileListState : INotifyPropertyChanged
             _previousGroupCache = Items.Count <= 20_000
                 ? (LoadedStateId!, LoadedPath ?? CurrentPath, _groupCache) : null;
         }
+        SelectionAnchorEntry = null;
         // ReplaceAll invalidates the active cache through CollectionChanged.
         // Detach it first so the inactive tab's preparation remains reusable.
         _groupCache = new FileListGroupCache();
@@ -330,6 +335,7 @@ public sealed class FileListState : INotifyPropertyChanged
 
     public void BeginStagedItems(string path, string stateId)
     {
+        SelectionAnchorEntry = null;
         InvalidateSimilarNameIndex();
         LastLoadedAt = null;
         CurrentPath = path;
@@ -533,6 +539,12 @@ public class FolderPane : INotifyPropertyChanged
     public BulkObservableCollection<FileEntry> Items => FileList.Items;
 
     public ICollectionView ItemsView => FileList.ItemsView;
+
+    public FileEntry? SelectionAnchorEntry
+    {
+        get => FileList.SelectionAnchorEntry;
+        set => FileList.SelectionAnchorEntry = value;
+    }
 
     public IReadOnlyList<string> SelectedPaths
     {

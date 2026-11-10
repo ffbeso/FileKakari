@@ -3043,7 +3043,7 @@ public partial class MainWindow : Window
             || pointInListView.X >= listView.ActualWidth - SplitterGuardWidth;
     }
 
-    private void PrepareWorkspacePaneFileListLeftMouseDown(ListView listView, FolderPane pane, MouseButtonEventArgs e)
+    private void PrepareWorkspacePaneFileListLeftMouseDown(ListView listView, FolderPane pane, MouseButtonEventArgs e, bool activePaneChanged = false)
     {
         LogListViewClick(listView, pane, e, e.OriginalSource as DependencyObject);
 
@@ -3112,7 +3112,13 @@ public partial class MainWindow : Window
         {
             if (e.ClickCount == 1)
             {
-                _workspacePendingRangeSelectionStartPoint = position;
+                if (!hasShift)
+                {
+                    pane.SelectionAnchorEntry = clickedEntry;
+                    _workspaceSelectionAnchorEntry = clickedEntry;
+                }
+
+                _workspacePendingRangeSelectionStartPoint = hasShift ? null : position;
                 _workspacePendingRangeSelectionClickEntry = clickedEntry;
                 _workspacePendingRangeSelectionStartAdditive = hasSelectionModifier;
                 _workspacePendingRangeSelectionListView = listView;
@@ -3131,6 +3137,7 @@ public partial class MainWindow : Window
         {
             if (!hasShift)
             {
+                pane.SelectionAnchorEntry = dragEntry;
                 _workspaceSelectionAnchorEntry = dragEntry;
             }
             BeginFileDragStart(listView, pane, dragEntry, position);
@@ -3144,7 +3151,8 @@ public partial class MainWindow : Window
                     _pendingSingleSelectionClickPane = pane;
                     _pendingSingleSelectionClickListView = listView;
 
-                    if (!hasSelectionModifier
+                    if (!activePaneChanged
+                        && !hasSelectionModifier
                         && (modifiers & ModifierKeys.Alt) == ModifierKeys.None
                         && GetFileEntryFromRenameHitTarget(source) is FileEntry renameEntry
                         && ReferenceEquals(renameEntry, dragEntry)
@@ -3163,7 +3171,7 @@ public partial class MainWindow : Window
             && hasShift
             && !IsInsideRenameTextBox(source))
         {
-            _workspacePendingRangeSelectionStartPoint = position;
+            _workspacePendingRangeSelectionStartPoint = null;
             _workspacePendingRangeSelectionClickEntry = clickedEntry;
             _workspacePendingRangeSelectionStartAdditive = hasControl;
             _workspacePendingRangeSelectionListView = listView;
@@ -3213,11 +3221,13 @@ public partial class MainWindow : Window
         if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
             FileListSelectionHelper.ApplyControlSelection(listView, entry);
+            pane.SelectionAnchorEntry = entry;
             _workspaceSelectionAnchorEntry = entry;
         }
         else
         {
             FileListSelectionHelper.ApplySingleSelection(listView, entry);
+            pane.SelectionAnchorEntry = entry;
             _workspaceSelectionAnchorEntry = entry;
         }
         listView.Focus();
@@ -3349,6 +3359,17 @@ public partial class MainWindow : Window
         if (!moved && !_workspaceRangeSelectionSession.Additive)
         {
             ClearSelectionForPane(pane, listView, updateStatus: false);
+            pane.SelectionAnchorEntry = null;
+        }
+        else if (moved)
+        {
+            var anchorAfterRange = listView.SelectedItem as FileEntry
+                ?? listView.SelectedItems.OfType<FileEntry>().FirstOrDefault();
+            if (anchorAfterRange is not null)
+            {
+                pane.SelectionAnchorEntry = anchorAfterRange;
+                _workspaceSelectionAnchorEntry = anchorAfterRange;
+            }
         }
 
         if (listView.IsMouseCaptured)

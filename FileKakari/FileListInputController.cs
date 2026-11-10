@@ -144,7 +144,12 @@ public partial class MainWindow
                 {
                     if (e.ClickCount == 1)
                     {
-                        _pendingRangeSelectionStartPoint = position;
+                        if (!hasShift)
+                        {
+                            _selectionAnchorEntry = clickedEntry;
+                        }
+
+                        _pendingRangeSelectionStartPoint = hasShift ? null : position;
                         _pendingRangeSelectionClickEntry = clickedEntry;
                         _pendingRangeSelectionStartAdditive = (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
                         e.Handled = true;
@@ -194,7 +199,7 @@ public partial class MainWindow
                     && hasShift
                     && !_owner.IsInsideRenameTextBox(source))
                 {
-                    _pendingRangeSelectionStartPoint = position;
+                    _pendingRangeSelectionStartPoint = null;
                     _pendingRangeSelectionClickEntry = clickedEntry;
                     _pendingRangeSelectionStartAdditive = hasControl;
                     e.Handled = true;
@@ -484,7 +489,17 @@ public partial class MainWindow
 
                 if (hasShift)
                 {
-                    FileListSelectionHelper.PerformShiftSelection(_owner.ItemsList, _selectionAnchorEntry, entry, hasControl);
+                    var normalPane = _owner.GetNormalFolderPane();
+                    var effectiveAnchor = FileListSelectionHelper.PerformShiftSelection(
+                        _owner.ItemsList,
+                        normalPane?.SelectionAnchorEntry ?? _selectionAnchorEntry,
+                        entry,
+                        hasControl);
+                    _selectionAnchorEntry = effectiveAnchor;
+                    if (normalPane is not null)
+                    {
+                        normalPane.SelectionAnchorEntry = effectiveAnchor;
+                    }
                 }
                 else
                 {

@@ -223,6 +223,7 @@ public partial class MainWindow
     {
         if (clickedEntry is not null)
         {
+            pane.SelectionAnchorEntry = clickedEntry;
             _workspaceSelectionAnchorEntry = clickedEntry;
         }
         FileListSelectionHelper.PrepareRightClickSelection(listView, clickedEntry);

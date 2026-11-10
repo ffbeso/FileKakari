@@ -887,7 +887,7 @@ public partial class MainWindow
 
         if (e.ChangedButton == MouseButton.Left)
         {
-            PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e);
+            PrepareWorkspacePaneFileListLeftMouseDown(listView, pane, e, activePaneChanged);
         }
 
         ScheduleWorkspacePaneActivation(pane, refreshPreviewIfAlreadyActivated: activePaneChanged);
@@ -910,18 +910,26 @@ public partial class MainWindow
 
                 if (hasShift)
                 {
-                    FileListSelectionHelper.PerformShiftSelection(pendingListView, _workspaceSelectionAnchorEntry, entry, hasControl);
+                    var effectiveAnchor = FileListSelectionHelper.PerformShiftSelection(
+                        pendingListView,
+                        pendingPane.SelectionAnchorEntry ?? _workspaceSelectionAnchorEntry,
+                        entry,
+                        hasControl);
+                    pendingPane.SelectionAnchorEntry = effectiveAnchor;
+                    _workspaceSelectionAnchorEntry = effectiveAnchor;
                 }
                 else
                 {
                     if (hasControl)
                     {
                         FileListSelectionHelper.ApplyControlSelection(pendingListView, entry);
+                        pendingPane.SelectionAnchorEntry = entry;
                         _workspaceSelectionAnchorEntry = entry;
                     }
                     else
                     {
                         FileListSelectionHelper.ApplySingleSelection(pendingListView, entry);
+                        pendingPane.SelectionAnchorEntry = entry;
                         _workspaceSelectionAnchorEntry = entry;
                     }
                 }

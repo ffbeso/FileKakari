@@ -223,8 +223,6 @@ public partial class MainWindow
             };
         }
 
-        var restoresOffset = policy is FileListRestorePolicy.ExactRestore or FileListRestorePolicy.ScrollOnly;
-        var directOffset = restoresOffset && loadTab.State.GroupMode != GroupMode.None && _fileWatcherRefreshCoordinator.IsRefreshRunning;
         ListViewRestoreResult result;
         using (SuppressPreviewForProgrammaticSelection("restore"))
         {
@@ -241,11 +239,10 @@ public partial class MainWindow
                 () => _scrollUserVersion,
                 UpdateSelectedItemStatus,
                 Dispatcher,
-                _loadCancellation?.Token ?? CancellationToken.None,
-                restoreOffsetDirectly: directOffset);
+                _loadCancellation?.Token ?? CancellationToken.None);
         }
 
-        if (restoresOffset && !directOffset)
+        if (policy == FileListRestorePolicy.ExactRestore || policy == FileListRestorePolicy.ScrollOnly)
         {
             await RestoreListViewScrollOffsetAsync(state.VerticalOffset);
         }
@@ -315,8 +312,7 @@ public partial class MainWindow
         FolderPane pane,
         double offset,
         int workspaceSwitchId = 0,
-        WorkspaceSession? session = null,
-        bool groupedWatchRefresh = false)
+        WorkspaceSession? session = null)
     {
         if (offset < 0)
         {
@@ -341,14 +337,14 @@ public partial class MainWindow
         else if (pane.FileList.PendingAnchorScrollState is { } anchorState && pane.ActiveTabState is { GroupMode: var groupMode and not GroupMode.None })
         {
             pane.FileList.PendingAnchorScrollState = null;
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher, isStale: isStale, allowEarlyScroll: groupedWatchRefresh))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), anchorState, groupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }
         }
         else if (pane.ActiveTabState is { GroupMode: var tabGroupMode and not GroupMode.None, AnchorState: { } tabAnchorState })
         {
-            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher, isStale: isStale, allowEarlyScroll: groupedWatchRefresh))
+            if (await AnchorScrollService.RestoreAnchorScrollAsync(GetFolderPaneListView(pane), tabAnchorState, tabGroupMode, Dispatcher, isStale: isStale))
             {
                 return;
             }
@@ -697,14 +693,13 @@ public partial class MainWindow
             }
             WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), $"viewstate-collection-view-ready-{trigger}", pane);
 
-            var groupedWatchRefresh = trigger == "folder-watch-refresh" && targetState.GroupMode != GroupMode.None;
             if (policy == FileListRestorePolicy.ExactRestore)
             {
-                await RestoreWorkspacePaneExactStateAsync(pane, targetState, workspaceSwitchId, session, groupedWatchRefresh);
+                await RestoreWorkspacePaneExactStateAsync(pane, targetState, workspaceSwitchId, session);
             }
             else if (policy == FileListRestorePolicy.ScrollOnly)
             {
-                await RestoreWorkspacePaneScrollOnlyStateAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session, groupedWatchRefresh);
+                await RestoreWorkspacePaneScrollOnlyStateAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session);
             }
             else if (policy == FileListRestorePolicy.FocusPathFallback)
             {
@@ -764,8 +759,7 @@ public partial class MainWindow
         FolderPane pane,
         WorkspaceTabState targetState,
         int workspaceSwitchId = 0,
-        WorkspaceSession? session = null,
-        bool groupedWatchRefresh = false)
+        WorkspaceSession? session = null)
     {
         var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         if (targetState.SelectedPaths.Count > 0)
@@ -784,7 +778,7 @@ public partial class MainWindow
                     pane,
                     targetState.SelectedPaths,
                     focus: false,
-                    scrollIntoView: !groupedWatchRefresh && targetState.VerticalOffset <= 0);
+                    scrollIntoView: targetState.VerticalOffset <= 0);
             }, DispatcherPriority.Send);
 
             if (_performanceLogger.IsEnabled)
@@ -795,7 +789,7 @@ public partial class MainWindow
 
         // 通常復元は従来どおりBackgroundまで待つ。削除専用Anchorは、その待ち中に
         // 未確定位置が描画されないよう、専用のExtent安定待ちへ直接進む。
-        if (!groupedWatchRefresh && GetDeleteScrollRestoreStateForPane(pane) is null)
+        if (GetDeleteScrollRestoreStateForPane(pane) is null)
         {
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
         }
@@ -809,7 +803,7 @@ public partial class MainWindow
             return;
         }
 
-        await RestoreWorkspacePaneScrollOffsetAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session, groupedWatchRefresh);
+        await RestoreWorkspacePaneScrollOffsetAsync(pane, targetState.VerticalOffset, workspaceSwitchId, session);
         WriteDeleteFlowSnapshot(GetDeleteFlowIdForPane(pane), "viewstate-scroll-restore-complete", pane);
     }
 
@@ -817,8 +811,7 @@ public partial class MainWindow
         FolderPane pane,
         double verticalOffset,
         int workspaceSwitchId = 0,
-        WorkspaceSession? session = null,
-        bool groupedWatchRefresh = false)
+        WorkspaceSession? session = null)
     {
         var isStale = CreatePaneRestoreStaleCheck(pane, workspaceSwitchId, session);
         await Dispatcher.InvokeAsync(() =>
@@ -847,7 +840,7 @@ public partial class MainWindow
         }
 
         if (isStale()) return;
-        await RestoreWorkspacePaneScrollOffsetAsync(pane, verticalOffset, workspaceSwitchId, session, groupedWatchRefresh);
+        await RestoreWorkspacePaneScrollOffsetAsync(pane, verticalOffset, workspaceSwitchId, session);
     }
 
     private async Task RestoreWorkspacePaneFocusedSelectionAsync(

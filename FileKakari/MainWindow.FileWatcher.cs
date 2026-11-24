@@ -837,7 +837,7 @@ public partial class MainWindow
                 var preservedState = CaptureWorkspacePanePreservedState(pane);
                 WriteDeleteFlowSnapshot(deleteFlowId, "watcher-viewstate-captured", pane, pending.ChangedPath);
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "folder-watch-refresh");
+                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
                 WriteDeleteFlowSnapshot(deleteFlowId, "watcher-load-and-restore-complete", pane, pending.ChangedPath);
                 CompleteDeleteScrollRestoreState(pane, deleteFlowId);
                 pane.ActiveTabState?.ClearPendingExternalChange();

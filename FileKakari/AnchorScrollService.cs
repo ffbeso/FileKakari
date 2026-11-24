@@ -135,17 +135,17 @@ internal static class AnchorScrollService
         PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=extent-wait elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} skipped={earlyScroll}");
         if (isStale?.Invoke() == true) return false;
 
-        if (!earlyScroll)
+        // Step 1: ScrollIntoView
+        stageTimer.Restart();
+        await dispatcher.InvokeAsync(() =>
         {
-            stageTimer.Restart();
-            await dispatcher.InvokeAsync(() =>
-            {
-                if (isStale?.Invoke() != true) listView.ScrollIntoView(targetEntry);
-            }, DispatcherPriority.Send);
-            PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
-        }
+            if (isStale?.Invoke() == true) return;
+            listView.ScrollIntoView(targetEntry);
+        }, earlyScroll ? DispatcherPriority.Loaded : DispatcherPriority.Send);
+        PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=scroll-into-view elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2}");
 
-        // Position an unrealized row and correct its relative Y in the same dispatcher turn.
+        // ScrollIntoView と相対Y補正のどちらでも仮想化コンテナの再配置が起こり得る。
+        // Extent・VerticalOffset・相対Yが同時に安定するまで、低優先度のレイアウト周期ごとに再補正する。
         stageTimer.Restart();
         var restored = await RestoreAnchorRelativePositionUntilStableAsync(
             listView,
@@ -153,7 +153,7 @@ internal static class AnchorScrollService
             anchorState,
             dispatcher,
             deleteFlowId,
-            resolveReason, isStale, earlyScroll);
+            resolveReason, isStale);
         PerfLog.WriteTiming($"anchor-stage flowId={deleteFlowId} stage=position-correction elapsedMs={stageTimer.Elapsed.TotalMilliseconds:F2} restored={restored}");
         if (!restored && earlyScroll && isStale?.Invoke() != true)
         {
@@ -236,8 +236,7 @@ internal static class AnchorScrollService
         Dispatcher dispatcher,
         long deleteFlowId,
         string resolveReason,
-        Func<bool>? isStale,
-        bool earlyScroll)
+        Func<bool>? isStale)
     {
         const int requiredStableTransitions = 2;
         const int maxLayoutPasses = 12;
@@ -317,7 +316,7 @@ internal static class AnchorScrollService
                 {
                     uiMs = (passTimer?.Elapsed.TotalMilliseconds ?? 0) - queueMs;
                 }
-            }, earlyScroll && pass == 0 ? DispatcherPriority.Loaded : DispatcherPriority.ContextIdle);
+            }, DispatcherPriority.ContextIdle);
 
             if (measurePasses)
                 PerfLog.WriteTiming($"anchor-pass list={listView.GetHashCode()} flowId={deleteFlowId} pass={pass} " +

@@ -502,6 +502,42 @@ public partial class MainWindow
                 {
                     WriteDeleteFlowSnapshot(deleteFlowId, "watcher-full-refresh-start", normalPane, pending.ChangedPath);
                 }
+                if (tab.State.GroupMode == GroupMode.Date && deleteFlowId == 0 && _itemsOwnerStateId == tab.State.Id)
+                {
+                    var generation = _loadGeneration;
+                    var sort = tab.State.SortColumn;
+                    var ascending = tab.State.SortAscending;
+                    var foldersFirst = _settingsService.Settings.SortFoldersFirst;
+                    var extra = ShouldLoadExtraColumns(sort);
+                    var token = _loadCancellation?.Token ?? CancellationToken.None;
+                    IReadOnlyList<FileEntry>? snapshot = null;
+                    try
+                    {
+                        snapshot = await Task.Run(() => _fileService.Enumerate(pending.Path, sort, ascending,
+                            foldersFirst, extra, token).ToList(), token);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // The regular navigation path handles missing/disconnected folders.
+                    }
+                    if (generation != _loadGeneration || !ReferenceEquals(ActiveTab, tab)
+                        || !string.Equals(tab.Navigation.CurrentPath, pending.Path, StringComparison.OrdinalIgnoreCase)
+                        || !CanRefreshFromFolderWatch(tab) || !_pendingNormalRefreshes.TryGetValue(pending.Key, out var current)
+                        || !ReferenceEquals(current, pending))
+                        return true;
+                    if (snapshot is not null && tab.State.GroupMode == GroupMode.Date && sort == tab.State.SortColumn
+                        && ascending == tab.State.SortAscending && extra == ShouldLoadExtraColumns(sort)
+                        && foldersFirst == _settingsService.Settings.SortFoldersFirst
+                        && DateGroupRefresh.TryApply(ItemsList, tab.State.LastLoadedAt, snapshot))
+                    {
+                        tab.StoreItems(pending.Path, _items.ToArray());
+                        tab.ClearPendingExternalChange();
+                        _pendingNormalRefreshes.Remove(pending.Key);
+                        RefreshCurrentFolderSummary();
+                        UpdateSelectedItemStatus();
+                        return true;
+                    }
+                }
                 await NavigateToFolderAsync(pending.Path, NavigationKind.Refresh);
                 if (GetNormalFolderPane() is { } refreshedNormalPane)
                 {
@@ -863,7 +899,7 @@ public partial class MainWindow
                 var preservedState = CaptureWorkspacePanePreservedState(pane);
                 WriteDeleteFlowSnapshot(deleteFlowId, "watcher-viewstate-captured", pane, pending.ChangedPath);
                 ClearWorkspacePaneItemsPreservingViewState(pane, preservedState);
-                await LoadFolderPaneItemsAsync(pane, restoreTrigger: "pane-load-complete");
+                await LoadFolderPaneItemsAsync(pane, restoreTrigger: state.GroupMode == GroupMode.Date && deleteFlowId == 0 && pane.FileList.PendingDeleteScrollRestoreState is null ? "watch-date-groups" : "pane-load-complete");
                 WriteDeleteFlowSnapshot(deleteFlowId, "watcher-load-and-restore-complete", pane, pending.ChangedPath);
                 CompleteDeleteScrollRestoreState(pane, deleteFlowId);
                 pane.ActiveTabState?.ClearPendingExternalChange();

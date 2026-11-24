@@ -1720,9 +1720,9 @@ public partial class MainWindow
         {
             ApplyColumnWidthsToWorkspacePane(pane);
             UpdateWorkspacePaneColumnHeadersForPane(pane);
-            var paneLoadTask = _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken);
+            var paneLoadTask = _folderPaneController.LoadPaneItemsAsync(pane, cancellationToken, restoreTrigger == "watch-date-groups");
             var requestedGeneration = pane.FileList.LoadGeneration;
-            await paneLoadTask;
+            var appliedDiff = await paneLoadTask;
             loadTiming?.Mark("loadComplete");
             loadTiming?.ObserveNextRender();
 
@@ -1759,9 +1759,9 @@ public partial class MainWindow
             }
 
             loadTiming?.Mark("restoreStart");
-            if (loadInteraction.HasInteracted && GetFolderPaneListView(pane) is { } interactedList)
+            if ((appliedDiff || loadInteraction.HasInteracted) && GetFolderPaneListView(pane) is { } interactedList)
             {
-                // Keep explicit input made against the progressively displayed rows.
+                // Keep the surviving selection and viewport for in-place updates or explicit input.
                 var selected = interactedList.SelectedItems.OfType<FileEntry>().Select(entry => entry.FullPath).ToList();
                 requestedState!.SelectedPaths = selected;
                 pane.SelectedPaths = selected;

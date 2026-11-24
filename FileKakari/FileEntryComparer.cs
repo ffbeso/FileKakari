@@ -11,7 +11,7 @@ public sealed class FileEntryComparer : IComparer
     private readonly Dictionary<string, int>? _currentOrder;
     private readonly GroupMode _groupMode;
     private readonly SimilarNameGroupIndex? _groupIndex;
-    private readonly GroupRepresentativeIndex? _representativeIndex;
+    private GroupRepresentativeIndex? _representativeIndex;
     private readonly Dictionary<string, string> _groupCompareKeys = new(StringComparer.Ordinal);
 
     public FileEntryComparer(
@@ -31,6 +31,14 @@ public sealed class FileEntryComparer : IComparer
         _groupIndex = groupIndex;
         _representativeIndex = representativeIndex;
     }
+
+    internal string ColumnId => _columnId;
+    internal bool Ascending => _ascending;
+    internal bool FoldersFirst => _foldersFirst;
+    internal bool UsesGroupRepresentatives => _representativeIndex is not null;
+
+    // The view keeps this comparer while individual rows are inserted or removed.
+    internal void UpdateRepresentatives(GroupRepresentativeIndex representatives) => _representativeIndex = representatives;
 
     public int Compare(object? x, object? y)
     {

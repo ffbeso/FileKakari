@@ -221,6 +221,65 @@ try
         }
     }));
 
+    await CheckAsync("date-group-first-download-keeps-viewport", () => RunOnStaAsync(() =>
+    {
+        var folder = Path.Combine(fixtures, "date-group");
+        var oldDate = DateTime.Today.AddDays(-10);
+        FileEntry Entry(string name, DateTime date) => new()
+        {
+            Name = name, FullPath = Path.Combine(folder, name), Kind = "file", IsDirectory = false,
+            ModifiedAt = date, CreatedAt = date, AccessedAt = date, Size = 1
+        };
+        var prior = Enumerable.Range(0, 200).Select(i => Entry($"old-{i:D3}", oldDate)).ToArray();
+        var state = new FileListState();
+        state.ReplaceItems(folder, prior);
+        var list = new System.Windows.Controls.ListView { ItemsSource = state.ItemsView, Width = 400, Height = 240 };
+        var assembly = typeof(FileEntry).Assembly;
+        var group = assembly.GetType("FileKakari.FileGroupHelper")!.GetMethod("ApplyGroupMode",
+            new[] { typeof(System.Windows.Controls.ListView), typeof(GroupMode), typeof(SimilarNameGroupIndex) })!;
+        group.Invoke(null, new object?[] { list, GroupMode.Date, null });
+        state.ApplySort("ModifiedAt", false, true, groupMode: GroupMode.Date);
+        System.Windows.Controls.VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+        System.Windows.Controls.VirtualizingPanel.SetScrollUnit(list, System.Windows.Controls.ScrollUnit.Pixel);
+        var host = new System.Windows.Window { Content = list, Opacity = 0, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            host.Show(); list.UpdateLayout();
+            var scroll = (System.Windows.Controls.ScrollViewer)typeof(MainWindow)
+                .GetMethod("FindVisualChild", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+                .MakeGenericMethod(typeof(System.Windows.Controls.ScrollViewer)).Invoke(null, new object[] { list })!;
+            var apply = assembly.GetType("FileKakari.DateGroupRefresh")!.GetMethod("TryApply")!;
+            var resets = 0;
+            state.ItemsView.CollectionChanged += (_, e) => { if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++; };
+            foreach (var workspace in new[] { true, false })
+            {
+                if (!workspace) ((System.Windows.Data.ListCollectionView)state.ItemsView).CustomSort =
+                    new FileEntryComparer("ModifiedAt", false, true, groupMode: GroupMode.Date);
+                resets = 0;
+                foreach (var offset in new[] { 0d, 72d })
+                {
+                    list.SelectedItem = prior[2];
+                    scroll.ScrollToVerticalOffset(offset); list.UpdateLayout();
+                    void Apply(IReadOnlyList<FileEntry> snapshot)
+                    {
+                        Require((bool)apply.Invoke(null, new object?[] { list, state.LastLoadedAt, snapshot })!, "Date refresh fell back to a reset.");
+                        System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                        Require(Math.Abs(scroll.VerticalOffset - offset) < 1 && list.SelectedItem == prior[2] && resets == 0,
+                            $"Date refresh moved the viewport ({offset} -> {scroll.VerticalOffset}) or lost selection.");
+                    }
+                    var partial = Entry("download.part", DateTime.Now);
+                    Apply(prior.Append(partial).ToArray());
+                    Require(state.ItemsView.Groups!.Count == 2 && ReferenceEquals(list.Items[0], partial), "The new Today group was not first.");
+                    var final = Entry("download.zip", DateTime.Now);
+                    Apply(prior.Append(final).ToArray());
+                    Require(ReferenceEquals(list.Items[0], final) && !list.Items.Contains(partial), "Renamed download was not updated.");
+                    Apply(prior);
+                    Require(state.ItemsView.Groups.Count == 1, "Empty Today group remained.");
+                }
+            }
+        }
+        finally { host.Close(); }
+    }));
     await CheckAsync("group-anchor-early-scroll-and-position-reuse", () => RunOnStaAsync(() =>
     {
         var folder = Path.Combine(fixtures, "early-anchor");

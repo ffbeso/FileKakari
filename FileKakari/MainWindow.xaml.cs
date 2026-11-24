@@ -7767,7 +7767,7 @@ public partial class MainWindow : Window
         return FindVisualChild<ScrollViewer>(ItemsList);
     }
 
-    private static T? FindVisualChild<T>(DependencyObject parent)
+    internal static T? FindVisualChild<T>(DependencyObject parent)
         where T : DependencyObject
     {
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)

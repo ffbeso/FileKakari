@@ -93,13 +93,13 @@ sealed class FolderPaneController
         return LoadPaneItemsAsync(pane, CancellationToken.None);
     }
 
-    internal async Task LoadPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken)
+    internal async Task<bool> LoadPaneItemsAsync(FolderPane pane, CancellationToken cancellationToken, bool refreshDateGroups = false)
     {
         var targetState = pane.ActiveTabState;
         if (targetState is null)
         {
             pane.FileList.StatusText = "";
-            return;
+            return false;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -113,7 +113,7 @@ sealed class FolderPaneController
             targetState.SetPathMissing(false);
             pane.FileList.IsPathMissing = false;
             await LoadSpecialLocationItemsAsync(pane, targetState, cancellationToken, loadGeneration);
-            return;
+            return false;
         }
 
         // Measure folder listing duration (ms) for performance logging
@@ -135,7 +135,7 @@ sealed class FolderPaneController
                     $"folder-pane-display-reuse paneId={pane.Id} stateId={targetState.Id} " +
                     $"path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count}");
                 _ = VerifyCachedDirectoryExistsAsync(pane, targetState, requestedPath, loadGeneration);
-                return;
+                return false;
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -157,7 +157,7 @@ sealed class FolderPaneController
             MainWindow.SyncPaneGroupCollapseState(pane);
             _performanceLogger.Write($"folder-pane-cache-restore paneId={pane.Id} stateId={targetState.Id} path=\"{targetState.CurrentPath}\" items={pane.FileList.Items.Count} lastLoaded=\"{FormatTimestamp(pane.FileList.LastLoadedAt)}\" lastExternalChange=\"{FormatTimestamp(pane.FileList.LastExternalChangeAt)}\"");
             _ = VerifyCachedDirectoryExistsAsync(pane, targetState, requestedPath, loadGeneration);
-            return;
+            return false;
         }
 
         if (!await _driveAvailabilityService.DirectoryExistsAsync(targetState.CurrentPath))
@@ -168,12 +168,12 @@ sealed class FolderPaneController
             {
                 pane.IsLoading = false;
             }
-            return;
+            return false;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration)) return;
+        if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration)) return false;
         targetState.SetPathMissing(false);
         pane.FileList.IsPathMissing = false;
         pane.IsLoading = true;
@@ -210,7 +210,26 @@ sealed class FolderPaneController
             if (!IsCurrentPaneLoadOwner(pane, targetState, requestedPath, loadGeneration))
             {
                 LogLoadFailureSkip(pane, targetState, requestedPath, loadGeneration, "owner-or-generation-mismatch", null);
-                return;
+                return false;
+            }
+
+            if (refreshDateGroups && targetState.GroupMode == GroupMode.Date
+                && pane.FileList.IsLoadedFor(targetState.Id, requestedPath)
+                && sortColumn == pane.FileList.DisplaySortColumn && sortColumn == targetState.SortColumn
+                && sortAscending == targetState.SortAscending && sortAscending == pane.FileList.DisplaySortAscending
+                && sortFoldersFirst == pane.FileList.DisplaySortFoldersFirst
+                && _getListView?.Invoke(pane) is { } listView
+                && ReferenceEquals(listView.ItemsSource, pane.FileList.ItemsView)
+                && DateGroupRefresh.TryApply(listView, pane.FileList.LastLoadedAt, items))
+            {
+                targetState.StoreItems(requestedPath, pane.FileList.Items.ToArray());
+                pane.FileList.LastLoadedAt = targetState.LastLoadedAt;
+                targetState.ClearPendingExternalChange();
+                targetState.LastLoadElapsedMs = stopwatch.ElapsedMilliseconds;
+                UpdateStatusAsync(pane, listView.SelectedItems.OfType<FileEntry>().ToArray());
+                pane.RefreshDisplay();
+                _performanceLogger.Write($"folder-pane-date-group-diff paneId={pane.Id} items={items.Count}");
+                return true;
             }
 
             AnchorScrollState? capturedAnchor = null;
@@ -233,7 +252,7 @@ sealed class FolderPaneController
                         pane.FileList.StatusText = _text.Format("LoadingProgress", count, stopwatch.ElapsedMilliseconds);
                         _performanceLogger.Write($"folder-pane-batch paneId={pane.Id} generation={loadGeneration} items={count} uiMs={uiMs:F2} nextBatch={nextSize}");
                     }, cancellationToken);
-                if (!published) return;
+                if (!published) return false;
                 // The user may have changed grouping while batches were being added.
                 // Rebuild group representatives/indexes from the complete collection.
                 if (targetState.GroupMode != GroupMode.None)
@@ -288,6 +307,7 @@ sealed class FolderPaneController
                 pane.IsLoading = false;
             }
         }
+        return false;
     }
 
     private bool IsCurrentPaneLoadOwner(FolderPane pane, WorkspaceTabState state, string path, long generation) =>

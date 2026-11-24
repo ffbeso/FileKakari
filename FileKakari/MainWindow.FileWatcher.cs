@@ -171,7 +171,7 @@ public partial class MainWindow
         }
     }
 
-    private void EnqueueWorkspacePaneWatchRefresh(FolderPane pane, string changedPath, TimeSpan remaining)
+    private void EnqueueWorkspacePaneWatchRefresh(FolderPane pane, string changedPath, TimeSpan remaining, IReadOnlyList<string>? metadataPaths = null)
     {
         var ownerSession = FindSessionContainingPane(pane);
         if (ownerSession is null)
@@ -194,12 +194,16 @@ public partial class MainWindow
         var exists = _pendingWorkspacePaneWatchRefreshes.TryGetValue(key, out var existing);
         var action = exists ? "merge" : "enqueue";
 
-        _pendingWorkspacePaneWatchRefreshes[key] = new PendingWorkspacePaneWatchRefresh(ownerSession.Id, pane.Id, state.Id, state.CurrentPath, changedPath, IsFullRefresh: true);
+        if (existing is not null && metadataPaths is not null)
+        {
+            metadataPaths = existing.MetadataPaths?.Union(metadataPaths, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+        _pendingWorkspacePaneWatchRefreshes[key] = new PendingWorkspacePaneWatchRefresh(ownerSession.Id, pane.Id, state.Id, state.CurrentPath, changedPath, metadataPaths);
 
         var suppressionState = remaining > TimeSpan.Zero ? "suppressed" : "ready";
         _performanceLogger.Write(
             $"folder-pane-watch-refresh-suppressed paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" " +
-            $"changedPath=\"{changedPath}\" pendingAction={action} refreshType=full remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)} " +
+            $"changedPath=\"{changedPath}\" pendingAction={action} refreshType={(metadataPaths is null ? "full" : "metadata")} remainingMs={(int)Math.Ceiling(remaining.TotalMilliseconds)} " +
             $"suppressionState={suppressionState} pendingKey=\"{key}\" ownerSessionId={ownerSession.Id} refreshTargetPaneId={pane.Id}");
 
         if (remaining > TimeSpan.Zero)
@@ -238,22 +242,13 @@ public partial class MainWindow
                 return;
             }
 
-            if (_fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var workspaceRemaining))
-            {
-                foreach (var pane in panesToRefresh)
-                {
-                    var changedPath = changedPaths.First(path => IsDirectChildPath(pane.CurrentPath, path));
-                    EnqueueWorkspacePaneWatchRefresh(pane, changedPath, workspaceRemaining);
-                }
-                return;
-            }
-
+            var suppressed = _fileWatcherRefreshCoordinator.IsSuppressed(_isFileOperationInProgress, out var remainingDelay);
             foreach (var pane in panesToRefresh)
             {
-                var changedPath = changedPaths.First(path => IsDirectChildPath(pane.CurrentPath, path));
-                EnqueueWorkspacePaneWatchRefresh(pane, changedPath, TimeSpan.Zero);
+                var paths = changedPaths.Where(path => IsDirectChildPath(pane.CurrentPath, path)).ToArray();
+                EnqueueWorkspacePaneWatchRefresh(pane, paths[0], remainingDelay, paths);
             }
-
+            if (suppressed) return;
             var processed = await ProcessPendingWorkspacePaneWatchRefreshAsync();
             if (processed && HasDelayedFolderWatchRefreshPending())
             {
@@ -830,6 +825,37 @@ public partial class MainWindow
             var success = false;
             try
             {
+                if (pending.MetadataPaths is { } paths && state.GroupMode != GroupMode.None
+                    && pane.FileList.IsLoadedFor(state.Id, pending.Path)
+                    && pane.FileList.PendingDeleteScrollRestoreState is null)
+                {
+                    var generation = pane.FileList.LoadGeneration;
+                    var observedAt = pane.FileList.LastExternalChangeAt;
+                    var settings = _settingsService.Settings;
+                    var extra = ShouldLoadExtraColumns(state.SortColumn);
+                    var updates = await Task.Run(() => PaneMetadataUpdate.Read(paths, extra, settings.ShowHiddenFiles, settings.ShowSystemFiles));
+                    if (!_pendingWorkspacePaneWatchRefreshes.TryGetValue(pending.Key, out var latest)
+                        || !ReferenceEquals(latest, pending) || !ReferenceEquals(state, pane.ActiveTabState)
+                        || !string.Equals(state.CurrentPath, pending.Path, StringComparison.OrdinalIgnoreCase)
+                        || !IsWorkspaceDisplayPane(pane) || pane.FileList.LoadGeneration != generation
+                        || !CanRefreshWorkspacePaneFromFolderWatch(pane, out _))
+                        return true;
+
+                    if (updates is not null && extra == ShouldLoadExtraColumns(state.SortColumn)
+                        && PaneMetadataUpdate.TryApply(pane.FileList, state.GroupMode, updates))
+                    {
+                        _pendingWorkspacePaneWatchRefreshes.Remove(pending.Key);
+                        if (observedAt == pane.FileList.LastExternalChangeAt)
+                        {
+                            state.ClearPendingExternalChange();
+                            state.LastLoadedAt = pane.FileList.LastLoadedAt = DateTimeOffset.UtcNow;
+                        }
+                        _folderPaneController.UpdateStatusAsync(pane, GetSelectedWorkspacePaneEntries(pane));
+                        _performanceLogger.Write($"folder-pane-watch-metadata-applied paneId={pane.Id} files={updates.Count}");
+                        return true;
+                    }
+                }
+
                 var beforeCount = pane.FileList.Items.Count;
                 var deleteFlowId = GetDeleteFlowIdForChangedPath(pending.ChangedPath);
                 _performanceLogger.Write($"folder-pane-watch-refresh-start paneId={pane.Id} stateId={state.Id} path=\"{state.CurrentPath}\" changedPath=\"{pending.ChangedPath}\" refreshType=full itemsBefore={beforeCount}");
@@ -996,7 +1022,7 @@ internal sealed record PendingNormalRefresh(string SessionId, string StateId, st
     }
 }
 
-internal sealed record PendingWorkspacePaneWatchRefresh(string SessionId, string PaneId, string StateId, string Path, string ChangedPath, bool IsFullRefresh)
+internal sealed record PendingWorkspacePaneWatchRefresh(string SessionId, string PaneId, string StateId, string Path, string ChangedPath, IReadOnlyList<string>? MetadataPaths)
 {
     public string Key => GetKey(this.SessionId, this.PaneId, this.StateId, this.Path);
 

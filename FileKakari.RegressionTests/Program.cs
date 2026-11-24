@@ -260,6 +260,36 @@ try
             Require(anchor is not null && scroll.VerticalOffset > 0, "Grouped fixture did not capture a scrolled anchor.");
             Task<bool> Restore(bool early, Func<bool>? stale = null, long flowId = 0) => (Task<bool>)restore.Invoke(null,
                 new object?[] { list, anchor, GroupMode.Extension, dispatcher, flowId, stale, early })!;
+            // A download-progress batch must keep the grouped view, selected object
+            // and viewport alive through layout, including with more than one changed file.
+            var metadata = typeof(FileEntry).Assembly.GetType("FileKakari.PaneMetadataUpdate")!;
+
+            var selectedEntry = entries.Single(entry => entry.FullPath == anchor!.AnchorPath);
+            list.SelectedItem = selectedEntry;
+            list.UpdateLayout();
+            var savedOffset = scroll.VerticalOffset;
+            var paths = new[] { entries[2].FullPath, selectedEntry.FullPath };
+            var resets = 0;
+            state.ItemsView.CollectionChanged += (_, e) =>
+            {
+                if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) resets++;
+            };
+            foreach (var path in paths) File.AppendAllText(path, "more");
+            var updates = (Dictionary<string, FileEntry>)metadata.GetMethod("Read")!.Invoke(null,
+                new object[] { paths, false, true, true })!;
+            bool ApplyMetadata() => (bool)metadata.GetMethod("TryApply")!.Invoke(null,
+                new object[] { state, GroupMode.Extension, updates })!;
+            Require(ApplyMetadata(), "Metadata-only download batch requested a full refresh.");
+            list.UpdateLayout();
+            Require(savedOffset > 0 && resets == 0 && list.SelectedItem == selectedEntry && scroll.VerticalOffset == savedOffset
+                && entries[2].Size == 7 && selectedEntry.Size == 7, "Grouped metadata update moved or reset the view.");
+            updates[paths[0]].Size = 12;
+            updates.Add("missing", updates[paths[0]]);
+            Require(!ApplyMetadata() && entries[2].Size == 7, "Fallback partially applied a metadata batch.");
+            updates.Remove("missing");
+            state.RecordMaterializedSort("Size", true, true);
+            Require(!ApplyMetadata() && entries[2].Size == 7, "Size sort accepted a changed sort key.");
+            state.RecordMaterializedSort("Name", true, true);
             var unchanged = Restore(true);
             Require(unchanged.IsCompletedSuccessfully && unchanged.Result, "Valid visible anchor was not reused synchronously.");
             scroll.ScrollToVerticalOffset(0); list.UpdateLayout();

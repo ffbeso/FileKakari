@@ -3079,6 +3079,11 @@ public partial class MainWindow : Window
 
         if (clickedEntry is null)
         {
+            if (TryClearFilterOnBackgroundDoubleClick(pane, e))
+            {
+                e.Handled = true;
+                return;
+            }
             if (e.ClickCount != 1
                 || IsInsideScrollBar(source)
                 || FindVisualParent<GridViewColumnHeader>(source) is not null)

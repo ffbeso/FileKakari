@@ -118,6 +118,17 @@ public partial class MainWindow
         ScheduleNormalFilterApply(activeTab.State, filter);
     }
 
+    private bool TryClearFilterOnBackgroundDoubleClick(FolderPane? pane, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || e.ClickCount != 2 || Keyboard.Modifiers != ModifierKeys.None
+            || e.OriginalSource is not DependencyObject source
+            || FindVisualParent<ListViewItem>(source) is not null
+            || IsInsideScrollBar(source) || FindVisualParent<GridViewColumnHeader>(source) is not null
+            || IsInsideGroupHeader(source))
+            return false;
+
+        return ClearFilterIfNeeded(pane, "background-double-click", nameof(TryClearFilterOnBackgroundDoubleClick));
+    }
     private bool ClearFilterIfNeeded(string reason = "explicit-clear", [CallerMemberName] string? caller = null)
     {
         var pane = GetActiveFolderPane();

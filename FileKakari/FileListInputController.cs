@@ -127,6 +127,11 @@ public partial class MainWindow
                 _pendingRangeSelectionStartAdditive = false;
                 _owner.CancelPendingRenameClick();
 
+                if (_owner.TryClearFilterOnBackgroundDoubleClick(_owner.GetNormalFolderPane(), e))
+                {
+                    e.Handled = true;
+                    return;
+                }
                 var dragEntry = _owner.GetFileEntryFromNameHitTarget(source);
                 if (clickedEntry is not null
                     && !_owner.IsInsideRenameTextBox(source)

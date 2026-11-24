@@ -124,7 +124,8 @@ internal sealed class ListViewRestoreService
         Func<int> getScrollUserVersion,
         Action updateSelectedItemStatus,
         Dispatcher dispatcher,
-        CancellationToken token)
+        CancellationToken token,
+        bool restoreOffsetDirectly = false)
     {
         var stopwatch = Stopwatch.StartNew();
         var selectedCount = 0;
@@ -161,7 +162,12 @@ internal sealed class ListViewRestoreService
                     }
                 }
 
-                if (!scrollSkipped)
+                if (!scrollSkipped && restoreOffsetDirectly && findScrollViewer() is { } viewer)
+                {
+                    viewer.ScrollToVerticalOffset(state.VerticalOffset);
+                    scrolledBy = "offset";
+                }
+                else if (!scrollSkipped && !restoreOffsetDirectly)
                 {
                     var selectedPath = state.FocusedPath ?? state.SelectedPaths.FirstOrDefault();
                     if (selectedPath is not null && entriesByPath.TryGetValue(selectedPath, out var selectedEntry))

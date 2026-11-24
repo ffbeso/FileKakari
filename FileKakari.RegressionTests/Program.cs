@@ -262,6 +262,19 @@ try
                 new object?[] { list, anchor, GroupMode.Extension, dispatcher, flowId, stale, early })!;
             var unchanged = Restore(true);
             Require(unchanged.IsCompletedSuccessfully && unchanged.Result, "Valid visible anchor was not reused synchronously.");
+            // A small displacement keeps the anchor realized. Correct its Y directly
+            // without asking WPF to bring the row into view first.
+            scroll.ScrollToVerticalOffset(scroll.VerticalOffset + 5);
+            list.UpdateLayout();
+            var bringRequests = 0;
+            System.Windows.RequestBringIntoViewEventHandler onBring = (_, _) => bringRequests++;
+            list.AddHandler(System.Windows.FrameworkElement.RequestBringIntoViewEvent, onBring, true);
+            var smallCorrection = Restore(true);
+            PumpDispatcherUntilComplete(smallCorrection);
+            list.RemoveHandler(System.Windows.FrameworkElement.RequestBringIntoViewEvent, onBring);
+            Require(smallCorrection.Result && bringRequests == 0
+                && Math.Abs(scroll.VerticalOffset - anchor!.FallbackVerticalOffset) <= 0.75,
+                "Correcting a visible grouped anchor made an intermediate bring-into-view request.");
             scroll.ScrollToVerticalOffset(0); list.UpdateLayout();
             var moved = Restore(true);
             PumpDispatcherUntilComplete(moved);
